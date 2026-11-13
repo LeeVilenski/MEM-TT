@@ -108,7 +108,7 @@ The host sets it for the room. It adjusts:
 
 ## Milestones
 
-1. **Physics sandbox:** ball, table and net, plus a ball machine firing set spins. Tune against real ball speeds (up to about 30 m/s) and spin rates (up to about 150 rps).
+1. ✅ **Physics sandbox** (done): ball, table and net, plus a ball machine firing set spins. Tune against real ball speeds (up to about 30 m/s) and spin rates (up to about 150 rps).
 2. **Swing → contact:** the mouse paddle and keyboard modifiers produce every shot above, played against the ball machine.
 3. **Rules + 1v1 against AI:** scoring, serves with the legality check, a basic AI.
 4. **Online rooms:** room codes, 1v1, then 2v2 doubles with partners taking turns, plus spectators.
