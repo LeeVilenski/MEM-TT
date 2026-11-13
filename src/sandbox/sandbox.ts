@@ -36,6 +36,9 @@ import { Hud, MatchHud, type ShotReport, type ReturnReport, type PracticeStats }
 import { Lobby } from './lobby';
 import { RallyRecorder, ReplayPlayer, type ViewFrame } from './replay';
 import { Sfx } from '../audio/sfx';
+import { TouchControls, isTouchDevice } from '../input/touch';
+import { TiltControl } from '../input/tilt';
+import { AutoQuality, QUALITY_LEVELS, type QualitySetting } from '../render/quality';
 import { VENUES, setVenue, type Venue, type VenueId } from '../render/venues';
 import { OnlineClient } from '../net/client';
 import { LocalServer, WebSocketTransport, roomUrl, type Transport } from '../net/transport';
@@ -158,6 +161,14 @@ export class Sandbox {
   private autoReplayed: unknown = null;
   private savedCamera: { pos: THREE.Vector3; target: THREE.Vector3; visible: Map<string, boolean> } | null = null;
 
+  // Mobile and performance
+  readonly isTouch = isTouchDevice();
+  private touch: TouchControls;
+  tilt = new TiltControl();
+  quality = { setting: (loadPref('mem.quality', 'auto') === 'auto' ? 'auto' : Number(loadPref('mem.quality', 'auto'))) as QualitySetting, showFps: false, tilt: false };
+  private autoQuality: AutoQuality;
+  private qualityLevel = -1;
+
   // Online
   online: OnlineClient | null = null;
   private localServer: LocalServer | null = null;
@@ -227,7 +238,24 @@ export class Sandbox {
     this.scene.add(this.targetRing);
 
     this.machine = this.settingsFromPreset(PRESETS.find((p) => p.name === 'Long push')!);
+    // Touch controls (phones/tablets) and adaptive quality.
+    this.touch = new TouchControls(container);
+    this.touch.onServeStart = () => {
+      if ((this.match?.humanToServe || this.online?.myServe) && this.playing) this.tossHoldStart = performance.now();
+    };
+    this.touch.onServeEnd = () => this.releaseToss();
+    this.touch.onReplay = () => (this.replay ? this.stopReplay() : this.startReplay());
+    this.touch.onMenu = () => this.setPlaying(false);
+    this.autoQuality = new AutoQuality(this.isTouch ? 1 : 2);
+    if (this.isTouch) {
+      document.body.classList.add('touch');
+      // A bit more forgiving on a phone.
+      this.realism.percent = 75;
+    }
+
     this.buildGui();
+    if (this.isTouch || window.innerWidth < 700) this.gui.close();
+    this.applyQuality();
     this.applyRealism();
     this.setVenue(this.look.venue);
     this.playerView.setStyle(this.player.style.id);
@@ -282,6 +310,8 @@ export class Sandbox {
   // ---------------------------------------------------------------- play mode
 
   requestPlay() {
+    // Phones have no mouse to capture: just start.
+    if (this.isTouch) return this.setPlaying(true);
     const canvas = this.renderer.domElement;
     // Pointer lock may be unavailable (e.g. in automated tests); fall back to play without it.
     const req = canvas.requestPointerLock?.() as unknown as Promise<void> | undefined;
@@ -293,6 +323,8 @@ export class Sandbox {
     if (this.playing === on) return;
     this.playing = on;
     this.controls.enabled = !on;
+    this.touch.show(on && this.isTouch);
+    document.body.classList.toggle('playing', on);
     this.playerView.visible = on;
     this.targetRing.visible = !on && !this.match;
     this.hud.setPlaying(on);
@@ -572,6 +604,12 @@ export class Sandbox {
     this.venue?.update(realDt, now / 1000);
     // Your own character: just the racket arm in first person, the full character otherwise.
     this.playerView.setFirstPerson(this.playing && !this.replay);
+    // Touch: show Serve only when it's your serve. Tilt: phone tilt sets the face angle.
+    if (this.isTouch) this.touch.setServeVisible(!!(this.match?.humanToServe || this.online?.myServe));
+    if (this.tilt.active) this.player.swing.basePitch = this.tilt.pitch;
+    // Adaptive quality.
+    if (this.quality.setting === 'auto' && this.autoQuality.sample(realDt)) this.applyQuality();
+    this.hud.setFps(this.quality.showFps ? `${this.autoQuality.fps} fps · ${QUALITY_LEVELS[this.qualityLevel].name}` : null);
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
   }
@@ -579,12 +617,17 @@ export class Sandbox {
   /** Current human input (mouse deltas accumulated since the last frame, plus held keys). */
   private gatherInput() {
     const k = this.keys;
+    const t = this.touch.buttons;
+    const swipe = this.touch.swipe.consume();
     const input: SwingInput = {
       ...this.input,
-      close: k.has('KeyW'),
-      open: k.has('KeyS'),
-      hookLeft: k.has('KeyA'),
-      hookRight: k.has('KeyD'),
+      dx: this.input.dx + swipe.dx,
+      dy: this.input.dy + swipe.dy,
+      drive: this.input.drive || t.drive,
+      close: k.has('KeyW') || t.close,
+      open: k.has('KeyS') || t.open,
+      hookLeft: k.has('KeyA') || t.hookLeft,
+      hookRight: k.has('KeyD') || t.hookRight,
     };
     const move = {
       x: (k.has('ArrowRight') ? 1 : 0) - (k.has('ArrowLeft') ? 1 : 0),
@@ -739,7 +782,7 @@ export class Sandbox {
       this.matchHud.setPrompt('Match paused — click <b>▶ Resume match</b> to continue');
       this.matchHud.setMeter(null);
     } else if (match.humanToServe) {
-      this.matchHud.setPrompt('Your serve: hold <kbd>Space</kbd> to toss (longer = higher), release, then swing as it drops');
+      this.matchHud.setPrompt(this.servePrompt());
       this.matchHud.setMeter(this.tossHoldStart !== null ? (performance.now() - this.tossHoldStart) / 1000 / TOSS_HOLD_MAX : null);
     } else {
       this.matchHud.setPrompt(null);
@@ -754,6 +797,30 @@ export class Sandbox {
     const h = 0.2 + (held / TOSS_HOLD_MAX) * 0.9;
     if (this.online) this.online.toss(h);
     else this.match!.toss(h);
+  }
+
+  private servePrompt() {
+    return this.isTouch
+      ? 'Your serve: hold <b>Serve</b> to toss (longer = higher), release, then swipe as it drops'
+      : 'Your serve: hold <kbd>Space</kbd> to toss (longer = higher), release, then swing as it drops';
+  }
+
+  // ---------------------------------------------------------------- quality
+
+  /** Apply the quality setting (or the automatic controller's current level). */
+  applyQuality() {
+    const idx = this.quality.setting === 'auto' ? this.autoQuality.level : this.quality.setting;
+    if (idx === this.qualityLevel) return;
+    this.qualityLevel = idx;
+    const q = QUALITY_LEVELS[idx];
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, q.maxPixelRatio));
+    const key = this.scene.getObjectByName('key') as THREE.DirectionalLight;
+    if (key.shadow.mapSize.x !== q.shadowMap) {
+      key.shadow.mapSize.set(q.shadowMap, q.shadowMap);
+      key.shadow.map?.dispose();
+      key.shadow.map = null;
+    }
+    this.resize();
   }
 
   // ---------------------------------------------------------------- look, sound, replays
@@ -1126,7 +1193,7 @@ export class Sandbox {
       this.matchHud.setPrompt('Paused locally — click <b>▶ Resume match</b> (the match keeps going online!)');
       this.matchHud.setMeter(null);
     } else if (c.myServe) {
-      this.matchHud.setPrompt('Your serve: hold <kbd>Space</kbd> to toss (longer = higher), release, then swing as it drops');
+      this.matchHud.setPrompt(this.servePrompt());
       this.matchHud.setMeter(this.tossHoldStart !== null ? (performance.now() - this.tossHoldStart) / 1000 / TOSS_HOLD_MAX : null);
     } else if (c.phase === 'serve-wait' && c.serverSeat) {
       this.matchHud.setPrompt(`${c.names[c.serverSeat] ?? 'Opponent'} to serve`);
@@ -1334,6 +1401,13 @@ export class Sandbox {
       .name('Auto-replay long rallies')
       .onChange((a: boolean) => savePref('mem.autoReplay', a ? '1' : '0'));
     lf.add({ replay: () => this.startReplay() }, 'replay').name('Replay last rally  [R]');
+    lf.add(this.quality, 'setting', { 'Auto (adapts to your device)': 'auto', High: 2, Medium: 1, Low: 0 })
+      .name('Graphics quality')
+      .onChange((v: QualitySetting) => {
+        savePref('mem.quality', String(v));
+        this.applyQuality();
+      });
+    lf.add(this.quality, 'showFps').name('Show FPS');
 
     const on = gui.addFolder('Online multiplayer');
     const o = this.onlineSettings;
@@ -1354,6 +1428,18 @@ export class Sandbox {
     mt.add({ end: () => this.endMatch() }, 'end').name('End match (back to practice)');
 
     const pl = gui.addFolder('Player');
+    if (this.isTouch || 'DeviceOrientationEvent' in window) {
+      pl.add(this.quality, 'tilt')
+        .name('Tilt phone → face angle')
+        .onChange(async (on: boolean) => {
+          if (on && !(await this.tilt.enable())) {
+            this.quality.tilt = false;
+            pl.controllersRecursive().forEach((c) => c.updateDisplay());
+            this.hud.flash('UNSUPPORTED', 'This device does not report its tilt (or permission was refused)');
+          } else if (!on) this.tilt.disable();
+        });
+      pl.add({ cal: () => this.tilt.recalibrate() }, 'cal').name('Recalibrate tilt');
+    }
     const rubberNames = Object.fromEntries(Object.values(RUBBERS).map((r) => [`${r.name} (${r.kind})`, r.id]));
     const rubberSel = { forehand: 'inverted', backhand: 'inverted' };
     const styleNames = Object.fromEntries(STYLE_IDS.map((id) => [`${STYLES[id].character} — ${STYLES[id].label}`, id]));

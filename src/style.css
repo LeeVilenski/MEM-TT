@@ -760,3 +760,197 @@ kbd {
   font-weight: 400;
   opacity: 0.85;
 }
+
+/* ---------------------------------------------------------------- mobile / touch */
+
+body.touch {
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.touch-ui {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.tb {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: rgba(18, 20, 27, 0.55);
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.05;
+  text-align: center;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.tb small {
+  font-size: 10px;
+  font-weight: 400;
+  opacity: 0.8;
+}
+
+.tb.down {
+  background: rgba(232, 86, 42, 0.75);
+  border-color: #fff;
+}
+
+/* Left thumb cluster: face angle, hook, drive. */
+.tb-close {
+  left: calc(16px + env(safe-area-inset-left));
+  bottom: 150px;
+}
+.tb-open {
+  left: calc(16px + env(safe-area-inset-left));
+  bottom: 76px;
+}
+.tb-hl {
+  left: calc(88px + env(safe-area-inset-left));
+  bottom: 186px;
+  width: 52px;
+  height: 52px;
+}
+.tb-hr {
+  left: calc(88px + env(safe-area-inset-left));
+  bottom: 126px;
+  width: 52px;
+  height: 52px;
+}
+.tb-drive {
+  left: calc(88px + env(safe-area-inset-left));
+  bottom: 56px;
+  width: 58px;
+  height: 58px;
+}
+.tb-serve {
+  left: calc(16px + env(safe-area-inset-left));
+  bottom: 230px;
+  background: rgba(232, 86, 42, 0.6);
+  display: none;
+}
+.tb-replay,
+.tb-menu {
+  top: calc(12px + env(safe-area-inset-top));
+  width: 44px;
+  height: 44px;
+  font-size: 20px;
+}
+.tb-menu {
+  right: calc(12px + env(safe-area-inset-right));
+}
+.tb-replay {
+  right: calc(64px + env(safe-area-inset-right));
+}
+
+body.touch.playing .lil-gui.lil-auto-place {
+  display: none;
+}
+
+/* Compact practice readout so it clears the left-hand buttons. */
+body.touch.playing .hud-panel {
+  width: 230px;
+  max-height: 150px;
+  overflow: hidden;
+  font-size: 10.5px;
+  padding: 8px 10px;
+}
+
+body.touch.playing .hud-panel .hud-title {
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+body.touch.playing .hud-panel .hud-sub,
+body.touch.playing .hud-panel .hud-section:not(.ret) {
+  display: none;
+}
+
+body.touch.playing .hud-stats {
+  font-size: 11px;
+  top: calc(8px + env(safe-area-inset-top));
+}
+
+body.touch .hud-help {
+  display: none;
+}
+
+body.touch .hud-paddle {
+  bottom: 12px;
+}
+
+.hud-fps {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  pointer-events: none;
+}
+
+.rotate-hint {
+  display: none;
+}
+
+@media (orientation: portrait) {
+  body.touch.playing .rotate-hint {
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    background: rgba(10, 12, 16, 0.92);
+    color: var(--text);
+    font-size: 18px;
+    text-align: center;
+    padding: 24px;
+  }
+  .rotate-hint div {
+    font-size: 56px;
+    color: var(--accent);
+  }
+}
+
+/* Small landscape screens: compact HUD. */
+@media (max-height: 480px) {
+  .mhud-board {
+    min-width: 0;
+    font-size: 12px;
+    padding: 4px 8px;
+  }
+  .mpts {
+    font-size: 15px;
+  }
+  .mhud-shots {
+    display: none;
+  }
+  .hud-panel {
+    max-height: 45vh;
+  }
+  .flash-title {
+    font-size: 30px;
+  }
+  .mhud-prompt {
+    font-size: 12px;
+    top: 18%;
+  }
+}

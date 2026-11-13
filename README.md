@@ -2,7 +2,31 @@
 
 A 3D browser table tennis game for 1–4 players, built around spin, pace and a full range of shots. See [PLAN.md](PLAN.md) for the full design and milestones.
 
-## Status: Milestone 6 — look and theme
+## Status: Milestone 7 — mobile
+
+The game plays on phones and tablets, in landscape (portrait shows a "turn your phone" hint).
+
+**Touch controls:**
+- **Drag** anywhere to move the paddle; a fast **swipe** is the stroke (up = topspin, down = backspin). It uses the same swing physics as a mouse flick.
+- The left-hand hold-buttons are **Close / Open face**, **Hook ↶ / ↷** and **Drive**.
+- **Serve:** hold to toss, release, then swipe. It only appears when it's your serve.
+- **⟲** replays the last rally and **☰** leaves play mode (the settings panel comes back).
+
+**Phone tilt (optional):** turn on **Player → Tilt phone → face angle**.
+- Tilt away from you to close the face and toward you to open it.
+- It calibrates to how you're holding the phone; use **Recalibrate tilt** to reset it.
+- It handles both landscape orientations, and iOS asks for permission when you switch it on.
+
+**Graphics quality** (**Look & sound → Graphics quality**):
+- **Auto** steps the resolution and shadow detail down when frames are slow and back up when there's headroom. You can also pick High, Medium or Low.
+- **Show FPS** displays the frame rate and current level.
+
+**On phones:**
+- The game starts at Medium quality with the settings panel closed and realism at 75% (more forgiving).
+- Play starts with a tap; there's no mouse to capture.
+- Pinch-zoom and page scrolling are disabled during play.
+
+### Milestone 6 — look and theme
 
 Everything is generated in code: geometry, textures and sound. There are no asset files.
 
@@ -228,7 +252,9 @@ server/        Room server adapters
 src/render/    Three.js scene, ball, paddle and player views
   venues.ts    Procedural IT venues
   avatar.ts    Low-poly characters per player style
+  quality.ts   Quality levels + automatic quality controller
 src/audio/     Procedural Web Audio sound effects and ambience
+src/input/     Touch controls (swipe swings, buttons) and phone tilt
 src/sandbox/   Sandbox app (ball machine, play mode, HUD, controls)
 tests/         Vitest: physics, paddle contact, swing, assist, rules, an end-to-end
                gameplay test vs every machine preset, full AI-vs-AI matches,

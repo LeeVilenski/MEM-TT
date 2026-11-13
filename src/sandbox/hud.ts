@@ -83,6 +83,21 @@ export class Hud {
   private flashTimer = 0;
   private replayEl: HTMLDivElement;
 
+  private fpsEl: HTMLDivElement | null = null;
+
+  setFps(text: string | null) {
+    if (!text) {
+      if (this.fpsEl) this.fpsEl.style.display = 'none';
+      return;
+    }
+    if (!this.fpsEl) {
+      this.fpsEl = el('div', 'hud-fps');
+      this.replayEl.parentElement!.append(this.fpsEl);
+    }
+    this.fpsEl.style.display = 'block';
+    this.fpsEl.textContent = text;
+  }
+
   /** Replay banner (null hides it). */
   setReplay(text: string | null) {
     this.replayEl.innerHTML = text ?? '';
@@ -99,7 +114,10 @@ export class Hud {
     this.help = el('div', 'hud-help');
 
     this.startEl = el('div', 'hud-start');
-    this.startEl.innerHTML = `<button type="button">▶ Play vs ball machine</button><div class="hud-start-sub">Your mouse becomes the paddle. Flick to swing. <kbd>Esc</kbd> to get the cursor back.</div>`;
+    const touch = document.body.classList.contains('touch') || window.matchMedia?.('(pointer: coarse)').matches;
+    this.startEl.innerHTML = touch
+      ? `<button type="button">▶ Play vs ball machine</button><div class="hud-start-sub">Drag to move the paddle, <b>swipe</b> to swing (up = topspin, down = backspin). ☰ to leave.</div>`
+      : `<button type="button">▶ Play vs ball machine</button><div class="hud-start-sub">Your mouse becomes the paddle. Flick to swing. <kbd>Esc</kbd> to get the cursor back.</div>`;
     this.startEl.querySelector('button')!.addEventListener('click', (e) => {
       e.stopPropagation();
       this.onStartPlay();

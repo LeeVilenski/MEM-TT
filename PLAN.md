@@ -114,5 +114,5 @@ The host sets it for the room. It adjusts:
 4. ✅ **Online rooms** (done): room codes, 1v1, then 2v2 doubles with partners taking turns, plus spectators.
 5. ✅ **Depth** (done): rubbers, player styles, AI per style, the realism slider.
 6. ✅ **Look and theme** (done): IT venues and characters, audio, replays.
-7. **Mobile:** touch-swipe swings, optional phone tilt, performance tuning.
+7. ✅ **Mobile** (done): touch-swipe swings, optional phone tilt, performance tuning.
 8. **Progression:** stats, training drills, tournaments, unlocks.
