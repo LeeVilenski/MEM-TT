@@ -97,9 +97,105 @@ export class Sfx {
     }
   }
 
+  /** Extra weight on hard hits (arcade effects): a low thump and a sharper crack. */
+  heavyHits = true;
+
   paddle(speed: number, rubberKind: string, x: number) {
     const tone = rubberTone(rubberKind);
-    this.burst({ gain: impactGain(speed, 18) * 0.9, pan: panFor(x), freq: tone.freq, q: tone.q, decay: tone.decay, tone: tone.freq * 0.55, toneDecay: tone.decay * 0.8 });
+    // Harder hits ring slightly higher and sharper.
+    const power = this.heavyHits ? Math.max(0, Math.min(1, (speed - 12) / 22)) : 0;
+    const f = tone.freq * (1 + 0.25 * power);
+    this.burst({ gain: impactGain(speed, 18) * 0.9, pan: panFor(x), freq: f, q: tone.q, decay: tone.decay, tone: f * 0.55, toneDecay: tone.decay * 0.8 });
+    if (power > 0.15) {
+      // Body: a short low thump, and a bright crack on smashes.
+      this.burst({ gain: 0.5 * power, pan: panFor(x), freq: 220, q: 0.7, decay: 0.09 + 0.06 * power, type: 'lowpass', tone: 85, toneDecay: 0.1 + 0.05 * power });
+      if (power > 0.5) this.burst({ gain: 0.35 * power, pan: panFor(x), freq: 5200, q: 1.2, decay: 0.03, type: 'highpass' });
+    }
+  }
+
+  /** A bright two-note chime for a perfectly timed stroke. */
+  perfect() {
+    const ctx = this.ready();
+    if (!ctx) return;
+    [1760, 2637].forEach((f, i) => {
+      const t = ctx.currentTime + i * 0.05;
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.value = f;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.12, t + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.25);
+      o.connect(g).connect(this.master!);
+      o.start(t);
+      o.stop(t + 0.27);
+    });
+  }
+
+  /**
+   * Colleagues reacting: 'applause' (a good rally), 'cheer' (a great one, or the match),
+   * 'groan' (an "ooh" at an error). `strength` 0–1.
+   */
+  crowd(kind: 'applause' | 'cheer' | 'groan', strength = 0.6) {
+    const ctx = this.ready();
+    if (!ctx) return;
+    const out = ctx.createGain();
+    out.gain.value = 0.25 + 0.5 * strength;
+    out.connect(this.master!);
+    const t0 = ctx.currentTime;
+    const noiseBand = (start: number, dur: number, freq: number, q: number, gain: number, attack: number, type: BiquadFilterType = 'bandpass') => {
+      const src = ctx.createBufferSource();
+      src.buffer = this.noise;
+      src.loop = true;
+      const f = ctx.createBiquadFilter();
+      f.type = type;
+      f.frequency.value = freq;
+      f.Q.value = q;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, start);
+      g.gain.exponentialRampToValueAtTime(gain, start + attack);
+      g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+      src.connect(f).connect(g).connect(out);
+      src.start(start, Math.random() * 0.5);
+      src.stop(start + dur + 0.05);
+      return f;
+    };
+    if (kind === 'groan') {
+      // A falling "oooh" from a few people: a vowel-like band sweeping down.
+      for (let i = 0; i < 4; i++) {
+        const st = t0 + i * 0.04;
+        const f = noiseBand(st, 0.9, 520 + i * 60, 6, 0.35, 0.12);
+        f.frequency.exponentialRampToValueAtTime(260 + i * 30, st + 0.85);
+      }
+      return;
+    }
+    // Claps: many short highpassed noise bursts from different people.
+    const dur = kind === 'cheer' ? 2.2 : 1.4;
+    const claps = Math.round((kind === 'cheer' ? 70 : 40) * (0.5 + strength));
+    for (let i = 0; i < claps; i++) {
+      const st = t0 + Math.random() * dur * Math.random() ** 0.5;
+      const src = ctx.createBufferSource();
+      src.buffer = this.noise;
+      const f = ctx.createBiquadFilter();
+      f.type = 'bandpass';
+      f.frequency.value = 1200 + Math.random() * 1800;
+      f.Q.value = 1.2;
+      const g = ctx.createGain();
+      const amp = 0.08 + Math.random() * 0.12;
+      g.gain.setValueAtTime(amp, st);
+      g.gain.exponentialRampToValueAtTime(0.0001, st + 0.03 + Math.random() * 0.02);
+      const pan = ctx.createStereoPanner();
+      pan.pan.value = Math.random() * 1.6 - 0.8;
+      src.connect(f).connect(g).connect(pan).connect(out);
+      src.start(st, Math.random() * 0.8, 0.06);
+    }
+    // A cheer adds a "yeah!" swell: voiced bands rising then falling.
+    if (kind === 'cheer') {
+      for (let i = 0; i < 3; i++) {
+        const f = noiseBand(t0 + i * 0.06, 1.6, 700 + i * 250, 3, 0.18, 0.25);
+        f.frequency.exponentialRampToValueAtTime(900 + i * 300, t0 + 0.4);
+      }
+    }
   }
 
   table(speed: number, x: number) {

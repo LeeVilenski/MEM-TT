@@ -219,6 +219,13 @@ Play against the ball machine with a mouse-driven paddle. Click **▶ Play**: th
   - Simulation (0%) turns all of this off.
 - **Physics:** the gesture becomes a real paddle velocity and face angle, and the physics below decides the shot.
 
+**Arcade effects** (Look & sound → *Arcade effects*, on by default):
+- **Feel:** a short hit-stop on hard hits (not online, where the clock is the server's), camera shake and a zoom kick on smashes.
+- **Visuals:** a glowing comet tail coloured by spin, sparks at contact, and puffs on hard bounces.
+- **Sound:** heavier hit sounds on hard shots, and colleagues who applaud long rallies, groan at errors and cheer the match.
+- **Finale:** the match-winning rally replays in slow motion.
+- **Perfect timing:** the cyan ring shrinks onto the ball and turns gold just before contact. A flick still moving within ~50 ms of contact is **PERFECT**: a gold spark burst and chime, plus 10% extra bat speed at 50% realism and above. The bonus is never on in Simulation.
+
 **How contact works**
 - The paddle is a real collider. It's swept between frames, so fast swings can't pass through the ball.
 - The impulse model includes the rubber's restitution and grip and a sponge "catapult". Spin, pace and direction come from the paddle's velocity and face angle; nothing is scripted per shot.

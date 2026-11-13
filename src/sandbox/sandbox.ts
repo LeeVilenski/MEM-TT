@@ -30,6 +30,7 @@ import { LET_MESSAGE, pointMessage } from '../game/messages';
 import { classifyShot } from '../game/shots';
 import { NO_INPUT, REACH, type SwingInput } from '../game/swing';
 import { BallView, spinColor } from '../render/ballView';
+import { Juice, hitPower } from '../render/juice';
 import { PlayerView } from '../render/playerView';
 import { createScene } from '../render/scene';
 import { Hud, MatchHud, type ShotReport, type ReturnReport, type PracticeStats } from './hud';
@@ -161,7 +162,14 @@ export class Sandbox {
     muted: loadPref('mem.muted', '0') === '1',
     ambience: loadPref('mem.ambience', '1') === '1',
     autoReplay: loadPref('mem.autoReplay', '1') === '1',
+    arcadeFx: loadPref('mem.arcadeFx', '1') === '1',
   };
+  /** Arcade effects: hit-stop, shake, comet tail, sparks (see render/juice). */
+  private juice!: Juice;
+  /** Speed of the last paddle hit, 0–1 (for crowd reactions). */
+  private lastHitPower = 0;
+  /** The match just ended: replay its last rally in slow motion. */
+  private finale = false;
   private recorder = new RallyRecorder();
   private replay: ReplayPlayer | null = null;
   private autoReplayed: unknown = null;
@@ -221,6 +229,9 @@ export class Sandbox {
 
     this.ball = new BallView(this.scene);
     this.ball.visible = false;
+    this.juice = new Juice(this.scene);
+    this.juice.enabled = this.look.arcadeFx;
+    this.sfx.heavyHits = this.look.arcadeFx;
     this.hud = new Hud(container);
 
     this.player = new Player('p1', this.params);
@@ -580,6 +591,7 @@ export class Sandbox {
     const info = classifyShot(e.pos, e.velOut, e.spinOut, e.paddleVel, e.velIn, e.spinIn);
     this.lastReturn = { ...info, paddleSpeed: length(e.paddleVel), wing: this.player.swing.side, rubber: this.player.rubbers[this.player.swing.side].name };
     this.hitSound(e.impactSpeed + length(e.paddleVel), this.player.rubbers[this.player.swing.side].kind, e.pos.x);
+    this.fxHit(e.pos, e.velOut, e.spinOut, true, false);
     this.career.recordShot(info.name, info.speed, info.rpm);
     this.recorder.caption(this.clock(), `You: ${info.name} · ${info.speed.toFixed(1)} m/s · ${Math.round(info.rpm).toLocaleString()} rpm`);
     this.ball.clearTrail();
@@ -597,6 +609,7 @@ export class Sandbox {
       this.stats.made++;
       this.stats.streak++;
       this.stats.best = Math.max(this.stats.best, this.stats.streak);
+      if (this.look.arcadeFx && this.stats.streak % 5 === 0) this.sfx.crowd(this.stats.streak % 10 === 0 ? 'cheer' : 'applause', Math.min(1, this.stats.streak / 20));
     } else {
       this.stats.streak = 0;
       if (result === 'OUT') this.hud.flash('404', 'Ball not found (on the table)');
@@ -656,16 +669,19 @@ export class Sandbox {
     this.lastFrame = now;
 
     this.localServer?.pump();
+    // Hit-stop pauses the game clock briefly; online the clock is the server's, so never.
+    this.juice.allowHitStop = !this.online;
+    const fxScale = this.online || this.replay ? 1 : this.juice.gameScale(realDt);
     if (this.replay) {
       // Online the match carries on underneath (it can't be paused for one player).
       if (this.online) this.onlineFrame(realDt);
       this.runReplay(realDt);
     } else {
       if (this.online) this.onlineFrame(realDt);
-      else if (this.match) this.matchFrame(realDt);
+      else if (this.match) this.matchFrame(realDt, fxScale);
       else {
         if (this.playing) this.updatePlayer(realDt);
-        if (!this.settings.paused) this.advance(realDt * this.settings.timeScale * this.gameSpeed, realDt);
+        if (!this.settings.paused) this.advance(realDt * this.settings.timeScale * this.gameSpeed * fxScale, realDt);
       }
       this.recordFrame();
       this.maybeAutoReplay();
@@ -681,7 +697,16 @@ export class Sandbox {
     if (this.quality.setting === 'auto' && this.autoQuality.sample(realDt)) this.applyQuality();
     this.hud.setFps(this.quality.showFps ? `${this.autoQuality.fps} fps · ${QUALITY_LEVELS[this.qualityLevel].name}` : null);
     this.controls.update();
+    const b = this.ball.last;
+    this.juice.update(realDt, this.ball.isVisible && b ? { pos: b.pos, state: b.state, visible: true } : null);
+    // Shake and zoom kick are applied for this render only.
+    const shake = this.playing && !this.replay ? this.juice.cameraOffset : null;
+    if (shake) {
+      this.camera.position.add(shake);
+      this.setFov(this.playCam.fov + this.juice.fovOffset);
+    }
     this.renderer.render(this.scene, this.camera);
+    if (shake) this.camera.position.sub(shake);
   }
 
   /** Current human input (mouse deltas accumulated since the last frame, plus held keys). */
@@ -716,7 +741,7 @@ export class Sandbox {
     this.player.setIntercept(ic, now);
     this.player.update(realDt, input, move, AIM_POINT);
     this.playerView.update(this.player);
-    this.playerView.setMarker(this.settings.showIntercept ? intercept : null);
+    this.playerView.setMarker(this.settings.showIntercept ? intercept : null, this.markerEta());
     this.hud.setPaddle(this.player.swing.pitchDeg, this.player.swing.side, this.player.swing.forcedSide !== null, input.drive);
   }
 
@@ -753,6 +778,7 @@ export class Sandbox {
           const name = e.serve ? 'Serve' : info.name;
           this.matchHud.addShot({ who, name, speed: info.speed, rpm: info.rpm, top: info.top });
           this.hitSound(h.impactSpeed + length(h.paddleVel), e.side === 'near' ? this.player.rubbers[this.player.swing.side].kind : ai.rubber.kind, h.pos.x);
+          this.fxHit(h.pos, h.velOut, h.spinOut, e.side === 'near', e.serve);
           this.recorder.caption(this.clock(), `${who}: ${name} · ${info.speed.toFixed(1)} m/s · ${Math.round(info.rpm).toLocaleString()} rpm`);
           if (e.side === 'near' && !e.serve) this.career.recordShot(info.name, info.speed, info.rpm);
           this.ball.clearTrail();
@@ -771,6 +797,7 @@ export class Sandbox {
           this.sfx.point(e.result.winner === 'near', e.game);
           this.updateVenueScreen();
           this.career.recordPoint(e.result.winner === 'near', { ace: e.result.ace, rallyHits: match.referee?.hits });
+          this.fxPoint(e.result.reason, match.referee?.hits ?? 0, e.result.winner === 'near', e.match);
           const m = pointMessage(e.result, names);
           if (e.match) this.hud.flash(e.result.winner === 'near' ? 'SHIPPED TO PROD' : 'INCIDENT REPORT', e.result.winner === 'near' ? 'You won the match!' : `${ai.displayName} won the match`);
           else if (e.game) this.hud.flash(e.result.winner === 'near' ? 'DEPLOYED' : 'ROLLBACK', `Game to ${names[e.result.winner]} — ${m.title}: ${m.sub}`);
@@ -808,19 +835,19 @@ export class Sandbox {
     this.sinceResolved = 0;
   }
 
-  private matchFrame(realDt: number) {
+  private matchFrame(realDt: number, fxScale = 1) {
     const match = this.match!;
     const ai = this.ai!;
     const running = this.playing && !this.settings.paused && match.phase !== 'match-over';
     if (running) {
       const { input, move } = this.gatherInput();
-      match.frame(realDt * this.settings.timeScale * this.gameSpeed, realDt, { side: 'near', input, move });
+      match.frame(realDt * this.settings.timeScale * this.gameSpeed * fxScale, realDt, { side: 'near', input, move });
       this.hud.setPaddle(this.player.swing.pitchDeg, this.player.swing.side, this.player.swing.forcedSide !== null, input.drive);
     }
 
     // Players and ball.
     this.playerView.update(this.player);
-    this.playerView.setMarker(this.settings.showIntercept ? match.interceptFor('near') : null);
+    this.playerView.setMarker(this.settings.showIntercept ? match.interceptFor('near') : null, this.markerEta());
     const pose = ai.worldPose;
     const body = ai.worldBody;
     this.aiView.updatePose(pose, body, pose.pos.x <= body.x ? 'forehand' : 'backhand');
@@ -1054,6 +1081,35 @@ export class Sandbox {
     }
   }
 
+  /** Timing-ring input: seconds until the ball arrives (only with arcade effects). */
+  private markerEta(): number | undefined {
+    return this.look.arcadeFx ? this.player.interceptEta : undefined;
+  }
+
+  /** Arcade effects for a paddle hit (render coordinates). `mine` = the local player. */
+  private fxHit(pos: Vec3, velOut: Vec3, spinOut: Vec3, mine: boolean, serve: boolean) {
+    this.lastHitPower = serve ? 0 : hitPower(length(velOut));
+    const perfect = mine && !serve && this.player.lastContactPerfect;
+    this.juice.hit(pos, velOut, spinOut, { perfect, serve });
+    if (perfect && this.look.arcadeFx) {
+      this.sfx.perfect();
+      this.hud.perfect();
+    }
+  }
+
+  /** Colleagues react to how a point ended. */
+  private fxPoint(reason: string, rallyHits: number, mine: boolean, matchOver: boolean) {
+    if (!this.look.arcadeFx) return;
+    const error = reason === 'net' || reason === 'out' || reason === 'own-side' || reason === 'volley-out';
+    if (matchOver) {
+      this.sfx.crowd(mine ? 'cheer' : 'applause', 1);
+      this.finale = true;
+    } else if (rallyHits >= 8) this.sfx.crowd('cheer', Math.min(1, rallyHits / 14));
+    else if (rallyHits >= 5) this.sfx.crowd('applause', 0.5);
+    else if (!error && this.lastHitPower > 0.75) this.sfx.crowd('applause', 0.4); // a smash winner
+    else if (error && rallyHits >= 3) this.sfx.crowd('groan', 0.5);
+  }
+
   private hitSound(speed: number, rubberKind: string, x: number) {
     this.sfx.paddle(speed, rubberKind, x);
     this.recorder.sound(this.clock(), 'paddle', speed, x, rubberKind);
@@ -1064,6 +1120,7 @@ export class Sandbox {
     const x = mapVec(side, e.pos).x;
     if (e.type === 'table') {
       this.sfx.table(e.impactSpeed, x);
+      this.juice.bounce(mapVec(side, e.pos), e.impactSpeed);
       this.recorder.sound(this.clock(), 'table', e.impactSpeed, x);
     } else if (e.type === 'net') {
       this.sfx.net(x);
@@ -1092,18 +1149,25 @@ export class Sandbox {
 
   private maybeAutoReplay() {
     const last = this.recorder.last;
+    // The match-winning rally, in slow motion.
+    if (this.finale && last && last !== this.autoReplayed && !this.recorder.recording) {
+      this.finale = false;
+      this.autoReplayed = last;
+      this.startReplay(0.25);
+      return;
+    }
     if (!this.look.autoReplay || !this.match || !last || last === this.autoReplayed || this.recorder.recording) return;
     this.autoReplayed = last;
     if (last.hits >= 6) this.startReplay();
   }
 
-  startReplay() {
+  startReplay(speed = 0.4) {
     const rally = this.recorder.last;
     if (!rally || this.replay) {
       if (!rally) this.hud.flash('NO DATA', 'Play a rally first, then press R');
       return;
     }
-    this.replay = new ReplayPlayer(rally, 0.4);
+    this.replay = new ReplayPlayer(rally, speed);
     const visible = new Map(this.replayViews().map(([id, v]) => [id, v.isVisible]));
     this.savedCamera = { pos: this.camera.position.clone(), target: this.controls.target.clone(), visible };
     this.ball.clearTrail();
@@ -1280,6 +1344,7 @@ export class Sandbox {
         this.matchHud.addShot({ who, name, speed: info.speed, rpm: info.rpm, top: info.top });
         const rubber = e.by === c.seat ? this.player.rubbers[this.player.swing.side].kind : 'Inverted';
         this.hitSound(length(e.velOut) + length(e.paddleVel), rubber, mapVec(c.side, e.pos).x);
+        this.fxHit(mapVec(c.side, e.pos), mapVec(c.side, e.velOut), mapVec(c.side, e.spinOut), e.by === c.seat, e.serve);
         this.recorder.caption(this.clock(), `${who}: ${name} · ${info.speed.toFixed(1)} m/s · ${Math.round(info.rpm).toLocaleString()} rpm`);
         this.rallyHits++;
         if (e.by === c.seat && !e.serve) this.career.recordShot(info.name, info.speed, info.rpm);
@@ -1300,6 +1365,7 @@ export class Sandbox {
         this.sfx.point(e.result.winner === c.side, e.game);
         this.updateVenueScreen();
         if (c.seat) this.career.recordPoint(e.result.winner === c.side, { ace: e.result.ace, rallyHits: this.rallyHits });
+        this.fxPoint(e.result.reason, this.rallyHits, e.result.winner === c.side, e.match);
         const names = { near: this.teamName('near'), far: this.teamName('far') };
         const m = pointMessage(e.result, names);
         const mine = e.result.winner === c.side;
@@ -1326,7 +1392,7 @@ export class Sandbox {
     // Me (view frame), other players (world → view).
     this.playerView.visible = !!c.seat && inMatch;
     this.playerView.update(this.player);
-    this.playerView.setMarker(this.settings.showIntercept ? c.interceptView() : null);
+    this.playerView.setMarker(this.settings.showIntercept ? c.interceptView() : null, this.markerEta());
     const seats = Object.keys(c.room?.seats ?? {}) as Seat[];
     for (const seat of seats) {
       if (seat === c.seat) continue;
@@ -1637,6 +1703,13 @@ export class Sandbox {
     lf.add(this.look, 'autoReplay')
       .name('Auto-replay long rallies')
       .onChange((a: boolean) => savePref('mem.autoReplay', a ? '1' : '0'));
+    lf.add(this.look, 'arcadeFx')
+      .name('Arcade effects (hit-stop, sparks, crowd)')
+      .onChange((a: boolean) => {
+        this.juice.enabled = a;
+        this.sfx.heavyHits = a;
+        savePref('mem.arcadeFx', a ? '1' : '0');
+      });
     lf.add({ replay: () => this.startReplay() }, 'replay').name('Replay last rally  [R]');
     lf.add(this.quality, 'setting', { 'Auto (adapts to your device)': 'auto', High: 2, Medium: 1, Low: 0 })
       .name('Graphics quality')

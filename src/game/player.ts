@@ -1,4 +1,4 @@
-import { RUBBERS, TABLE, lerp, normalize, type PaddleCollider, type PaddlePose, type PhysicsParams, type Rubber, type Vec3 } from '../physics';
+import { RUBBERS, TABLE, lerp, normalize, scale, type BallState, type ContactAdjust, type PaddleCollider, type PaddlePose, type PhysicsParams, type Rubber, type Vec3 } from '../physics';
 import { makeAngleAssist, type ShotMode } from './assist';
 import { realismSettings } from './realism';
 import { STYLES, type PlayStyle, type StyleId } from './styles';
@@ -37,6 +37,8 @@ const MAX_LEAN = 0.45;
 /** The magnet ramps up over the last this-many seconds before contact. */
 const MAGNET_WINDOW = 0.3;
 const AIM_LIMIT = 0.6;
+/** A stroke whose peak is this close (s) before contact is perfectly timed. */
+export const PERFECT_WINDOW = 0.05;
 /** How far the bat can go sideways in the world. */
 const BAT_LIMIT = TABLE.width / 2 + 1.1;
 
@@ -87,6 +89,7 @@ export class Player {
     this.assists.footwork = r.footwork;
     this.assists.magnet = r.magnet;
     this.swing.params.powerCap = r.powerCap;
+    this.perfectBonus = r.perfectBonus;
     this.swing.params.strokeHold = r.strokeHold;
     this.swing.params.autoFace = r.autoFace;
   }
@@ -112,6 +115,11 @@ export class Player {
   get batX() {
     return this.body.x + this.swing.x;
   }
+
+  /** Extra bat speed for a perfectly timed stroke (0 = none; set by the realism slider). */
+  perfectBonus = 0;
+  /** Whether the last paddle contact was perfectly timed (read on the paddle event). */
+  lastContactPerfect = false;
 
   /** Where this player's shot is aimed (view frame); the contact assist steers toward it. */
   aimTarget: { x: number; z: number } | null = null;
@@ -196,6 +204,15 @@ export class Player {
     }
   }
 
+  /** At contact: perfect-timing check (and its bonus), then the contact assist. */
+  private contact(ball: BallState, pose: PaddlePose, normal: Vec3, rubber: Rubber): Vec3 | ContactAdjust {
+    const perfect = this.shotMode === 'rally' && this.swing.strokePeakAge <= PERFECT_WINDOW;
+    this.lastContactPerfect = perfect;
+    if (!perfect || this.perfectBonus <= 0) return this.angleAssist(ball, pose, normal, rubber);
+    const faster = { ...pose, vel: scale(pose.vel, 1 + this.perfectBonus) };
+    return withVel(this.angleAssist(ball, faster, normal, rubber), faster.vel);
+  }
+
   /**
    * Collider for one physics tick. A frame spans `count` ticks; tick `index` covers
    * the fraction [index/count, (index+1)/count] of the paddle's motion this frame.
@@ -210,9 +227,14 @@ export class Player {
       back: rubber,
       extraRadius: this.assists.hitArea,
       poseAt: (f) => lerpPose(prev, cur, (index + f) / count),
-      adjustNormal: this.angleAssist,
+      adjustNormal: (ball, pose, normal, rub) => this.contact(ball, pose, normal, rub),
     };
   }
+}
+
+function withVel(r: Vec3 | ContactAdjust, vel: Vec3): ContactAdjust {
+  if ('normal' in r) return r.vel ? r : { normal: r.normal, vel };
+  return { normal: r, vel };
 }
 
 function lerpPose(a: PaddlePose, b: PaddlePose, t: number): PaddlePose {

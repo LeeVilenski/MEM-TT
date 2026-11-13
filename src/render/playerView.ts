@@ -7,6 +7,8 @@ import type { StyleId } from '../game/styles';
 import { Avatar } from './avatar';
 
 const RED = 0xc8202a;
+/** The ring turns gold this long (s) before contact: flick now for a perfect stroke. */
+const PERFECT_RING = 0.06;
 const BLACK = 0x15161a;
 
 /**
@@ -103,10 +105,24 @@ export class PlayerView {
     if (!v) this.setMarker(null);
   }
 
-  setMarker(p: Vec3 | null) {
+  /**
+   * Show the intercept ring at `p`. With `eta` (seconds until the ball arrives), it is a
+   * timing ring: it shrinks onto the ball as it arrives and turns gold in the
+   * perfect-timing window.
+   */
+  setMarker(p: Vec3 | null, eta?: number) {
     this.marker.visible = !!p;
     this.markerLine.visible = !!p;
     if (!p) return;
+    const mat = this.marker.material as THREE.MeshBasicMaterial;
+    if (eta !== undefined && Number.isFinite(eta)) {
+      const k = Math.max(0, Math.min(1, eta / 0.5));
+      this.marker.scale.setScalar(1 + 1.6 * k);
+      mat.color.set(eta <= PERFECT_RING ? 0xffc83d : 0x5eead4);
+    } else {
+      this.marker.scale.setScalar(1);
+      mat.color.set(0x5eead4);
+    }
     this.marker.position.set(p.x, p.y, p.z);
     this.markerLine.position.set(p.x, p.y, p.z);
     this.markerLine.scale.y = p.y;

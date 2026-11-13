@@ -54,7 +54,8 @@ export function playBall(presetName: string, angleAssist: number, flickLead = 2 
       if (flick > 0) {
         input.dy = -flickPx;
         flick--;
-      } else {
+      } else if (!flicked) {
+        // (After the flick the hand follows through and holds; it doesn't chase the ring.)
         const clamp = (v: number) => Math.max(-maxStep, Math.min(maxStep, v));
         // Steer the cursor (the bat, before the magnet) onto the ring.
         input.dx = clamp((ic.pos.x - player.batX) / sens);

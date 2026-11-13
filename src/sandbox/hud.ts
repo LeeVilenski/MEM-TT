@@ -164,6 +164,9 @@ export class Hud {
     container.append(this.replayEl);
     this.paddleEl = el('div', 'hud-paddle');
     this.statsEl = el('div', 'hud-stats');
+    this.perfectEl = el('div', 'hud-perfect');
+    this.perfectEl.textContent = 'PERFECT';
+    container.append(this.perfectEl);
     container.append(this.panel, this.flashEl, this.warnEl, this.help, this.startEl, this.paddleEl, this.statsEl);
     this.setPlaying(false);
     this.setStats({ attempts: 0, made: 0, streak: 0, best: 0 });
@@ -211,6 +214,15 @@ export class Hud {
     this.flashEl.classList.add('show');
     window.clearTimeout(this.flashTimer);
     this.flashTimer = window.setTimeout(() => this.flashEl.classList.remove('show'), 1400);
+  }
+
+  private perfectEl: HTMLDivElement;
+
+  /** A small gold "PERFECT" pop for a perfectly timed stroke. */
+  perfect() {
+    this.perfectEl.classList.remove('show');
+    void this.perfectEl.offsetWidth; // restart the CSS animation
+    this.perfectEl.classList.add('show');
   }
 
   setPaddle(pitch: number, wing: StrokeSide, locked: boolean, drive: boolean) {

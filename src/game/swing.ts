@@ -183,13 +183,21 @@ export class SwingController {
   private heldAge = 0;
   /** Mouse-plane velocity of the stroke in memory (for its direction). */
   private heldGesture = { x: 0, y: 0 };
+  /** Seconds since the last frame of flick movement. */
+  private flickAge = Infinity;
+
+  /** Seconds since the last flick movement (Infinity if no flick is live). */
+  get strokePeakAge(): number {
+    if (this.heldGesture.x === 0 && this.heldGesture.y === 0) return Infinity;
+    return this.flickAge;
+  }
 
   /**
    * Sideways aim from the stroke's direction, −1 (left) … 1 (right): a stroke angled ~40°
    * off vertical is full aim. 0 when no stroke is live.
    */
   get strokeAim(): number {
-    if (length(this.held) < 1e-6 || this.heldAge > this.params.strokeHold) return 0;
+    if (this.flickAge > this.params.strokeHold) return 0;
     const g = this.heldGesture;
     const ratio = g.x / Math.max(Math.abs(g.y), 0.5);
     return Math.max(-1, Math.min(1, ratio / 0.85));
@@ -251,6 +259,16 @@ export class SwingController {
     }
     let vel = strokeVelocity(gesture, input.drive, hook, p, this.serving ? p.serveThreshold : p.swingThreshold, this.serving);
 
+    // The flick itself, from this frame's raw movement (not the smoothed velocity): its
+    // direction aims, and the time since it ended times the stroke ("perfect" timing).
+    // Sliding across to reach the ball, or slow positioning before a block, isn't a flick.
+    const thrNow = this.serving ? p.serveThreshold : p.swingThreshold;
+    const rawGesture = this.serving ? Math.hypot(rawVx, rawVy) : Math.hypot(rawVx * p.lateralStroke, rawVy);
+    if (rawGesture > thrNow) {
+      if (this.flickAge > p.strokeHold || Math.hypot(rawVx, rawVy) >= Math.hypot(this.heldGesture.x, this.heldGesture.y)) this.heldGesture = { x: rawVx, y: rawVy };
+      this.flickAge = 0;
+    } else this.flickAge += dt;
+
     // Stroke memory: the strongest recent stroke stays "live" for strokeHold seconds,
     // fading out, so contact doesn't have to land on the exact frame of the flick.
     this.heldAge += dt;
@@ -258,11 +276,6 @@ export class SwingController {
     if (length(vel) >= length(this.held) * fade) {
       this.held = vel;
       this.heldAge = 0;
-      // Direction from this frame's raw movement (the flick itself), not the smoothed
-      // velocity, so sliding across to reach the ball just before isn't read as aim.
-      // Only a real stroke aims: slow positioning before a block doesn't.
-      const stroke = Math.hypot(gesture.x, gesture.y) > (this.serving ? p.serveThreshold : p.swingThreshold);
-      this.heldGesture = stroke ? { x: rawVx, y: rawVy } : { x: 0, y: 0 };
     } else {
       vel = scale(this.held, fade);
     }
@@ -303,6 +316,7 @@ export class SwingController {
     this.planarVel = { x: 0, y: 0 };
     this.held = v3();
     this.heldGesture = { x: 0, y: 0 };
+    this.flickAge = Infinity;
     this.pose = { pos: v3(bodyX + x, y, restZ), normal: v3(0, 0, -1), vel: v3() };
     this.visualPos = { ...this.pose.pos };
     this.prevPose = this.pose;
