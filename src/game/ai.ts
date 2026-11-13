@@ -21,6 +21,7 @@ import { landingOutcome, type ShotMode } from './assist';
 import { mapPose, mapState, mapVec, type SideId } from './frame';
 import { IncomingPrediction } from './intercept';
 import { faceNormal } from './swing';
+import { STYLES, type PlayStyle } from './styles';
 
 /**
  * Computer opponent. All reasoning happens in the AI's local frame, where it stands
@@ -52,9 +53,9 @@ export interface AiProfile {
 export type AiLevel = 'easy' | 'medium' | 'hard';
 
 export const AI_LEVELS: Record<AiLevel, AiProfile> = {
-  easy: { name: 'Intern', reaction: 0.22, moveSpeed: 2.6, paddleSpeed: 4, pitchError: 4.5, yawError: 3.5, speedError: 0.12, aggression: 0.2, margin: 0.3 },
-  medium: { name: 'Sysadmin', reaction: 0.16, moveSpeed: 3.4, paddleSpeed: 5, pitchError: 2.2, yawError: 2, speedError: 0.07, aggression: 0.5, margin: 0.2 },
-  hard: { name: 'Principal Engineer', reaction: 0.1, moveSpeed: 4.4, paddleSpeed: 6.5, pitchError: 1.0, yawError: 1, speedError: 0.04, aggression: 0.8, margin: 0.12 },
+  easy: { name: 'Junior', reaction: 0.22, moveSpeed: 2.6, paddleSpeed: 4, pitchError: 4.5, yawError: 3.5, speedError: 0.12, aggression: 0.2, margin: 0.3 },
+  medium: { name: 'Senior', reaction: 0.16, moveSpeed: 3.4, paddleSpeed: 5, pitchError: 2.2, yawError: 2, speedError: 0.07, aggression: 0.5, margin: 0.2 },
+  hard: { name: 'Principal', reaction: 0.1, moveSpeed: 4.4, paddleSpeed: 6.5, pitchError: 1.0, yawError: 1, speedError: 0.04, aggression: 0.8, margin: 0.12 },
 };
 
 type StrokeKind = 'loop' | 'drive' | 'push' | 'block' | 'smash' | 'flick' | 'chop' | 'serve-short' | 'serve-long' | 'serve-side';
@@ -67,7 +68,7 @@ const STROKES: Record<StrokeKind, Vec3> = {
   block: v3(0, 0.6, -1.2),
   smash: v3(0, 1, -17),
   flick: v3(0, 4, -6),
-  chop: v3(0, -6, -3),
+  chop: v3(0, -4.5, -6.5),
   'serve-short': v3(0, -2.5, -3.2),
   'serve-long': v3(0, 2.5, -7.5),
   'serve-side': v3(4, -1.2, -4),
@@ -114,6 +115,33 @@ export class AiPlayer {
   plan: AiPlan | null = null;
   /** Doubles: serves must go diagonally (own right half → receiver's right half). */
   doubles = false;
+  /** Playing style: stroke preferences, distance from the table and rubbers. */
+  style: PlayStyle = STYLES.allround;
+
+  setStyle(style: PlayStyle) {
+    this.style = style;
+    this.rubber = style.rubbers.forehand;
+    this.body = { ...this.ready };
+  }
+
+  /** Display name, e.g. "Sysadmin · Senior". */
+  get displayName() {
+    return `${this.style.character} · ${this.profile.name}`;
+  }
+
+  /** Ready position for this style. */
+  private get ready() {
+    return { x: 0, z: TABLE.halfLength + Math.max(0.45, this.style.distance) };
+  }
+
+  /** Reorder candidate strokes by style preference (randomised, so styles mix it up). */
+  private byStyle(choices: StrokeKind[]): StrokeKind[] {
+    const w = this.style.ai as Partial<Record<StrokeKind, number>>;
+    return choices
+      .map((k, i) => ({ k, score: (w[k] ?? 1) * (1 + this.rng()) * (1 - i * 0.15) }))
+      .sort((a, b) => b.score - a.score)
+      .map((x) => x.k);
+  }
   private moveFrom = 0;
   private pose: PaddlePose = { pos: v3(0.3, TABLE.height + 0.25, READY.z - ARM), normal: v3(0, 0, -1), vel: v3() };
   private prevPose: PaddlePose = this.pose;
@@ -133,7 +161,8 @@ export class AiPlayer {
   planReturn(world: BallState, now: number): AiPlan | null {
     const local = mapState(this.side, world);
     const pred = new IncomingPrediction(local, this.params, now);
-    const planeZ = TABLE.halfLength + 0.2 + this.rng() * 0.25;
+    // Where it meets the ball depends on the style: blockers stay close, choppers deep.
+    const planeZ = TABLE.halfLength + Math.max(0.15, this.style.distance - 0.4) + this.rng() * 0.25;
     const ic = pred.interceptAt(planeZ, now, TABLE.height + 0.95);
     if (!ic) return (this.plan = null);
 
@@ -152,7 +181,9 @@ export class AiPlayer {
     else if (at.pos.z > TABLE.halfLength + 1.2) choices = r < 0.5 ? ['chop', 'loop', 'block'] : ['loop', 'chop', 'block'];
     else choices = r < 0.25 + 0.5 * a ? ['loop', 'drive', 'block'] : r < 0.7 ? ['drive', 'block', 'loop'] : ['block', 'drive', 'loop'];
 
-    return (this.plan = this.solve(at, ic.t, choices, 'rally', now));
+    // Keep every candidate the situation allows, but let the style decide the order.
+    const extra: StrokeKind[] = at.pos.z > TABLE.halfLength + 0.8 ? ['chop'] : [];
+    return (this.plan = this.solve(at, ic.t, this.byStyle([...new Set([...choices, ...extra])]), 'rally', now));
   }
 
   /**
@@ -160,7 +191,7 @@ export class AiPlayer {
    * spawns the ball there. The plan strikes the ball on its way down.
    */
   planServe(now: number): { hand: Vec3; tossVy: number } {
-    this.body = { ...READY };
+    this.body = { ...READY, z: TABLE.halfLength + 0.65 };
     // Doubles: serve from the right half (+x locally) so the ball can go diagonally.
     const handX = this.doubles ? 0.25 + this.rng() * 0.3 : this.body.x + 0.3 + (this.rng() - 0.5) * 0.3;
     const hand = v3(handX, TABLE.height + 0.06, TABLE.halfLength + 0.15);
@@ -260,7 +291,7 @@ export class AiPlayer {
     const plan = this.plan && now <= this.plan.t + 0.25 ? this.plan : null;
 
     // Footwork toward a position where the contact point is at a comfortable offset.
-    let target = READY;
+    let target = this.ready;
     if (plan && now >= this.moveFrom) {
       const fh = plan.pos.x >= this.body.x - 0.1;
       target = { x: plan.pos.x + (fh ? -0.4 : 0.3), z: Math.max(TABLE.halfLength + 0.15, plan.pos.z + ARM) };

@@ -189,12 +189,11 @@ export class Match {
     // The server can only strike the toss on its way down.
     if (side === this.server && this.referee.hits === 0 && this.sim.state.vel.y >= 0) return undefined;
     const c = this.sides[side];
-    if (c.kind === 'ai') return [c.ai.collider(index, count)];
-    // Humans: no accidental volleys (the assisted paddle can sit in the ball's path over
-    // the table). Contact only after the bounce, or once the ball is past the end line.
+    // No accidental volleys (an assisted or waiting paddle can sit in the ball's path
+    // over the table): contact only after the bounce, or once the ball is past the end line.
     const localZ = side === 'near' ? this.sim.state.pos.z : -this.sim.state.pos.z;
     if (this.referee.hits > 0 && this.referee.ballHeadingTo === side && this.referee.expectedHitter === side && !this.bouncedOn[side] && localZ < TABLE.halfLength) return undefined;
-    return [c.player.collider(index, count)];
+    return [c.kind === 'ai' ? c.ai.collider(index, count) : c.player.collider(index, count)];
   }
 
   private sideOfPaddle(id: string): SideId {

@@ -21,6 +21,9 @@ import {
 } from './protocol';
 import type { Transport } from './transport';
 import type { AiLevel } from '../game/ai';
+import { realismSettings } from '../game/realism';
+import type { StyleId } from '../game/styles';
+import { DEFAULT_PARAMS } from '../physics';
 
 export type OnlinePhase = 'connecting' | 'lobby' | 'serve-wait' | 'rally' | 'point-over' | 'over' | 'closed';
 
@@ -66,6 +69,8 @@ export class OnlineClient {
   /** Latest pose of every other seat (world frame), with local receive time. */
   remotes = new Map<Seat, { pose: WirePose; at: number }>();
   lastResult: PointResult | null = null;
+  /** The room's realism (0 simulation … 1 arcade), known once a match starts. */
+  realism = 0.55;
   rtt = 0;
   private offset = 0;
   private bestRtt = Infinity;
@@ -76,15 +81,35 @@ export class OnlineClient {
   private bouncedOnMySide = false;
   private listeners: ((e: OnlineEvent) => void)[] = [];
 
+  /**
+   * Local game clock: runs at the room's game speed once a match starts (the realism
+   * slider slows the game for everyone), so server time estimates stay consistent.
+   */
+  private speed = 1;
+  private clockBase: number;
+  private rawBase: number;
+  private clock = () => this.clockBase + (this.rawClock() - this.rawBase) * this.speed;
+
+  private setSpeed(k: number) {
+    this.clockBase = this.clock();
+    this.rawBase = this.rawClock();
+    this.speed = k;
+    // Re-measure the clock offset at the new rate.
+    this.bestRtt = Infinity;
+    this.ping();
+  }
+
   constructor(
     private transport: Transport,
     readonly player: Player,
+    /** Shared physics parameters; the room's spin-curve setting is applied to them. */
     private params: PhysicsParams,
-    private clock: () => number,
-    hello: { name: string; create?: { mode: GameMode; bestOf: number; aiLevel: AiLevel } },
+    private rawClock: () => number,
+    hello: { name: string; style?: StyleId; create?: { mode: GameMode; bestOf: number; aiLevel: AiLevel; realism?: number } },
   ) {
+    this.clockBase = this.rawBase = rawClock();
     transport.onOpen = () => {
-      this.send({ t: 'hello', v: PROTOCOL_VERSION, name: hello.name, create: hello.create });
+      this.send({ t: 'hello', v: PROTOCOL_VERSION, name: hello.name, style: hello.style, create: hello.create });
       this.ping();
     };
     transport.onMessage = (m) => this.onMessage(m);
@@ -138,8 +163,12 @@ export class OnlineClient {
     this.send({ t: 'sit', seat });
   }
 
-  configure(c: { mode?: GameMode; bestOf?: number; aiLevel?: AiLevel }) {
+  configure(c: { mode?: GameMode; bestOf?: number; aiLevel?: AiLevel; aiStyle?: StyleId | 'random'; realism?: number }) {
     this.send({ t: 'config', ...c });
+  }
+
+  setStyle(style: StyleId) {
+    this.send({ t: 'style', style });
   }
 
   start(fillAI: boolean) {
@@ -301,13 +330,21 @@ export class OnlineClient {
       case 'error':
         this.emit({ type: 'error', message: m.message });
         break;
-      case 'match':
+      case 'match': {
+        // Room-wide realism: game speed and spin curve must match the server; the
+        // player's own assists follow it too.
+        const r = realismSettings(m.realism);
+        this.realism = m.realism;
+        this.params.liftCoefficientMax = DEFAULT_PARAMS.liftCoefficientMax * r.spinCurve;
+        this.player.applyRealism(m.realism);
+        if (this.speed !== r.gameSpeed) this.setSpeed(r.gameSpeed);
         this.mode = m.mode;
         this.names = m.names;
         this.score = m.score;
         this.phase = 'serve-wait';
         this.emit({ type: 'match' });
         break;
+      }
       case 'serve':
         this.serverSeat = m.server;
         this.receiverSeat = m.receiver;

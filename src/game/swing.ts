@@ -138,6 +138,8 @@ export class SwingController {
   side: StrokeSide = 'forehand';
   /** Serving: gentle strokes count (lower stroke threshold). */
   serving = false;
+  /** Player-style multiplier on lateral reach. */
+  reachScale = 1;
   /** null = automatic forehand/backhand from paddle position. */
   forcedSide: StrokeSide | null = null;
 
@@ -180,7 +182,7 @@ export class SwingController {
     // Full movement up to the stroke threshold, then falling off with the square of the
     // speed (down to strokeTravel): positioning is unaffected, hard flicks barely move it.
     const posScale = mouseSpeed > thr ? Math.max(p.strokeTravel, (thr / mouseSpeed) ** 2) : 1;
-    this.x = clamp(this.x + mx * posScale, -REACH.lateral, REACH.lateral);
+    this.x = clamp(this.x + mx * posScale, -REACH.lateral * this.reachScale, REACH.lateral * this.reachScale);
     this.y = clamp(this.y + my * posScale, REACH.minHeight, REACH.maxHeight);
 
     // Smooth the bursty mouse velocity (exponential moving average).

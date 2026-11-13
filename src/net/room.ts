@@ -2,6 +2,8 @@ import { BallSim, DEFAULT_PARAMS, TABLE, TICK_DT, predict, v3, type BallEvent, t
 import { AI_LEVELS, AiPlayer, type AiLevel } from '../game/ai';
 import { mapVec, type SideId } from '../game/frame';
 import { RallyReferee, Scoreboard, type RallyOutcome } from '../game/rules';
+import { DEFAULT_REALISM, realismSettings } from '../game/realism';
+import { STYLES, STYLE_IDS, type StyleId } from '../game/styles';
 import {
   PROTOCOL_VERSION,
   fromV,
@@ -50,14 +52,17 @@ interface Flight {
   sim: BallSim;
   /** Server time of sim.time = 0. */
   t0: number;
+  /** Live AI flights: has the ball bounced on the AI's half yet? */
+  bounced?: boolean;
 }
 
 const timeOf = (f: Flight) => f.t0 + f.sim.time;
 
 export class RoomCore {
   readonly info: RoomInfo;
-  private clients = new Map<string, { name: string }>();
+  private clients = new Map<string, { name: string; style?: StyleId }>();
   private params: PhysicsParams;
+  private baseParams: PhysicsParams;
 
   private phase: MatchPhase = 'lobby';
   private phaseStart = 0;
@@ -83,13 +88,42 @@ export class RoomCore {
     private host: RoomHost,
     opts: { params?: PhysicsParams; rng?: () => number; mode?: GameMode; bestOf?: number; aiLevel?: AiLevel } = {},
   ) {
-    this.params = opts.params ?? DEFAULT_PARAMS;
+    this.baseParams = opts.params ?? DEFAULT_PARAMS;
+    this.params = this.baseParams;
     this.rng = opts.rng ?? Math.random;
-    this.info = { code, mode: opts.mode ?? 'singles', bestOf: opts.bestOf ?? 3, aiLevel: opts.aiLevel ?? 'medium', host: '', seats: {}, spectators: [], phase: 'lobby' };
+    this.clockBase = this.hostBase = host.now();
+    this.info = {
+      code,
+      mode: opts.mode ?? 'singles',
+      bestOf: opts.bestOf ?? 3,
+      aiLevel: opts.aiLevel ?? 'medium',
+      aiStyle: 'random',
+      realism: DEFAULT_REALISM,
+      host: '',
+      seats: {},
+      spectators: [],
+      phase: 'lobby',
+    };
     this.lastTick = host.now();
   }
 
   private rng: () => number;
+
+  /**
+   * Game clock. Runs at the room's game speed (the realism slider slows the whole
+   * game down); re-based when a match starts so it stays continuous.
+   */
+  private speed = 1;
+  private clockBase = 0;
+  private hostBase = 0;
+  now(): number {
+    return this.clockBase + (this.host.now() - this.hostBase) * this.speed;
+  }
+  private setSpeed(k: number) {
+    this.clockBase = this.now();
+    this.hostBase = this.host.now();
+    this.speed = k;
+  }
 
   get clientCount() {
     return this.clients.size;
@@ -104,7 +138,7 @@ export class RoomCore {
       return;
     }
     const name = (msg.name || 'Player').slice(0, 24);
-    this.clients.set(id, { name });
+    this.clients.set(id, { name, style: msg.style });
     if (!this.info.host) {
       this.info.host = id;
       if (msg.create) this.configure(msg.create);
@@ -112,13 +146,13 @@ export class RoomCore {
     // Take the first free seat while in the lobby.
     if (this.info.phase === 'lobby') {
       const free = seatsFor(this.info.mode).find((s) => !this.info.seats[s]);
-      if (free) this.info.seats[free] = { name, clientId: id };
+      if (free) this.info.seats[free] = { name, clientId: id, style: msg.style };
     }
     this.refreshSpectators();
-    this.host.send(id, { t: 'welcome', you: id, room: this.info, now: this.host.now() });
+    this.host.send(id, { t: 'welcome', you: id, room: this.info, now: this.now() });
     this.broadcastRoom();
     if (this.info.phase !== 'lobby' && this.score) {
-      this.host.send(id, { t: 'match', mode: this.info.mode, names: this.names(), score: this.snap() });
+      this.host.send(id, { t: 'match', mode: this.info.mode, names: this.names(), score: this.snap(), realism: this.info.realism });
     }
   }
 
@@ -129,8 +163,8 @@ export class RoomCore {
       if (info.clientId !== id) continue;
       if (this.info.phase === 'playing') {
         // Keep the match going: the AI takes over the seat.
-        this.info.seats[seat] = { name: `${info.name} (AI)`, ai: this.info.aiLevel };
-        this.ais[seat] = this.makeAi(seat);
+        this.info.seats[seat] = { name: `${info.name} (AI)`, ai: this.info.aiLevel, style: info.style };
+        this.ais[seat] = this.makeAi(seat, info.style);
       } else delete this.info.seats[seat];
     }
     if (this.info.host === id) this.info.host = this.clients.keys().next().value ?? '';
@@ -143,13 +177,20 @@ export class RoomCore {
     if (!this.clients.has(id)) return;
     switch (msg.t) {
       case 'ping':
-        return this.host.send(id, { t: 'pong', c: msg.c, s: this.host.now() });
+        return this.host.send(id, { t: 'pong', c: msg.c, s: this.now() });
       case 'sit':
         return this.sit(id, msg.seat);
       case 'config':
         if (id !== this.info.host || this.info.phase === 'playing') return;
         this.configure(msg);
         return this.broadcastRoom();
+      case 'style': {
+        if (!(msg.style in STYLES)) return;
+        this.clients.get(id)!.style = msg.style;
+        const seat = this.seatOf(id);
+        if (seat) this.info.seats[seat]!.style = msg.style;
+        return this.broadcastRoom();
+      }
       case 'start':
         if (id !== this.info.host) return this.host.send(id, { t: 'error', message: 'Only the host can start the match.' });
         return this.startMatch(msg.fillAI);
@@ -183,12 +224,12 @@ export class RoomCore {
     const current = this.seatOf(id);
     if (seat && (!seatsFor(this.info.mode).includes(seat) || this.info.seats[seat]?.clientId)) return;
     if (current) delete this.info.seats[current];
-    if (seat) this.info.seats[seat] = { name: this.clients.get(id)!.name, clientId: id };
+    if (seat) this.info.seats[seat] = { name: this.clients.get(id)!.name, clientId: id, style: this.clients.get(id)!.style };
     this.refreshSpectators();
     this.broadcastRoom();
   }
 
-  private configure(c: { mode?: GameMode; bestOf?: number; aiLevel?: AiLevel }) {
+  private configure(c: { mode?: GameMode; bestOf?: number; aiLevel?: AiLevel; aiStyle?: StyleId | 'random'; realism?: number }) {
     if (c.mode && c.mode !== this.info.mode) {
       this.info.mode = c.mode;
       // Drop seats that don't exist in the new mode, then re-seat everyone in order.
@@ -198,6 +239,8 @@ export class RoomCore {
     }
     if (c.bestOf && [1, 3, 5, 7].includes(c.bestOf)) this.info.bestOf = c.bestOf;
     if (c.aiLevel && c.aiLevel in AI_LEVELS) this.info.aiLevel = c.aiLevel;
+    if (c.aiStyle && (c.aiStyle === 'random' || c.aiStyle in STYLES)) this.info.aiStyle = c.aiStyle;
+    if (typeof c.realism === 'number' && c.realism >= 0 && c.realism <= 1) this.info.realism = c.realism;
     this.refreshSpectators();
   }
 
@@ -208,10 +251,15 @@ export class RoomCore {
 
   // ------------------------------------------------------------ match flow
 
-  private makeAi(seat: Seat) {
+  private makeAi(seat: Seat, style?: StyleId) {
     const ai = new AiPlayer(seatSide(seat), AI_LEVELS[this.info.aiLevel], this.params, this.rng);
     ai.doubles = this.info.mode === 'doubles';
+    ai.setStyle(STYLES[style ?? this.info.seats[seat]?.style ?? 'allround']);
     return ai;
+  }
+
+  private pickAiStyle(): StyleId {
+    return this.info.aiStyle === 'random' ? STYLE_IDS[Math.floor(this.rng() * STYLE_IDS.length)] : this.info.aiStyle;
   }
 
   /** Start a match (or a rematch). Optionally fill empty seats with the AI. */
@@ -220,17 +268,25 @@ export class RoomCore {
     for (const s of seats) {
       // Seats left by AI from a previous match are refilled fresh.
       if (this.info.seats[s]?.ai) delete this.info.seats[s];
-      if (!this.info.seats[s] && fillAI) this.info.seats[s] = { name: `${AI_LEVELS[this.info.aiLevel].name} (AI)`, ai: this.info.aiLevel };
+      if (!this.info.seats[s] && fillAI) {
+        const style = this.pickAiStyle();
+        this.info.seats[s] = { name: `${STYLES[style].character} · ${AI_LEVELS[this.info.aiLevel].name} (AI)`, ai: this.info.aiLevel, style };
+      }
     }
     if (seats.some((s) => !this.info.seats[s])) {
       return this.broadcast({ t: 'error', message: 'Not enough players — fill the empty seats with the AI or wait for others to join.' });
     }
+    // Realism: physics (spin curve) and game speed are room-wide so everyone agrees.
+    const r = realismSettings(this.info.realism);
+    this.params = { ...this.baseParams, liftCoefficientMax: this.baseParams.liftCoefficientMax * r.spinCurve };
+    this.setSpeed(r.gameSpeed);
+    this.lastTick = this.now();
     this.ais = {};
     for (const s of seats) if (this.info.seats[s]!.ai) this.ais[s] = this.makeAi(s);
     this.score = new Scoreboard({ bestOf: this.info.bestOf, pointsToWin: 11, firstServer: this.rng() < 0.5 ? 'near' : 'far' });
     this.info.phase = 'playing';
     this.broadcastRoom();
-    this.broadcast({ t: 'match', mode: this.info.mode, names: this.names(), score: this.snap() });
+    this.broadcast({ t: 'match', mode: this.info.mode, names: this.names(), score: this.snap(), realism: this.info.realism });
     this.beginServe();
   }
 
@@ -247,7 +303,7 @@ export class RoomCore {
 
   private beginServe() {
     this.phase = 'serve-wait';
-    this.phaseStart = this.host.now();
+    this.phaseStart = this.now();
     this.order = this.rotationOrder();
     this.serverIndex = this.score!.rotation % this.order.length;
     this.hitIndex = 0;
@@ -261,7 +317,7 @@ export class RoomCore {
 
   private applyToss(by: Seat, at: number, hand: { x: number; y: number; z: number }, vy: number) {
     if (this.phase !== 'serve-wait' || by !== this.next) return;
-    const now = this.host.now();
+    const now = this.now();
     at = Math.min(now, Math.max(this.phaseStart, at));
     // Sanity: the hand must be behind the server's end line, near table height.
     const local = mapVec(seatSide(by), hand);
@@ -304,7 +360,7 @@ export class RoomCore {
     if (this.phase !== 'rally' || !this.referee || !this.judge) return;
     const side = seatSide(by);
     if (this.referee.expectedHitter !== side) return; // not this side's ball
-    const now = this.host.now();
+    const now = this.now();
     at = Math.min(now, at);
     if (at < timeOf(this.judge) - 1e-6) return; // arrived after the grace period: too late
 
@@ -360,7 +416,7 @@ export class RoomCore {
 
   private endRally(out: RallyOutcome) {
     this.phase = 'point-over';
-    this.phaseStart = this.host.now();
+    this.phaseStart = this.now();
     this.referee = null;
     this.aiLive = null;
     for (const ai of Object.values(this.ais)) ai?.clearPlan();
@@ -373,7 +429,7 @@ export class RoomCore {
 
   /** Call regularly (~60 Hz). */
   tick() {
-    const now = this.host.now();
+    const now = this.now();
     const dt = Math.min(0.1, Math.max(0, now - this.lastTick));
     this.lastTick = now;
     for (const ai of Object.values(this.ais)) ai?.update(dt, now);
@@ -424,9 +480,14 @@ export class RoomCore {
     const ticks = Math.floor((now - timeOf(live)) / TICK_DT + 1e-9);
     for (let i = 0; i < ticks; i++) {
       const serving = this.referee.awaitingServe;
-      const colliders = serving && live.sim.state.vel.y >= 0 ? undefined : [ai.collider(i, ticks)];
+      // Serve: strike the toss on its way down. Rally: no accidental volleys — only after
+      // the ball bounced on the AI's half, or once it is past the end line.
+      const localZ = seatSide(seat) === 'near' ? live.sim.state.pos.z : -live.sim.state.pos.z;
+      const blocked = serving ? live.sim.state.vel.y >= 0 : !live.bounced && localZ < TABLE.halfLength;
+      const colliders = blocked ? undefined : [ai.collider(i, ticks)];
       const events: BallEvent[] = [];
       live.sim.step(TICK_DT, events, colliders);
+      if (events.some((e) => e.type === 'table' && e.side === seatSide(seat))) live.bounced = true;
       const hit = events.find((e): e is Extract<BallEvent, { type: 'paddle' }> => e.type === 'paddle');
       if (hit) {
         this.aiLive = null;

@@ -2,7 +2,40 @@
 
 A 3D browser table tennis game for 1–4 players, built around spin, pace and a full range of shots. See [PLAN.md](PLAN.md) for the full design and milestones.
 
-## Status: Milestone 4 — online rooms (singles and doubles)
+## Status: Milestone 5 — depth: realism, styles, rubbers, AI per style
+
+**Realism slider** (panel → **Realism**; set by the host for an online room). It runs from 0% (Simulation) to 100% (Arcade), and Balanced, 55%, is the default. It sets:
+
+| Setting | Simulation | Balanced | Arcade |
+|---|---|---|---|
+| Game speed | 1.0× | 0.78× | 0.6× |
+| Timing window | 60 ms | 137 ms | 200 ms |
+| Angle assist | off | corrects ≤ 46° | always lands if possible |
+| Hit area | +0 cm | +3.9 cm | +7 cm |
+| Footwork assist | 25% | 69% | 100% |
+| Spin curve | real | real (×1.04) | exaggerated ×1.4 |
+
+Online, the whole room runs at the slider's game speed: the server and every client share the slowed clock.
+
+**Player styles:** choose under **Player → Your style**. Each changes handling (swing power, reach, footwork, stance) and sets your rubbers.
+
+| Character | Style | Stance | Rubbers (FH / BH) |
+|---|---|---|---|
+| Helpdesk Hero | All-rounder | mid | Standard Build / Standard Build |
+| Full-Stack Dev | Looper | mid-deep, +10% power | Standard Build / Standard Build |
+| Sysadmin | Chopper | deep, +12% reach | Standard Build / Legacy Code (long pips) |
+| Security Analyst | Blocker ("The Firewall") | at the table | Standard Build / Hotfix (short pips) |
+| Network Engineer | Penhold hitter | close, +15% power and footwork | Hotfix / Standard Build |
+
+**AI per style:** an AI opponent is a style plus a level (Junior, Senior or Principal).
+- A **Sysadmin** AI chops from about 2.6 m back.
+- A **Full-Stack Dev** AI loops.
+- A **Security Analyst** AI blocks at the table.
+- A **Network Engineer** AI drives, flicks and smashes.
+
+You choose the AI's style in **Match vs AI** or in the online lobby (or leave it random).
+
+### Milestone 4 — online rooms (singles and doubles)
 
 - **Create a room:** open **Online multiplayer**, then **➕ Create room**. Share the 5-letter code or the invite link, players choose seats, and the host starts the match.
 - **Fill seats with AI:** empty seats can be filled by the AI, so 1 human vs AI, 2 vs 2, or anything in between works.
@@ -146,6 +179,8 @@ src/game/      Engine-agnostic game logic (shared with AI and netcode later)
   rules.ts     Rally referee, serve legality, scoring and serve rotation
   ai.ts        AI opponent (planning, stroke solving, difficulty)
   match.ts     Match orchestration: serving, rallies, scoring (engine-agnostic)
+  realism.ts   The realism slider → game speed, assists, spin curve
+  styles.ts    Player styles (characters): handling, stance, rubbers, AI preferences
   messages.ts  IT-themed call-outs
 src/net/       Online play
   protocol.ts  Wire messages (shared by client and servers)

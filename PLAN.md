@@ -112,7 +112,7 @@ The host sets it for the room. It adjusts:
 2. ✅ **Swing → contact** (done): the mouse paddle and keyboard modifiers produce every shot above, played against the ball machine.
 3. ✅ **Rules + 1v1 against AI** (done): scoring, serves with the legality check, a basic AI.
 4. ✅ **Online rooms** (done): room codes, 1v1, then 2v2 doubles with partners taking turns, plus spectators.
-5. **Depth:** rubbers, player styles, AI per style, the realism slider.
+5. ✅ **Depth** (done): rubbers, player styles, AI per style, the realism slider.
 6. **Look and theme:** IT venues and characters, audio, replays.
 7. **Mobile:** touch-swipe swings, optional phone tilt, performance tuning.
 8. **Progression:** stats, training drills, tournaments, unlocks.

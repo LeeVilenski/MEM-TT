@@ -22,6 +22,8 @@ import {
 } from '../physics';
 import { Player } from '../game/player';
 import { AI_LEVELS, AiPlayer, type AiLevel } from '../game/ai';
+import { DEFAULT_REALISM, REALISM_PRESETS, realismSettings } from '../game/realism';
+import { STYLES, STYLE_IDS, type StyleId } from '../game/styles';
 import { IncomingPrediction } from '../game/intercept';
 import { Match } from '../game/match';
 import { LET_MESSAGE, pointMessage } from '../game/messages';
@@ -121,7 +123,21 @@ export class Sandbox {
   private ai: AiPlayer | null = null;
   private aiView: PlayerView;
   private matchHud: MatchHud;
-  matchSettings = { level: 'medium' as AiLevel, bestOf: 3 };
+  matchSettings = { level: 'medium' as AiLevel, bestOf: 3, aiStyle: 'random' as StyleId | 'random' };
+  /** Realism slider (0 = simulation, 100 = arcade), for offline play and new rooms. */
+  realism = { percent: Math.round(DEFAULT_REALISM * 100), style: 'allround' as StyleId };
+  /** Game speed from the realism slider (offline). */
+  private gameSpeed = realismSettings(DEFAULT_REALISM).gameSpeed;
+
+  /** Apply the local realism slider: assists, spin curve and game speed. */
+  applyRealism() {
+    const a = this.realism.percent / 100;
+    const r = realismSettings(a);
+    this.player.applyRealism(a);
+    this.params.liftCoefficientMax = DEFAULT_PARAMS.liftCoefficientMax * r.spinCurve;
+    this.gameSpeed = r.gameSpeed;
+    this.gui?.controllersRecursive().forEach((c) => c.updateDisplay());
+  }
   private tossHoldStart: number | null = null;
 
   // Online
@@ -194,6 +210,7 @@ export class Sandbox {
 
     this.machine = this.settingsFromPreset(PRESETS.find((p) => p.name === 'Long push')!);
     this.buildGui();
+    this.applyRealism();
     this.updateMachineVisuals();
 
     window.addEventListener('resize', () => this.resize());
@@ -507,7 +524,7 @@ export class Sandbox {
     else if (this.match) this.matchFrame(realDt);
     else {
       if (this.playing) this.updatePlayer(realDt);
-      if (!this.settings.paused) this.advance(realDt * this.settings.timeScale, realDt);
+      if (!this.settings.paused) this.advance(realDt * this.settings.timeScale * this.gameSpeed, realDt);
     }
     if (this.playing) this.updatePlayCamera(realDt);
     this.controls.update();
@@ -550,12 +567,14 @@ export class Sandbox {
     this.leaveOnline();
     this.endMatch(false);
     const ai = (this.ai = new AiPlayer('far', AI_LEVELS[this.matchSettings.level], this.params));
+    const st = this.matchSettings.aiStyle === 'random' ? STYLE_IDS[Math.floor(Math.random() * STYLE_IDS.length)] : this.matchSettings.aiStyle;
+    ai.setStyle(STYLES[st]);
     const match = (this.match = new Match(
       this.params,
       { near: { kind: 'human', player: this.player }, far: { kind: 'ai', ai } },
       { bestOf: this.matchSettings.bestOf, pointsToWin: 11, firstServer: Math.random() < 0.5 ? 'near' : 'far' },
     ));
-    const names = { near: 'You', far: ai.profile.name };
+    const names = { near: 'You', far: ai.displayName };
     match.on((e) => {
       switch (e.type) {
         case 'toss':
@@ -565,7 +584,7 @@ export class Sandbox {
         case 'hit': {
           const h = e.event;
           const info = classifyShot(h.pos, h.velOut, h.spinOut, h.paddleVel, h.velIn, h.spinIn);
-          this.matchHud.addShot({ who: e.side === 'near' ? 'You' : ai.profile.name, name: e.serve ? 'Serve' : info.name, speed: info.speed, rpm: info.rpm, top: info.top });
+          this.matchHud.addShot({ who: e.side === 'near' ? 'You' : ai.displayName, name: e.serve ? 'Serve' : info.name, speed: info.speed, rpm: info.rpm, top: info.top });
           this.ball.clearTrail();
           break;
         }
@@ -577,7 +596,7 @@ export class Sandbox {
           break;
         case 'point': {
           const m = pointMessage(e.result, names);
-          if (e.match) this.hud.flash(e.result.winner === 'near' ? 'SHIPPED TO PROD' : 'INCIDENT REPORT', e.result.winner === 'near' ? 'You won the match!' : `${ai.profile.name} won the match`);
+          if (e.match) this.hud.flash(e.result.winner === 'near' ? 'SHIPPED TO PROD' : 'INCIDENT REPORT', e.result.winner === 'near' ? 'You won the match!' : `${ai.displayName} won the match`);
           else if (e.game) this.hud.flash(e.result.winner === 'near' ? 'DEPLOYED' : 'ROLLBACK', `Game to ${names[e.result.winner]} — ${m.title}: ${m.sub}`);
           else this.hud.flash(m.title, m.sub);
           break;
@@ -619,7 +638,7 @@ export class Sandbox {
     const running = this.playing && !this.settings.paused && match.phase !== 'match-over';
     if (running) {
       const { input, move } = this.gatherInput();
-      match.frame(realDt * this.settings.timeScale, realDt, { side: 'near', input, move });
+      match.frame(realDt * this.settings.timeScale * this.gameSpeed, realDt, { side: 'near', input, move });
       this.hud.setPaddle(this.player.swing.pitchDeg, this.player.swing.side, this.player.swing.forcedSide !== null, input.drive);
     }
 
@@ -638,10 +657,10 @@ export class Sandbox {
     const sc = match.score;
     const gp = sc.gamePoint();
     const mp = sc.matchPoint();
-    const badge = sc.deuce ? 'DEUCE · RACE CONDITION' : mp ? `MATCH POINT · ${mp === 'near' ? 'You' : ai.profile.name}` : gp ? `GAME POINT · ${gp === 'near' ? 'You' : ai.profile.name}` : null;
+    const badge = sc.deuce ? 'DEUCE · RACE CONDITION' : mp ? `MATCH POINT · ${mp === 'near' ? 'You' : ai.displayName}` : gp ? `GAME POINT · ${gp === 'near' ? 'You' : ai.displayName}` : null;
     this.matchHud.setScore({
       you: 'You',
-      them: `${ai.profile.name} (AI)`,
+      them: `${ai.displayName} (AI)`,
       points: [sc.points.near, sc.points.far],
       games: [sc.games.near, sc.games.far],
       youServe: (match.phase === 'rally' || match.phase === 'point-over') && match.referee ? match.referee.server === 'near' : sc.server === 'near',
@@ -655,7 +674,7 @@ export class Sandbox {
       const games = sc.history.map((g) => `${g.near}–${g.far}`).join('  ·  ');
       this.matchHud.setPrompt(null);
       this.matchHud.setMeter(null);
-      this.matchHud.showOver(won ? 'SHIPPED TO PROD' : 'INCIDENT REPORT', won ? `You beat ${ai.profile.name} ${sc.games.near}–${sc.games.far}` : `${ai.profile.name} won ${sc.games.far}–${sc.games.near}`, games);
+      this.matchHud.showOver(won ? 'SHIPPED TO PROD' : 'INCIDENT REPORT', won ? `You beat ${ai.displayName} ${sc.games.near}–${sc.games.far}` : `${ai.displayName} won ${sc.games.far}–${sc.games.near}`, games);
       if (document.pointerLockElement) document.exitPointerLock();
       return;
     }
@@ -711,7 +730,8 @@ export class Sandbox {
     }
     const client = (this.online = new OnlineClient(transport, this.player, this.params, () => performance.now() / 1000, {
       name: o.name || 'Player',
-      create: create ? { mode: o.mode, bestOf: o.bestOf, aiLevel: o.aiLevel } : undefined,
+      style: this.player.style.id,
+      create: create ? { mode: o.mode, bestOf: o.bestOf, aiLevel: o.aiLevel, realism: this.realism.percent / 100 } : undefined,
     }));
     this.lobby.fillAI = true;
     this.lobby.setError('');
@@ -724,6 +744,7 @@ export class Sandbox {
   leaveOnline() {
     if (!this.online) return;
     this.hud.setOverlay(false);
+    this.applyRealism(); // the room's realism no longer applies
     this.online.leave();
     this.online = null;
     this.lobby.show(null);
@@ -1064,6 +1085,22 @@ export class Sandbox {
 
     gui.add({ play: () => this.requestPlay() }, 'play').name('▶ Play  (Esc to leave)');
 
+    const rf = gui.addFolder('Realism');
+    rf.add(this.realism, 'percent', 0, 100, 5)
+      .name('Arcade %')
+      .onChange(() => this.applyRealism());
+    for (const [name, v] of Object.entries(REALISM_PRESETS)) {
+      rf.add(
+        {
+          [name]: () => {
+            this.realism.percent = Math.round(v * 100);
+            this.applyRealism();
+          },
+        },
+        name,
+      ).name(`${name} (${Math.round(v * 100)}%)`);
+    }
+
     const on = gui.addFolder('Online multiplayer');
     const o = this.onlineSettings;
     on.add(o, 'name').name('Your name');
@@ -1076,7 +1113,8 @@ export class Sandbox {
 
     const mt = gui.addFolder('Match vs AI');
     const levelNames = Object.fromEntries(Object.entries(AI_LEVELS).map(([k, v]) => [`${v.name} (${k})`, k]));
-    mt.add(this.matchSettings, 'level', levelNames).name('Opponent');
+    mt.add(this.matchSettings, 'level', levelNames).name('Opponent level');
+    mt.add(this.matchSettings, 'aiStyle', { Random: 'random', ...Object.fromEntries(STYLE_IDS.map((id) => [`${STYLES[id].character} (${STYLES[id].label})`, id])) }).name('Opponent style');
     mt.add(this.matchSettings, 'bestOf', { 'Best of 1': 1, 'Best of 3': 3, 'Best of 5': 5, 'Best of 7': 7 }).name('Format');
     mt.add({ start: () => this.startMatch() }, 'start').name('▶ Start match');
     mt.add({ end: () => this.endMatch() }, 'end').name('End match (back to practice)');
@@ -1084,6 +1122,17 @@ export class Sandbox {
     const pl = gui.addFolder('Player');
     const rubberNames = Object.fromEntries(Object.values(RUBBERS).map((r) => [`${r.name} (${r.kind})`, r.id]));
     const rubberSel = { forehand: 'inverted', backhand: 'inverted' };
+    const styleNames = Object.fromEntries(STYLE_IDS.map((id) => [`${STYLES[id].character} — ${STYLES[id].label}`, id]));
+    pl.add(this.realism, 'style', styleNames)
+      .name('Your style')
+      .onChange((id: StyleId) => {
+        this.player.applyStyle(id);
+        rubberSel.forehand = this.player.rubbers.forehand.id;
+        rubberSel.backhand = this.player.rubbers.backhand.id;
+        this.online?.setStyle(id);
+        pl.controllersRecursive().forEach((c) => c.updateDisplay());
+        this.hud.flash(STYLES[id].character.toUpperCase(), STYLES[id].description);
+      });
     pl.add(rubberSel, 'forehand', rubberNames).name('Forehand rubber').onChange((id: string) => (this.player.rubbers.forehand = RUBBERS[id]));
     pl.add(rubberSel, 'backhand', rubberNames).name('Backhand rubber').onChange((id: string) => (this.player.rubbers.backhand = RUBBERS[id]));
     pl.add(this.player.swing.params, 'sensitivity', 0.0005, 0.004, 0.0001).name('Mouse sensitivity');

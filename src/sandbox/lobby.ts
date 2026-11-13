@@ -1,4 +1,6 @@
 import { AI_LEVELS, type AiLevel } from '../game/ai';
+import { realismLabel } from '../game/realism';
+import { STYLES, STYLE_IDS, type StyleId } from '../game/styles';
 import type { OnlineClient } from '../net/client';
 import { seatsFor, type GameMode, type Seat } from '../net/protocol';
 
@@ -52,7 +54,7 @@ export class Lobby {
       const info = room.seats[seat];
       const mine = info?.clientId === c.you;
       const body = info
-        ? `<span class="seat-name">${esc(info.name)}${mine ? ' <i>(you)</i>' : ''}</span>${info.ai ? '<span class="seat-tag">AI</span>' : ''}${mine && room.phase !== 'playing' ? '<button data-a="stand" class="link">Stand up</button>' : ''}`
+        ? `<span class="seat-name">${esc(info.name)}${mine ? ' <i>(you)</i>' : ''}</span>${info.ai ? '<span class="seat-tag">AI</span>' : ''}${info.style && !info.ai ? `<span class="seat-style">${STYLES[info.style]?.character ?? ''}</span>` : ''}${mine && room.phase !== 'playing' ? '<button data-a="stand" class="link">Stand up</button>' : ''}`
         : room.phase !== 'playing'
           ? `<button data-a="sit" data-seat="${seat}">Sit here</button><span class="seat-empty">${host && this.fillAI ? 'AI will play' : 'Empty'}</span>`
           : '<span class="seat-empty">Empty</span>';
@@ -69,9 +71,11 @@ export class Lobby {
           <label>Mode <select data-c="mode">${opts<GameMode>(room.mode, [['singles', 'Singles (1v1)'], ['doubles', 'Doubles (2v2)']])}</select></label>
           <label>Format <select data-c="bestOf">${opts(room.bestOf, [[1, 'Best of 1'], [3, 'Best of 3'], [5, 'Best of 5'], [7, 'Best of 7']])}</select></label>
           <label>AI level <select data-c="aiLevel">${opts<AiLevel>(room.aiLevel, Object.entries(AI_LEVELS).map(([k, v]) => [k as AiLevel, v.name]))}</select></label>
+          <label>AI style <select data-c="aiStyle">${opts<StyleId | 'random'>(room.aiStyle, [['random', 'Random'], ...STYLE_IDS.map((id) => [id, STYLES[id].character] as [StyleId, string])])}</select></label>
+          <label class="realism">Realism <input type="range" min="0" max="100" step="5" value="${Math.round(room.realism * 100)}" data-c="realism"/> <span>${realismLabel(room.realism)}</span></label>
           <label class="check"><input type="checkbox" data-c="fill"${this.fillAI ? ' checked' : ''}/> Fill empty seats with AI</label>
         </div>`
-      : `<div class="lobby-wait">${room.mode === 'doubles' ? 'Doubles' : 'Singles'} · best of ${room.bestOf} — waiting for the host to start…</div>`;
+      : `<div class="lobby-wait">${room.mode === 'doubles' ? 'Doubles' : 'Singles'} · best of ${room.bestOf} · realism ${realismLabel(room.realism)} — waiting for the host to start…</div>`;
 
     this.el.innerHTML = `<div class="lobby-card">
       <div class="lobby-head">
@@ -128,6 +132,12 @@ export class Lobby {
         break;
       case 'aiLevel':
         this.client.configure({ aiLevel: t.value as AiLevel });
+        break;
+      case 'aiStyle':
+        this.client.configure({ aiStyle: t.value as StyleId | 'random' });
+        break;
+      case 'realism':
+        this.client.configure({ realism: Number(t.value) / 100 });
         break;
       case 'fill':
         this.fillAI = (t as HTMLInputElement).checked;

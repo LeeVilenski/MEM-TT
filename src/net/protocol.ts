@@ -3,6 +3,7 @@ import type { AiLevel } from '../game/ai';
 import type { SideId } from '../game/frame';
 import type { PointResult } from '../game/rules';
 import type { StrokeSide } from '../game/swing';
+import type { StyleId } from '../game/styles';
 
 /**
  * Wire protocol between game clients and the room server (JSON over WebSocket).
@@ -13,7 +14,7 @@ import type { StrokeSide } from '../game/swing';
  * lag) and reports it; the server re-simulates every flight and referees the rally.
  * All coordinates on the wire are world coordinates; times are server clock seconds.
  */
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 
 export type Seat = 'near1' | 'near2' | 'far1' | 'far2';
 export const SEATS: Seat[] = ['near1', 'far1', 'near2', 'far2'];
@@ -51,6 +52,8 @@ export interface SeatInfo {
   clientId?: string;
   /** AI level if the seat is filled by the AI. */
   ai?: AiLevel;
+  /** Player style (character). */
+  style?: StyleId;
 }
 
 export interface RoomInfo {
@@ -58,6 +61,10 @@ export interface RoomInfo {
   mode: GameMode;
   bestOf: number;
   aiLevel: AiLevel;
+  /** Style for AI seats ('random' picks one per seat). */
+  aiStyle: StyleId | 'random';
+  /** Realism slider: 0 = simulation, 1 = arcade. Sets game speed, spin curve and assists. */
+  realism: number;
   host: string;
   seats: Partial<Record<Seat, SeatInfo>>;
   /** Connected clients not (yet) in a seat. */
@@ -79,10 +86,11 @@ export interface ScoreSnap {
 // ---------------------------------------------------------------- client → server
 
 export type ClientMsg =
-  | { t: 'hello'; v: number; name: string; create?: { mode: GameMode; bestOf: number; aiLevel: AiLevel } }
+  | { t: 'hello'; v: number; name: string; style?: StyleId; create?: { mode: GameMode; bestOf: number; aiLevel: AiLevel; realism?: number } }
+  | { t: 'style'; style: StyleId }
   | { t: 'ping'; c: number }
   | { t: 'sit'; seat: Seat | null }
-  | { t: 'config'; mode?: GameMode; bestOf?: number; aiLevel?: AiLevel }
+  | { t: 'config'; mode?: GameMode; bestOf?: number; aiLevel?: AiLevel; aiStyle?: StyleId | 'random'; realism?: number }
   | { t: 'start'; fillAI: boolean }
   | { t: 'toss'; at: number; hand: V; vy: number }
   | { t: 'hit'; at: number; ball: WireBall; velIn: V; spinIn: V; paddleVel: V }
@@ -96,7 +104,7 @@ export type ServerMsg =
   | { t: 'room'; room: RoomInfo }
   | { t: 'pong'; c: number; s: number }
   | { t: 'error'; message: string }
-  | { t: 'match'; mode: GameMode; names: Partial<Record<Seat, string>>; score: ScoreSnap }
+  | { t: 'match'; mode: GameMode; names: Partial<Record<Seat, string>>; score: ScoreSnap; realism: number }
   /** Waiting for `server` to toss. */
   | { t: 'serve'; server: Seat; receiver: Seat; score: ScoreSnap }
   | { t: 'toss'; at: number; by: Seat; hand: V; vy: number; next: Seat }

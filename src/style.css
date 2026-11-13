@@ -712,3 +712,25 @@ kbd {
   text-decoration: underline;
   margin-left: auto;
 }
+
+.seat-style {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.lobby-controls .realism {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.lobby-controls .realism input {
+  flex: 1;
+  accent-color: var(--accent);
+}
+
+.lobby-controls .realism span {
+  min-width: 120px;
+  color: var(--muted);
+}

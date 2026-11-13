@@ -69,6 +69,13 @@ PORT=8080 npm run start:server
 
 Without this variable the deployed game falls back to `local`, which is AI-only.
 
+## Updating the room server
+
+Whenever the game's online protocol changes, redeploy the room server so it matches the web client. Otherwise players see "Game version mismatch".
+
+- **Cloudflare:** `cd server/cloudflare && npx wrangler deploy`
+- **Node:** rebuild with `npm run build:server` and restart.
+
 ## Playing online
 
 1. **Create the room:** open **Online multiplayer**, set your name, and click **➕ Create room**.

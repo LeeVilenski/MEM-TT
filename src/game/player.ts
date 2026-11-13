@@ -1,5 +1,8 @@
 import { RUBBERS, TABLE, lerp, normalize, type PaddleCollider, type PaddlePose, type PhysicsParams, type Rubber, type Vec3 } from '../physics';
 import { makeAngleAssist, type ShotMode } from './assist';
+import { realismSettings } from './realism';
+import { STYLES, type PlayStyle, type StyleId } from './styles';
+import { DEFAULT_SWING } from './swing';
 import { SwingController, type StrokeSide, type SwingInput } from './swing';
 
 export interface AssistSettings {
@@ -51,6 +54,27 @@ export class Player {
   shotMode: ShotMode = 'rally';
   private angleAssist;
 
+  /** Playing style (character): handling, stance and default rubbers. */
+  style: PlayStyle = STYLES.allround;
+
+  /** Apply a style: swing power, reach, footwork, stance distance and its rubbers. */
+  applyStyle(id: StyleId) {
+    const st = (this.style = STYLES[id]);
+    this.swing.params.swingGain = DEFAULT_SWING.swingGain * st.power;
+    this.swing.reachScale = st.reach;
+    this.homeZ = TABLE.halfLength + st.distance;
+    this.rubbers = { ...st.rubbers };
+  }
+
+  /** Apply the realism slider (0 = simulation, 1 = arcade) to this player's assists. */
+  applyRealism(arcade: number) {
+    const r = realismSettings(arcade);
+    this.assists.angle = r.angleAssist;
+    this.assists.hitArea = r.hitArea;
+    this.assists.footwork = r.footwork;
+    this.swing.params.strokeHold = r.strokeHold;
+  }
+
   constructor(id: string, params: PhysicsParams) {
     this.id = id;
     this.angleAssist = makeAngleAssist(params, () => this.assists.angle, () => this.shotMode);
@@ -66,9 +90,10 @@ export class Player {
 
   update(dt: number, input: SwingInput, move: MoveInput, aim: { x: number; z: number }) {
     // Footwork: manual movement plus assisted pull toward the incoming ball.
-    let vx = move.x * MANUAL_SPEED;
-    let vz = move.z * MANUAL_SPEED;
-    if (move.z !== 0) this.homeZ = clamp(this.homeZ + move.z * MANUAL_SPEED * dt, TABLE.halfLength + 0.2, TABLE.halfLength + 3.5);
+    const foot = this.style.footwork;
+    let vx = move.x * MANUAL_SPEED * foot;
+    let vz = move.z * MANUAL_SPEED * foot;
+    if (move.z !== 0) this.homeZ = clamp(this.homeZ + move.z * MANUAL_SPEED * foot * dt, TABLE.halfLength + 0.2, TABLE.halfLength + 3.5);
 
     const a = this.assists.footwork;
     if (a > 0) {
@@ -84,7 +109,7 @@ export class Player {
         if (this.intercept.z < this.homeZ - ARM_REACH) tz = this.intercept.z + ARM_REACH;
         else if (this.intercept.z > this.homeZ - ARM_REACH + 0.05) tz = this.intercept.z + ARM_REACH;
       }
-      const pull = (d: number) => clamp(d * 16, -ASSIST_SPEED, ASSIST_SPEED) * a;
+      const pull = (d: number) => clamp(d * 16, -ASSIST_SPEED * foot, ASSIST_SPEED * foot) * a;
       if (move.x === 0) vx += pull(tx - this.body.x);
       if (move.z === 0) vz += pull(tz - this.body.z);
     }
