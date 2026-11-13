@@ -67,6 +67,7 @@ const PLAY_HELP = [
   '<kbd>A</kbd>/<kbd>D</kbd> hook left/right',
   '<kbd>Shift</kbd> FH/BH lock',
   '<kbd>←→↑↓</kbd> footwork',
+  '<kbd>R</kbd> replay last rally',
   '<kbd>Esc</kbd> exit',
 ];
 
@@ -80,6 +81,13 @@ export class Hud {
   private paddleEl: HTMLDivElement;
   private statsEl: HTMLDivElement;
   private flashTimer = 0;
+  private replayEl: HTMLDivElement;
+
+  /** Replay banner (null hides it). */
+  setReplay(text: string | null) {
+    this.replayEl.innerHTML = text ?? '';
+    this.replayEl.style.display = text ? 'block' : 'none';
+  }
   private playing = false;
   onStartPlay: () => void = () => {};
 
@@ -97,6 +105,9 @@ export class Hud {
       this.onStartPlay();
     });
 
+    this.replayEl = el('div', 'hud-replay');
+    this.replayEl.style.display = 'none';
+    container.append(this.replayEl);
     this.paddleEl = el('div', 'hud-paddle');
     this.statsEl = el('div', 'hud-stats');
     container.append(this.panel, this.flashEl, this.warnEl, this.help, this.startEl, this.paddleEl, this.statsEl);

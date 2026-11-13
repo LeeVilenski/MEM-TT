@@ -93,7 +93,15 @@ export class BallView {
     this.mesh.quaternion.premultiply(q);
   }
 
+  /** What was drawn last (for replays). */
+  last: { pos: Vec3; state: BallState } | null = null;
+
+  get isVisible() {
+    return this.mesh.visible;
+  }
+
   update(pos: Vec3, state: BallState) {
+    this.last = { pos, state };
     this.mesh.position.set(pos.x, pos.y, pos.z);
 
     const w = length(state.spin);

@@ -3,6 +3,8 @@ import { PADDLE, UP, cross, dot, normalize, scale, sub, type Vec3 } from '../phy
 import type { Player } from '../game/player';
 import type { StrokeSide } from '../game/swing';
 import type { PaddlePose } from '../physics';
+import type { StyleId } from '../game/styles';
+import { Avatar } from './avatar';
 
 const RED = 0xc8202a;
 const BLACK = 0x15161a;
@@ -16,11 +18,13 @@ export class PlayerView {
   private faceFront: THREE.Mesh;
   private faceBack: THREE.Mesh;
   private body = new THREE.Group();
+  private avatar: Avatar | null = null;
+  private handle: THREE.Object3D;
   private marker: THREE.Mesh;
   private markerLine: THREE.Line;
   private shadow: THREE.Mesh;
 
-  constructor(scene: THREE.Scene, opts: { bodyColor?: number; bodyOpacity?: number; marker?: boolean } = {}) {
+  constructor(scene: THREE.Scene, opts: { bodyColor?: number; bodyOpacity?: number; marker?: boolean; style?: StyleId } = {}) {
     // Blade: two thin discs (one per rubber) around a wooden core, slightly oval.
     const disc = new THREE.CylinderGeometry(PADDLE.radius, PADDLE.radius, 0.002, 40);
     disc.rotateX(Math.PI / 2); // face along ±z
@@ -34,6 +38,7 @@ export class PlayerView {
     const handle = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.1, 0.024), mk(0x8a5a2b));
     handle.position.y = -PADDLE.radius - 0.045;
     handle.name = 'handle';
+    this.handle = handle;
     const blade = new THREE.Group();
     blade.add(this.faceFront, this.faceBack, core, handle);
     blade.scale.set(1, 1.06, 1);
@@ -46,8 +51,10 @@ export class PlayerView {
     const bodyMat = new THREE.MeshStandardMaterial({ color: opts.bodyColor ?? 0x6b7280, transparent: true, opacity: opts.bodyOpacity ?? 0.16, roughness: 0.8, depthWrite: false });
     const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.16, 0.6, 6, 16), bodyMat);
     torso.position.y = 0.9;
+    torso.name = 'torso';
     this.body.add(torso);
     scene.add(this.body);
+    if (opts.style) this.setStyle(opts.style);
 
     this.shadow = new THREE.Mesh(new THREE.CircleGeometry(0.28, 24), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.25 }));
     this.shadow.rotation.x = -Math.PI / 2;
@@ -67,6 +74,26 @@ export class PlayerView {
     );
     scene.add(this.markerLine);
     this.setMarker(null);
+  }
+
+  private firstPerson = false;
+
+  /** The local player's own view: draw only the racket arm, not the body in front of the camera. */
+  setFirstPerson(on: boolean) {
+    this.firstPerson = on;
+    this.avatar?.setFirstPerson(on);
+  }
+
+  /** Show this player as a style's character (replacing the plain torso). */
+  setStyle(style: StyleId) {
+    if (this.avatar) {
+      this.body.remove(this.avatar.group);
+      this.avatar.dispose();
+    }
+    this.avatar = new Avatar(style, 1);
+    this.avatar.setFirstPerson(this.firstPerson);
+    this.body.add(this.avatar.group);
+    this.body.getObjectByName('torso')!.visible = false;
   }
 
   set visible(v: boolean) {
@@ -91,7 +118,15 @@ export class PlayerView {
   }
 
   /** Generic update (used for AI players too). Pose and body in world coordinates. */
+  /** What was drawn last (for replays). */
+  last: { pose: PaddlePose; body: { x: number; z: number }; wing: StrokeSide; forward: number } | null = null;
+
+  get isVisible() {
+    return this.paddle.visible;
+  }
+
   updatePose(pose: PaddlePose, bodyPos: { x: number; z: number }, wing: StrokeSide, forward = 0) {
+    this.last = { pose, body: bodyPos, wing, forward };
     const n = pose.normal;
     // Blade frame: local +z = face normal, local +y = "up" along the blade toward its tip.
     let up = sub(UP, scale(n, dot(UP, n)));
@@ -112,7 +147,14 @@ export class PlayerView {
     (this.faceFront.material as THREE.MeshStandardMaterial).color.set(fh ? RED : BLACK);
     (this.faceBack.material as THREE.MeshStandardMaterial).color.set(fh ? BLACK : RED);
 
-    this.body.position.set(bodyPos.x, 0, bodyPos.z);
+    if (this.avatar) {
+      // The body group stays at the origin; the avatar places itself and reaches for the handle.
+      this.body.position.set(0, 0, 0);
+      this.paddle.updateMatrixWorld(true);
+      const hand = new THREE.Vector3();
+      this.handle.getWorldPosition(hand);
+      this.avatar.update(bodyPos, hand, bodyPos.z >= 0);
+    } else this.body.position.set(bodyPos.x, 0, bodyPos.z);
     this.shadow.position.set(bodyPos.x, 0.002, bodyPos.z);
   }
 }

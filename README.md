@@ -2,7 +2,42 @@
 
 A 3D browser table tennis game for 1–4 players, built around spin, pace and a full range of shots. See [PLAN.md](PLAN.md) for the full design and milestones.
 
-## Status: Milestone 5 — depth: realism, styles, rubbers, AI per style
+## Status: Milestone 6 — look and theme
+
+Everything is generated in code: geometry, textures and sound. There are no asset files.
+
+**Venues** (panel → **Look & sound → Venue**; your choice is remembered):
+- **Open-plan office:** a window wall, desks with code on the monitors, and a "SPRINT 42" whiteboard.
+- **Server room:** rows of racks with blinking status LEDs, cable trays and cold-aisle lighting.
+- **Conference room:** a wood floor, a glass wall, a "Q4 OKRs" whiteboard, and a TV showing the live score.
+- **Rooftop (company offsite):** a sunset sky, a city skyline, string lights and an "OFFSITE 2026" banner.
+- **Sandbox:** the original plain hall.
+
+**Characters:** each player style has a low-poly look, and its arm really holds the paddle.
+
+| Character | Look |
+|---|---|
+| Helpdesk Hero | headset |
+| Full-Stack Dev | hoodie and headphones |
+| Sysadmin | beard, lanyard and badge |
+| Security Analyst | suit, shades and earpiece |
+| Network Engineer | hi-vis vest, cap and a coil of patch cable |
+
+In first person you see only your racket arm, which is see-through so it never hides the ball. Replays show your full character.
+
+**Sound** (Web Audio, synthesised live):
+- **Paddle hits:** the tone depends on the rubber and the loudness on impact speed.
+- **Ball sounds:** table bounces, net and floor, panned left or right by where they happen.
+- **Cues:** a toss sound, and a short jingle on each point (up when you win it, down when you lose it).
+- **Background:** quiet per venue: office hum, server fans, wind on the roof.
+- **Controls:** volume, mute and ambience on or off.
+
+**Replays:** press **R** after a point, or use **Look & sound → Replay last rally**.
+- The rally replays at 0.4× from a broadcast camera, with each shot's name, speed and spin, and its sounds.
+- In matches against the AI, rallies of 6 or more hits replay automatically. You can turn this off.
+- Online, replays are manual and stop as soon as it's your turn.
+
+### Milestone 5 — depth: realism, styles, rubbers, AI per style
 
 **Realism slider** (panel → **Realism**; set by the host for an online room). It runs from 0% (Simulation) to 100% (Arcade), and Balanced, 55%, is the default. It sets:
 
@@ -191,6 +226,9 @@ server/        Room server adapters
   node.ts      Node.js (ws) — Fly.io, Render, Railway, VPS
   cloudflare/  Cloudflare Worker + Durable Object (wrangler.toml)
 src/render/    Three.js scene, ball, paddle and player views
+  venues.ts    Procedural IT venues
+  avatar.ts    Low-poly characters per player style
+src/audio/     Procedural Web Audio sound effects and ambience
 src/sandbox/   Sandbox app (ball machine, play mode, HUD, controls)
 tests/         Vitest: physics, paddle contact, swing, assist, rules, an end-to-end
                gameplay test vs every machine preset, full AI-vs-AI matches,

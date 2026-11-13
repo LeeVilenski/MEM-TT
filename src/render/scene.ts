@@ -2,9 +2,9 @@ import * as THREE from 'three';
 import { NET, TABLE } from '../physics';
 
 /**
- * Minimal, readable prototype scene: table, net, floor, lighting and shadows.
- * Art direction (the IT-office venues) comes in a later milestone; the priority
- * here is depth perception — the ball's shadow on the table matters most.
+ * Core scene: table, net, a default floor and lighting with shadows. Venues
+ * (venues.ts) restyle the lights, floor and background and add their own props;
+ * the ball's shadow on the table stays the priority for depth perception.
  */
 export function createScene(renderer: THREE.WebGLRenderer) {
   const scene = new THREE.Scene();
@@ -15,7 +15,9 @@ export function createScene(renderer: THREE.WebGLRenderer) {
   renderer.shadowMap.type = THREE.PCFShadowMap;
 
   // Lighting: soft fill plus a high key light casting the ball's shadow straight down.
-  scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x22252c, 1.1));
+  const hemi = new THREE.HemisphereLight(0xdfe8ff, 0x22252c, 1.1);
+  hemi.name = 'hemi';
+  scene.add(hemi);
   const key = new THREE.DirectionalLight(0xffffff, 2.2);
   key.position.set(0.6, 6, 0.8);
   key.castShadow = true;
@@ -28,15 +30,18 @@ export function createScene(renderer: THREE.WebGLRenderer) {
   sc.near = 1;
   sc.far = 10;
   key.shadow.bias = -0.0005;
+  key.name = 'key';
   scene.add(key);
 
   // Floor with a subtle tile grid.
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.MeshStandardMaterial({ color: 0x23262e, roughness: 0.95 }));
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
+  floor.name = 'floor';
   scene.add(floor);
   const grid = new THREE.GridHelper(40, 66, 0x2e323c, 0x2e323c);
   grid.position.y = 0.001;
+  grid.name = 'grid';
   scene.add(grid);
 
   scene.add(createTable());

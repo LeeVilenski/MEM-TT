@@ -34,6 +34,9 @@ import { PlayerView } from '../render/playerView';
 import { createScene } from '../render/scene';
 import { Hud, MatchHud, type ShotReport, type ReturnReport, type PracticeStats } from './hud';
 import { Lobby } from './lobby';
+import { RallyRecorder, ReplayPlayer, type ViewFrame } from './replay';
+import { Sfx } from '../audio/sfx';
+import { VENUES, setVenue, type Venue, type VenueId } from '../render/venues';
 import { OnlineClient } from '../net/client';
 import { LocalServer, WebSocketTransport, roomUrl, type Transport } from '../net/transport';
 import { fromV, isRoomCode, randomRoomCode, seatSide, type GameMode, type Seat } from '../net/protocol';
@@ -140,6 +143,21 @@ export class Sandbox {
   }
   private tossHoldStart: number | null = null;
 
+  // Look, sound and replays
+  sfx = new Sfx();
+  private venue: Venue | null = null;
+  look = {
+    venue: (loadPref('mem.venue', 'office') as VenueId) in VENUES ? (loadPref('mem.venue', 'office') as VenueId) : 'office',
+    volume: Number(loadPref('mem.volume', '0.7')),
+    muted: loadPref('mem.muted', '0') === '1',
+    ambience: loadPref('mem.ambience', '1') === '1',
+    autoReplay: loadPref('mem.autoReplay', '1') === '1',
+  };
+  private recorder = new RallyRecorder();
+  private replay: ReplayPlayer | null = null;
+  private autoReplayed: unknown = null;
+  private savedCamera: { pos: THREE.Vector3; target: THREE.Vector3; visible: Map<string, boolean> } | null = null;
+
   // Online
   online: OnlineClient | null = null;
   private localServer: LocalServer | null = null;
@@ -211,6 +229,15 @@ export class Sandbox {
     this.machine = this.settingsFromPreset(PRESETS.find((p) => p.name === 'Long push')!);
     this.buildGui();
     this.applyRealism();
+    this.setVenue(this.look.venue);
+    this.playerView.setStyle(this.player.style.id);
+    this.sfx.volume = this.look.volume;
+    this.sfx.muted = this.look.muted;
+    this.sfx.ambienceOn = this.look.ambience;
+    // Browsers only allow audio after a user gesture.
+    const unlock = () => this.sfx.unlock();
+    window.addEventListener('pointerdown', unlock);
+    window.addEventListener('keydown', unlock);
     this.updateMachineVisuals();
 
     window.addEventListener('resize', () => this.resize());
@@ -315,6 +342,8 @@ export class Sandbox {
 
   fire() {
     if (this.match) return;
+    this.recorder.start(this.clock());
+    this.recorder.caption(this.clock(), `Ball machine: ${this.machine.preset}`);
     if (this.playing && this.machine.mix) {
       const p = PRESETS[this.mixIndex++ % PRESETS.length];
       Object.assign(this.machine, this.settingsFromPreset(p));
@@ -391,6 +420,8 @@ export class Sandbox {
   // ---------------------------------------------------------------- events
 
   private handleEvent(e: BallEvent) {
+    this.ballSound(e);
+    if (e.type === 'floor' && !this.playing) this.recorder.end(this.clock());
     if (e.type === 'paddle') return this.onPaddleHit(e);
     if (!this.report) return;
     const r = this.report;
@@ -453,6 +484,8 @@ export class Sandbox {
     this.phase = 'returned';
     const info = classifyShot(e.pos, e.velOut, e.spinOut, e.paddleVel, e.velIn, e.spinIn);
     this.lastReturn = { ...info, paddleSpeed: length(e.paddleVel), wing: this.player.swing.side, rubber: this.player.rubbers[this.player.swing.side].name };
+    this.hitSound(e.impactSpeed + length(e.paddleVel), this.player.rubbers[this.player.swing.side].kind, e.pos.x);
+    this.recorder.caption(this.clock(), `You: ${info.name} · ${info.speed.toFixed(1)} m/s · ${Math.round(info.rpm).toLocaleString()} rpm`);
     this.ball.clearTrail();
     this.player.intercept = null;
     this.hud.showShot(this.report!, this.lastReturn);
@@ -485,6 +518,7 @@ export class Sandbox {
   }
 
   private resolve() {
+    this.recorder.end(this.clock());
     this.phase = 'done';
     this.sinceResolved = 0;
     this.player.intercept = null;
@@ -520,13 +554,24 @@ export class Sandbox {
     this.lastFrame = now;
 
     this.localServer?.pump();
-    if (this.online) this.onlineFrame(realDt);
-    else if (this.match) this.matchFrame(realDt);
-    else {
-      if (this.playing) this.updatePlayer(realDt);
-      if (!this.settings.paused) this.advance(realDt * this.settings.timeScale * this.gameSpeed, realDt);
+    if (this.replay) {
+      // Online the match carries on underneath (it can't be paused for one player).
+      if (this.online) this.onlineFrame(realDt);
+      this.runReplay(realDt);
+    } else {
+      if (this.online) this.onlineFrame(realDt);
+      else if (this.match) this.matchFrame(realDt);
+      else {
+        if (this.playing) this.updatePlayer(realDt);
+        if (!this.settings.paused) this.advance(realDt * this.settings.timeScale * this.gameSpeed, realDt);
+      }
+      this.recordFrame();
+      this.maybeAutoReplay();
+      if (this.playing) this.updatePlayCamera(realDt);
     }
-    if (this.playing) this.updatePlayCamera(realDt);
+    this.venue?.update(realDt, now / 1000);
+    // Your own character: just the racket arm in first person, the full character otherwise.
+    this.playerView.setFirstPerson(this.playing && !this.replay);
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
   }
@@ -569,6 +614,7 @@ export class Sandbox {
     const ai = (this.ai = new AiPlayer('far', AI_LEVELS[this.matchSettings.level], this.params));
     const st = this.matchSettings.aiStyle === 'random' ? STYLE_IDS[Math.floor(Math.random() * STYLE_IDS.length)] : this.matchSettings.aiStyle;
     ai.setStyle(STYLES[st]);
+    this.aiView.setStyle(st);
     const match = (this.match = new Match(
       this.params,
       { near: { kind: 'human', player: this.player }, far: { kind: 'ai', ai } },
@@ -580,21 +626,32 @@ export class Sandbox {
         case 'toss':
           this.ball.clearTrail();
           this.clearMarkers();
+          this.recorder.start(this.clock());
+          this.sfx.toss();
           break;
         case 'hit': {
           const h = e.event;
           const info = classifyShot(h.pos, h.velOut, h.spinOut, h.paddleVel, h.velIn, h.spinIn);
-          this.matchHud.addShot({ who: e.side === 'near' ? 'You' : ai.displayName, name: e.serve ? 'Serve' : info.name, speed: info.speed, rpm: info.rpm, top: info.top });
+          const who = e.side === 'near' ? 'You' : ai.displayName;
+          const name = e.serve ? 'Serve' : info.name;
+          this.matchHud.addShot({ who, name, speed: info.speed, rpm: info.rpm, top: info.top });
+          this.hitSound(h.impactSpeed + length(h.paddleVel), e.side === 'near' ? this.player.rubbers[this.player.swing.side].kind : ai.rubber.kind, h.pos.x);
+          this.recorder.caption(this.clock(), `${who}: ${name} · ${info.speed.toFixed(1)} m/s · ${Math.round(info.rpm).toLocaleString()} rpm`);
           this.ball.clearTrail();
           break;
         }
         case 'ball':
+          if (e.event.type !== 'paddle') this.ballSound(e.event);
           if (e.event.type === 'table') this.addMarker(e.event.pos, spinColor(e.event.velIn, e.event.spinIn));
           break;
         case 'let':
           this.hud.flash(LET_MESSAGE.title, LET_MESSAGE.sub);
+          this.recorder.end(this.clock());
           break;
         case 'point': {
+          this.recorder.end(this.clock());
+          this.sfx.point(e.result.winner === 'near', e.game);
+          this.updateVenueScreen();
           const m = pointMessage(e.result, names);
           if (e.match) this.hud.flash(e.result.winner === 'near' ? 'SHIPPED TO PROD' : 'INCIDENT REPORT', e.result.winner === 'near' ? 'You won the match!' : `${ai.displayName} won the match`);
           else if (e.game) this.hud.flash(e.result.winner === 'near' ? 'DEPLOYED' : 'ROLLBACK', `Game to ${names[e.result.winner]} — ${m.title}: ${m.sub}`);
@@ -697,6 +754,137 @@ export class Sandbox {
     const h = 0.2 + (held / TOSS_HOLD_MAX) * 0.9;
     if (this.online) this.online.toss(h);
     else this.match!.toss(h);
+  }
+
+  // ---------------------------------------------------------------- look, sound, replays
+
+  private clock() {
+    return performance.now() / 1000;
+  }
+
+  setVenue(id: VenueId) {
+    this.look.venue = id;
+    this.venue = setVenue(this.scene, id, this.venue);
+    this.sfx.setAmbience(this.look.ambience ? VENUES[id].ambience : 'none');
+    savePref('mem.venue', id);
+    this.updateVenueScreen();
+  }
+
+  /** The conference room's TV shows the score. */
+  private updateVenueScreen() {
+    if (!this.venue?.setScore) return;
+    if (this.online?.score) {
+      const c = this.online;
+      const sc = c.score!;
+      const them: SideId = c.side === 'near' ? 'far' : 'near';
+      this.venue.setScore([`${this.teamName(c.side, false).slice(0, 12).toUpperCase()}  ${sc.points[c.side]}`, `${this.teamName(them, false).slice(0, 12).toUpperCase()}  ${sc.points[them]}`, `GAMES ${sc.games[c.side]}-${sc.games[them]}`]);
+    } else if (this.match && this.ai) {
+      const sc = this.match.score;
+      this.venue.setScore([`YOU          ${sc.points.near}`, `${this.ai.style.character.toUpperCase().padEnd(12)} ${sc.points.far}`, `GAMES ${sc.games.near}-${sc.games.far}`]);
+    } else {
+      this.venue.setScore(['MEM TABLE TENNIS', 'PRACTICE', `RETURNS ${this.stats.made}/${this.stats.attempts}`]);
+    }
+  }
+
+  private hitSound(speed: number, rubberKind: string, x: number) {
+    this.sfx.paddle(speed, rubberKind, x);
+    this.recorder.sound(this.clock(), 'paddle', speed, x, rubberKind);
+  }
+
+  /** Table / net / floor sounds (world event, shown from `side`'s view). */
+  private ballSound(e: BallEvent, side: SideId = 'near') {
+    const x = mapVec(side, e.pos).x;
+    if (e.type === 'table') {
+      this.sfx.table(e.impactSpeed, x);
+      this.recorder.sound(this.clock(), 'table', e.impactSpeed, x);
+    } else if (e.type === 'net') {
+      this.sfx.net(x);
+      this.recorder.sound(this.clock(), 'net', 3, x);
+    } else if (e.type === 'floor') {
+      const speed = length(this.ball.last?.state.vel ?? v3(0, -3, 0));
+      this.sfx.floor(speed, x);
+      this.recorder.sound(this.clock(), 'floor', speed, x);
+    }
+  }
+
+  /** Views that can appear in a replay, by id. */
+  private replayViews(): [string, PlayerView][] {
+    return [['me', this.playerView], ['ai', this.aiView], ...[...this.remoteViews.entries()].map(([seat, v]) => [seat, v] as [string, PlayerView])];
+  }
+
+  private recordFrame() {
+    if (!this.recorder.recording) return;
+    const views: ViewFrame[] = [];
+    for (const [id, v] of this.replayViews()) {
+      if (v.isVisible && v.last) views.push({ id, ...v.last, visible: true });
+    }
+    const b = this.ball.isVisible && this.ball.last ? { pos: this.ball.last.pos, vel: this.ball.last.state.vel, spin: this.ball.last.state.spin } : null;
+    this.recorder.add(this.clock(), b, views);
+  }
+
+  private maybeAutoReplay() {
+    const last = this.recorder.last;
+    if (!this.look.autoReplay || !this.match || !last || last === this.autoReplayed || this.recorder.recording) return;
+    this.autoReplayed = last;
+    if (last.hits >= 6) this.startReplay();
+  }
+
+  startReplay() {
+    const rally = this.recorder.last;
+    if (!rally || this.replay) {
+      if (!rally) this.hud.flash('NO DATA', 'Play a rally first, then press R');
+      return;
+    }
+    this.replay = new ReplayPlayer(rally, 0.4);
+    const visible = new Map(this.replayViews().map(([id, v]) => [id, v.isVisible]));
+    this.savedCamera = { pos: this.camera.position.clone(), target: this.controls.target.clone(), visible };
+    this.ball.clearTrail();
+    this.playerView.setMarker(null);
+    this.hud.setReplay('REPLAY');
+  }
+
+  stopReplay() {
+    if (!this.replay) return;
+    this.replay = null;
+    this.hud.setReplay(null);
+    this.ball.clearTrail();
+    const saved = this.savedCamera;
+    if (saved) {
+      this.camera.position.copy(saved.pos);
+      this.controls.target.copy(saved.target);
+      for (const [id, v] of this.replayViews()) v.visible = saved.visible.get(id) ?? false;
+    }
+    this.savedCamera = null;
+  }
+
+  private runReplay(dt: number) {
+    const r = this.replay!;
+    for (const cue of r.advance(dt)) {
+      if (cue.kind !== 'sound') continue;
+      if (cue.sound === 'paddle') this.sfx.paddle(cue.speed, cue.rubber ?? 'Inverted', cue.x);
+      else if (cue.sound === 'table') this.sfx.table(cue.speed, cue.x);
+      else if (cue.sound === 'net') this.sfx.net(cue.x);
+      else this.sfx.floor(cue.speed, cue.x);
+    }
+    const f = r.frame();
+    for (const [id, v] of this.replayViews()) {
+      const vf = f.views.find((x) => x.id === id);
+      v.visible = !!vf;
+      if (vf) v.updatePose(vf.pose, vf.body, vf.wing, vf.forward);
+    }
+    this.playerView.setMarker(null);
+    this.ball.visible = !!f.ball;
+    if (f.ball) {
+      this.ball.rotate(f.ball.spin, dt * r.speed);
+      this.ball.update(f.ball.pos, { pos: f.ball.pos, vel: f.ball.vel, spin: f.ball.spin });
+    }
+    // Broadcast camera: side-on, slowly drifting.
+    const k = r.time / Math.max(0.5, r.rally.duration);
+    this.camera.position.set(3.6 - k * 0.6, 1.75, 0.9 - k * 1.8);
+    this.controls.target.set(0, 0.85, 0);
+    this.camera.lookAt(this.controls.target);
+    this.hud.setReplay(`▶ REPLAY ×${r.speed} · ${r.caption || '…'}<br/><small>press R to skip</small>`);
+    if (r.done) this.stopReplay();
   }
 
   // ---------------------------------------------------------------- online
@@ -810,23 +998,36 @@ export class Sandbox {
         if (c.seat) this.requestPlay();
         break;
       case 'toss':
+        this.stopReplay();
         this.ball.clearTrail();
         this.clearMarkers();
+        this.recorder.start(this.clock());
+        this.sfx.toss();
         break;
       case 'hit': {
         const info = classifyShot(mapVec(c.side, e.pos), e.velOut, e.spinOut, e.paddleVel, e.velIn, e.spinIn);
         const who = e.by === c.seat ? 'You' : (c.names[e.by] ?? e.by);
-        this.matchHud.addShot({ who, name: e.serve ? 'Serve' : info.name, speed: info.speed, rpm: info.rpm, top: info.top });
+        const name = e.serve ? 'Serve' : info.name;
+        this.matchHud.addShot({ who, name, speed: info.speed, rpm: info.rpm, top: info.top });
+        const rubber = e.by === c.seat ? this.player.rubbers[this.player.swing.side].kind : 'Inverted';
+        this.hitSound(length(e.velOut) + length(e.paddleVel), rubber, mapVec(c.side, e.pos).x);
+        this.recorder.caption(this.clock(), `${who}: ${name} · ${info.speed.toFixed(1)} m/s · ${Math.round(info.rpm).toLocaleString()} rpm`);
         this.ball.clearTrail();
+        if (c.next === c.seat) this.stopReplay();
         break;
       }
       case 'ball':
+        if (e.event.type !== 'paddle') this.ballSound(e.event, c.side);
         if (e.event.type === 'table') this.addMarker(mapVec(c.side, e.event.pos), spinColor(e.event.velIn, e.event.spinIn));
         break;
       case 'let':
         this.hud.flash(LET_MESSAGE.title, LET_MESSAGE.sub);
+        this.recorder.end(this.clock());
         break;
       case 'point': {
+        this.recorder.end(this.clock());
+        this.sfx.point(e.result.winner === c.side, e.game);
+        this.updateVenueScreen();
         const names = { near: this.teamName('near'), far: this.teamName('far') };
         const m = pointMessage(e.result, names);
         const mine = e.result.winner === c.side;
@@ -858,7 +1059,7 @@ export class Sandbox {
       if (seat === c.seat) continue;
       let view = this.remoteViews.get(seat);
       if (!view) {
-        view = new PlayerView(this.scene, { bodyColor: seatSide(seat) === side ? 0x60a5fa : 0xe8562a, bodyOpacity: 0.4 });
+        view = new PlayerView(this.scene, { bodyColor: seatSide(seat) === side ? 0x60a5fa : 0xe8562a, bodyOpacity: 1, style: c.room?.seats[seat]?.style ?? 'allround' });
         this.remoteViews.set(seat, view);
       }
       const r = c.remotes.get(seat);
@@ -1030,6 +1231,9 @@ export class Sandbox {
       this.step();
     } else if (e.code === 'KeyC') {
       this.clearMarkers();
+    } else if (e.code === 'KeyR' && !e.repeat) {
+      if (this.replay) this.stopReplay();
+      else this.startReplay();
     } else if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
       if (this.playing && !e.repeat) {
         const s = this.player.swing;
@@ -1101,6 +1305,36 @@ export class Sandbox {
       ).name(`${name} (${Math.round(v * 100)}%)`);
     }
 
+    const lf = gui.addFolder('Look & sound');
+    lf.add(this.look, 'venue', Object.fromEntries(Object.entries(VENUES).map(([id, v]) => [v.name, id])))
+      .name('Venue')
+      .onChange((id: VenueId) => this.setVenue(id));
+    lf.add(this.look, 'volume', 0, 1, 0.05)
+      .name('Volume')
+      .onChange((v: number) => {
+        this.sfx.volume = v;
+        this.sfx.applyVolume();
+        savePref('mem.volume', String(v));
+      });
+    lf.add(this.look, 'muted')
+      .name('Mute')
+      .onChange((m: boolean) => {
+        this.sfx.muted = m;
+        this.sfx.applyVolume();
+        savePref('mem.muted', m ? '1' : '0');
+      });
+    lf.add(this.look, 'ambience')
+      .name('Venue ambience')
+      .onChange((a: boolean) => {
+        this.sfx.ambienceOn = a;
+        this.sfx.setAmbience(a ? VENUES[this.look.venue].ambience : 'none');
+        savePref('mem.ambience', a ? '1' : '0');
+      });
+    lf.add(this.look, 'autoReplay')
+      .name('Auto-replay long rallies')
+      .onChange((a: boolean) => savePref('mem.autoReplay', a ? '1' : '0'));
+    lf.add({ replay: () => this.startReplay() }, 'replay').name('Replay last rally  [R]');
+
     const on = gui.addFolder('Online multiplayer');
     const o = this.onlineSettings;
     on.add(o, 'name').name('Your name');
@@ -1127,6 +1361,7 @@ export class Sandbox {
       .name('Your style')
       .onChange((id: StyleId) => {
         this.player.applyStyle(id);
+        this.playerView.setStyle(id);
         rubberSel.forehand = this.player.rubbers.forehand.id;
         rubberSel.backhand = this.player.rubbers.backhand.id;
         this.online?.setStyle(id);
