@@ -1420,10 +1420,12 @@ export class Sandbox {
   private updatePlayCamera(dt: number) {
     const b = this.player.body;
     const { height, distance } = this.playCam;
-    const target = new THREE.Vector3(b.x * 0.5, height, b.z + distance);
+    // Follow the body only a little, and slowly: the bat goes where the cursor is, so a
+    // steady view keeps it under your hand on screen.
+    const target = new THREE.Vector3(b.x * 0.25, height, b.z + distance);
     // Look a little above the table so the ball's height over the net reads clearly;
     // the lower the camera, the higher (flatter) the look point.
-    const look = new THREE.Vector3(b.x * 0.2, 0.78 + Math.max(0, 1.95 - height) * 0.25, -0.9);
+    const look = new THREE.Vector3(b.x * 0.1, 0.78 + Math.max(0, 1.95 - height) * 0.25, -0.9);
     const k = 1 - Math.exp(-dt / 0.12);
     this.camera.position.lerp(target, k);
     this.controls.target.lerp(look, k);
@@ -1706,6 +1708,7 @@ export class Sandbox {
     pl.add(this.player.swing.params, 'swingGain', 0.6, 3, 0.05).name('Swing power');
     pl.add(this.player.assists, 'angle', 0, 1, 0.05).name('Angle assist');
     pl.add(this.player.assists, 'hitArea', 0, 0.1, 0.005).name('Hit area + (m)');
+    pl.add(this.player.assists, 'magnet', 0, 0.5, 0.01).name('Bat magnet (m)');
     pl.add(this.player.assists, 'footwork', 0, 1, 0.05).name('Footwork assist');
     pl.add(this.settings, 'showIntercept').name('Intercept marker');
 

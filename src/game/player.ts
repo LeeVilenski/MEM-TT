@@ -12,9 +12,11 @@ export interface AssistSettings {
   hitArea: number;
   /** 0–1: how strongly the player is moved to the ball. */
   footwork: number;
+  /** Bat magnet radius, metres: within this of the ball's path the bat is pulled onto it as the ball arrives. */
+  magnet: number;
 }
 
-export const DEFAULT_ASSISTS: AssistSettings = { angle: 0.75, hitArea: 0.035, footwork: 0.7 };
+export const DEFAULT_ASSISTS: AssistSettings = { angle: 0.75, hitArea: 0.035, footwork: 0.7, magnet: 0.3 };
 
 export interface MoveInput {
   /** −1 … 1: left/right (arrow keys). */
@@ -30,10 +32,15 @@ const ARM_REACH = 0.42;
 /** Comfortable body offset from the ball for each wing. */
 const FOREHAND_OFFSET = 0.42;
 const BACKHAND_OFFSET = 0.3;
-/** Below this paddle offset the footwork assist uses the comfortable offsets above. */
-const MIN_OFFSET = 0.15;
 /** How far a player can lean in over the table. */
 const MAX_LEAN = 0.45;
+/** The magnet ramps up over the last this-many seconds before contact. */
+const MAGNET_WINDOW = 0.3;
+/** Aiming: lateral landing shift (m) per metre the cursor is held beside the ball. */
+const AIM_GAIN = 2.5;
+const AIM_LIMIT = 0.6;
+/** How far the bat can go sideways in the world. */
+const BAT_LIMIT = TABLE.width / 2 + 1.1;
 
 /**
  * A player at the near end: body position (footwork), swing controller and rubbers.
@@ -80,6 +87,7 @@ export class Player {
     this.assists.angle = r.angleAssist;
     this.assists.hitArea = r.hitArea;
     this.assists.footwork = r.footwork;
+    this.assists.magnet = r.magnet;
     this.swing.params.strokeHold = r.strokeHold;
     this.swing.params.autoFace = r.autoFace;
   }
@@ -97,8 +105,27 @@ export class Player {
     return this.body.z - ARM_REACH - this.lean;
   }
 
+  /** The wing the footwork assist is setting up for. */
+  private wing: StrokeSide = 'forehand';
+
+  /** Where the cursor puts the bat, world x (before the magnet). */
+  get batX() {
+    return this.body.x + this.swing.x;
+  }
+
+  /** Landing aim after cursor placement: hold the bat beside the ball to aim that way. */
+  aimFor(aim: { x: number; z: number }) {
+    if (!this.intercept || this.shotMode !== 'rally') return aim;
+    const offset = this.batX - this.intercept.x;
+    return { x: clamp(aim.x + offset * AIM_GAIN, -AIM_LIMIT, AIM_LIMIT), z: aim.z };
+  }
+
   update(dt: number, input: SwingInput, move: MoveInput, aim: { x: number; z: number }) {
-    // Footwork: manual movement plus assisted pull toward the incoming ball.
+    // The bat is anchored in the world (it goes exactly where you move it); the body follows it.
+    const batX = this.batX;
+
+    // Footwork: manual movement plus the assist, which keeps the body a comfortable arm's
+    // length beside the bat (forehand: bat to the right; backhand: to the left).
     const foot = this.style.footwork;
     let vx = move.x * MANUAL_SPEED * foot;
     let vz = move.z * MANUAL_SPEED * foot;
@@ -106,39 +133,57 @@ export class Player {
 
     const a = this.assists.footwork;
     if (a > 0) {
-      let tx = this.body.x;
+      // Which wing to set up for: forced with the keys, else forehand on the right half of
+      // the court and backhand on the left (with a little hysteresis around the middle).
+      const forced = this.swing.forcedSide;
+      if (forced) this.wing = forced;
+      else if (batX > 0.08) this.wing = 'forehand';
+      else if (batX < -0.08) this.wing = 'backhand';
+      const tx = batX - (this.wing === 'forehand' ? FOREHAND_OFFSET : -BACKHAND_OFFSET);
       let tz = this.homeZ;
       if (this.intercept) {
-        // Step so the paddle (held at its current offset from the body) lines up with
-        // the ball. Keep at least a comfortable offset so the ball isn't into the body.
-        let rel = this.swing.x;
-        if (Math.abs(rel) < MIN_OFFSET) rel = rel >= 0 ? FOREHAND_OFFSET : -BACKHAND_OFFSET;
-        tx = this.intercept.x - rel;
         // Short ball: step in so the paddle plane reaches it. Deep ball (lob): back off.
         if (this.intercept.z < this.homeZ - ARM_REACH) tz = this.intercept.z + ARM_REACH;
         else if (this.intercept.z > this.homeZ - ARM_REACH + 0.05) tz = this.intercept.z + ARM_REACH;
       }
       const pull = (d: number) => clamp(d * 16, -ASSIST_SPEED * foot, ASSIST_SPEED * foot) * a;
-      if (move.x === 0) vx += pull(tx - this.body.x);
+      if (move.x === 0 && Math.abs(tx - this.body.x) > 0.05) vx += pull(tx - this.body.x);
       if (move.z === 0) vz += pull(tz - this.body.z);
     }
     this.body.x = clamp(this.body.x + vx * dt, -2.5, 2.5);
     this.body.z = clamp(this.body.z + vz * dt, TABLE.halfLength + 0.15, TABLE.halfLength + 3.6);
+    // Keep the bat where it was in the world while the body moves under it.
+    this.swing.x = clamp(batX, -BAT_LIMIT, BAT_LIMIT) - this.body.x;
 
     // Lean over the table when the ball is shorter than the arm can reach from here.
     const needLean = this.intercept ? clamp(this.body.z - ARM_REACH - this.intercept.z, 0, MAX_LEAN) : 0;
     this.lean += (needLean - this.lean) * (1 - Math.exp(-dt / 0.08));
 
     this.swing.serving = this.shotMode === 'serve';
-    // A ball arriving soon (or the serve toss in the air) pins the contact point during a flick.
-    this.swing.ballNear = this.shotMode === 'serve' || (this.intercept !== null && this.interceptEta < 0.45);
-    this.swing.update(dt, input, this.body, this.restZ, aim);
+    this.swing.update(dt, input, this.body, this.restZ, this.aimFor(aim));
+    const pose = this.swing.pose;
+
+    // Bat magnet: as the ball arrives, a bat held near its path is pulled onto it, so the
+    // mouse gesture (the stroke) is what matters, not pixel-perfect placement.
+    const ic = this.intercept;
+    if (ic && this.assists.magnet > 0 && this.interceptEta < MAGNET_WINDOW) {
+      const dx = ic.x - pose.pos.x;
+      const dy = ic.y - pose.pos.y;
+      const d = Math.hypot(dx, dy);
+      const r = this.assists.magnet;
+      const near = d <= r ? 1 : Math.max(0, 1 - (d - r) / 0.1);
+      const soon = smoothstep(clamp(1 - this.interceptEta / MAGNET_WINDOW, 0, 1));
+      const k = near * soon;
+      pose.pos.x += dx * k;
+      pose.pos.y += dy * k;
+      this.swing.visualPos = { ...pose.pos };
+    }
 
     // Keep the paddle above the table surface when reaching over it.
-    const pose = this.swing.pose;
     if (pose.pos.z < TABLE.halfLength + 0.02 && pose.pos.y < TABLE.height + 0.06) {
-      this.swing.y = TABLE.height + 0.06;
+      if (this.swing.y < TABLE.height + 0.06) this.swing.y = TABLE.height + 0.06;
       pose.pos.y = TABLE.height + 0.06;
+      this.swing.visualPos.y = pose.pos.y;
     }
   }
 
@@ -166,3 +211,4 @@ function lerpPose(a: PaddlePose, b: PaddlePose, t: number): PaddlePose {
 }
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+const smoothstep = (t: number) => t * t * (3 - 2 * t);

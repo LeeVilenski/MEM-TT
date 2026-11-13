@@ -194,8 +194,9 @@ Play against the ball machine with a mouse-driven paddle. Click **▶ Play**: th
 
 | Input | Action |
 |---|---|
-| Mouse | Move the paddle (relative to your body, like an arm) |
-| **Flick** the mouse | Stroke. Up = topspin (loop), down = backspin (push/chop), sideways = sidespin |
+| Mouse | Move the bat: it goes exactly where you put it, and your body follows |
+| **Flick** the mouse | Stroke. Up = topspin (loop), down = backspin (push/chop), still = block. Serves: sideways = sidespin |
+| Bat beside the ring | Placement: left of the ring hits left, right of it hits right |
 | Hold left button | Drive: more forward pace, less brush |
 | W / S | Close / open the face while held |
 | Mouse wheel | Base face angle |
@@ -203,6 +204,13 @@ Play against the ball machine with a mouse-driven paddle. Click **▶ Play**: th
 | Shift | Lock forehand/backhand (press again for auto) |
 | Arrow keys | Footwork (on top of the footwork assist) |
 | Esc | Leave play mode |
+
+**Control scheme: cursor + gesture**
+- **Position:** the bat follows the cursor 1:1 and stays put on screen while your body walks under it.
+- **Bat magnet:** in the last 0.3 s before contact, a bat within the magnet radius of the ball's path is pulled onto it. The radius is 10 cm in Simulation and 40 cm in Arcade (a slider under Player).
+- **Stroke:** the stroke is read from your mouse motion over roughly the last 0.15 s. In rallies, sideways mouse speed counts only 30%, so moving across to a wide ball isn't read as a swing.
+- **Placement:** holding the bat beside the ball steers the aim left or right.
+- **Physics:** the gesture becomes a real paddle velocity and face angle, and the physics below decides the shot.
 
 **How contact works**
 - The paddle is a real collider. It's swept between frames, so fast swings can't pass through the ball.

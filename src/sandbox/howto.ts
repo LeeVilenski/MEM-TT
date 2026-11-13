@@ -39,7 +39,7 @@ export class HowToPlay {
     this.el.innerHTML = `<div class="career-card howto-card">
       <div class="cs-head"><div><div class="cs-sub">MEM Table Tennis</div><div class="cs-title">How to play</div></div><div class="cs-xp"></div><button data-a="close" class="cs-close" aria-label="Close">✕</button></div>
       <div class="cs-body">
-        <div class="ht-step"><div class="ht-n">1</div><div><b>Get to the ring.</b> The <span class="ht-ring">cyan ring</span> shows where the ball will reach you. ${move} so the paddle sits on the ring. Your feet move by themselves.</div></div>
+        <div class="ht-step"><div class="ht-n">1</div><div><b>Put the bat by the ring.</b> The <span class="ht-ring">cyan ring</span> shows where the ball will reach you. ${move}: the bat goes exactly where you put it, and your feet follow. You only need to get close: as the ball arrives the bat <b>snaps onto it</b>.</div></div>
         <div class="ht-step"><div class="ht-n">2</div><div><b>Swing just before the ball arrives.</b> Which way you swing decides the shot:
           <table class="ht-shots">
             <tr><td>Topspin<br><small>loop / drive</small></td><td>${flickUp} through the ring. For a flatter, faster drive, ${drive} while you swing.</td></tr>
@@ -47,6 +47,7 @@ export class HowToPlay {
             <tr><td>Block</td><td>Keep the paddle <b>still</b> on the ring. Great against fast topspin.</td></tr>
             <tr><td>Sidespin<br><small>hook</small></td><td>${hook} while you swing.</td></tr>
           </table>
+          <b>Placement:</b> hold the bat a little <b>left</b> of the ring to hit the ball left, <b>right</b> of it to hit right.
         </div></div>
         <div class="ht-step"><div class="ht-n">3</div><div><b>Timing.</b> A swing counts for about 0.15 s. <b>A little early beats late</b>: if you swing after the ball has reached the ring, you just block it.</div></div>
         <div class="ht-step"><div class="ht-n">4</div><div><b>Missing?</b> Into the net → open the face (${open}). Long → close it (${close}). The face angle is shown at the bottom of the screen.</div></div>

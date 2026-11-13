@@ -33,7 +33,7 @@ export function playBall(presetName: string, angleAssist: number, flickLead = 2 
   player.swing.basePitch = opts.basePitch ?? (backspin ? -10 : -30);
   opts.setup?.(player);
   const sens = player.swing.params.sensitivity;
-  const maxStep = 800 / FPS; // positioning speed, below the stroke threshold
+  const maxStep = 2400 / FPS; // positioning speed (a brisk hand)
   let flick = 0;
   let flicked = false;
   let accumulator = 0;
@@ -56,10 +56,9 @@ export function playBall(presetName: string, angleAssist: number, flickLead = 2 
         flick--;
       } else {
         const clamp = (v: number) => Math.max(-maxStep, Math.min(maxStep, v));
-        // Footwork assist handles fine left–right alignment; only correct big errors.
-        const ex = ic.pos.x - player.swing.pose.pos.x;
-        if (Math.abs(ex) > 0.3) input.dx = clamp(ex / sens);
-        input.dy = clamp(-(ic.pos.y - player.swing.pose.pos.y) / sens);
+        // Steer the cursor (the bat, before the magnet) onto the ring.
+        input.dx = clamp((ic.pos.x - player.batX) / sens);
+        input.dy = clamp(-(ic.pos.y - player.swing.y) / sens);
       }
     } else if (flick > 0) {
       input.dy = -flickPx;

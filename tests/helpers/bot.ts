@@ -14,7 +14,7 @@ export function makeBot(c: OnlineClient) {
     const input = { ...NO_INPUT };
     const p = c.player;
     const sens = p.swing.params.sensitivity;
-    const lim = 800 / FPS;
+    const lim = 2400 / FPS;
     const clamp = (v: number) => Math.max(-lim, Math.min(lim, v));
     if (flick > 0) {
       flick--;
@@ -49,9 +49,9 @@ export function makeBot(c: OnlineClient) {
         flick = 3;
         flickDy = -60;
       } else {
-        const ex = ic.pos.x - p.swing.pose.pos.x;
-        if (Math.abs(ex) > 0.3) input.dx = clamp(ex / sens);
-        input.dy = clamp(-(ic.pos.y - p.swing.pose.pos.y) / sens);
+        // Steer the cursor (the bat, before the magnet) onto the ring.
+        input.dx = clamp((ic.pos.x - p.batX) / sens);
+        input.dy = clamp(-(ic.pos.y - p.swing.y) / sens);
       }
     }
     return input;

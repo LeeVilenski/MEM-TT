@@ -34,6 +34,8 @@ export interface SwingParams {
   faceStep: number;
   /** How far the paddle can travel forward during a stroke, metres. */
   maxForwardTravel: number;
+  /** Rally strokes: fraction of sideways mouse speed that counts toward the stroke. */
+  lateralStroke: number;
   /** How fast the paddle returns to the ready position after a stroke, m/s. */
   recoverySpeed: number;
   /**
@@ -76,6 +78,7 @@ export const DEFAULT_SWING: SwingParams = {
   hookGain: 1.0,
   faceStep: 22,
   maxForwardTravel: 0.3,
+  lateralStroke: 0.3,
   recoverySpeed: 2.5,
   swingThreshold: 1.5,
   serveThreshold: 0.3,
@@ -110,7 +113,7 @@ export interface SwingInput {
 export const NO_INPUT: SwingInput = { dx: 0, dy: 0, drive: false, close: false, open: false, hookLeft: false, hookRight: false };
 
 /** Reach limits relative to the player's body. */
-export const REACH = Object.freeze({ lateral: 0.95, minHeight: TABLE.height - 0.35, maxHeight: TABLE.height + 0.95 });
+export const REACH = Object.freeze({ lateral: 1.5, minHeight: TABLE.height - 0.35, maxHeight: TABLE.height + 0.95 });
 
 /**
  * Face normal for a pitch (positive = open, tilted up) and yaw (positive = aimed toward +x),
@@ -167,14 +170,7 @@ export class SwingController {
   reachScale = 1;
   /** Current auto-face contribution, degrees (for the HUD). */
   autoPitch = 0;
-  /** Set by the player each frame: a ball will reach the paddle very soon. */
-  ballNear = false;
-  /** Fast stroke movement held out of the contact point (see update). */
-  private stroke: { x: number; y: number; age: number } | null = null;
-  /** Visual-only offset that eases the drawn paddle back after a stroke's follow-through. */
-  private recoverX = 0;
-  private recoverY = 0;
-  /** Where the paddle is drawn: follows the mouse 1:1 (the contact point may be pinned). */
+  /** Where the paddle is drawn (the player's bat magnet may move it onto the ball). */
   visualPos: Vec3 = v3();
   /** null = automatic forehand/backhand from paddle position. */
   forcedSide: StrokeSide | null = null;
@@ -210,42 +206,11 @@ export class SwingController {
     const rawVx = dt > 0 ? mx / dt : 0;
     const rawVy = dt > 0 ? my / dt : 0;
 
-    // The paddle follows the mouse 1:1 (lateral position relative to the body, like an arm).
-    const mouseSpeed = Math.hypot(rawVx, rawVy);
-    const thr = this.serving ? p.serveThreshold : p.swingThreshold;
-    const prevX = this.x;
-    const prevY = this.y;
+    // The bat follows the mouse 1:1. (x is stored relative to the body, but the player
+    // moves it back as the body moves, so on screen it stays exactly where you put it.)
     this.x = clamp(this.x + mx, -REACH.lateral * this.reachScale, REACH.lateral * this.reachScale);
     this.y = clamp(this.y + my, REACH.minHeight, REACH.maxHeight);
 
-    // Stroke offset: when you flick with a ball about to arrive, the fast "stroke" part of
-    // the movement is left out of the *contact point* for the stroke's timing window. You
-    // see the full swing, but a slightly early flick doesn't carry the blade off the ball's
-    // line; slower positioning in the same window still moves the contact point. With no
-    // ball coming nothing is held back, so ordinary movement is never sluggish.
-    // Rally strokes are up/down flicks, so only height is held back and sideways movement
-    // (chasing the ball) always stays live. Serves can be sideways flicks: both axes.
-    const stroking = this.serving ? mouseSpeed > thr : Math.abs(rawVy) > thr && Math.abs(rawVy) > Math.abs(rawVx);
-    if (stroking && this.ballNear) {
-      if (!this.stroke) this.stroke = { x: 0, y: 0, age: 0 };
-      if (this.serving) this.stroke.x += this.x - prevX;
-      this.stroke.y += this.y - prevY;
-    }
-    if (this.stroke) {
-      this.stroke.age += dt;
-      if (this.stroke.age > p.strokeHold + 0.05 || !this.ballNear) {
-        // Follow-through over: the paddle recovers to where the stroke started (as a real
-        // player returns to the ready position), so the next ball isn't met 15 cm too high.
-        this.x -= this.stroke.x;
-        this.y -= this.stroke.y;
-        this.recoverX += this.stroke.x;
-        this.recoverY += this.stroke.y;
-        this.stroke = null;
-      }
-    }
-    const rk = dt > 0 ? Math.exp(-dt / 0.09) : 0;
-    this.recoverX *= rk;
-    this.recoverY *= rk;
 
     // Smooth the bursty mouse velocity (exponential moving average).
     const k = dt > 0 ? 1 - Math.exp(-dt / p.velocitySmoothing) : 1;
@@ -258,7 +223,10 @@ export class SwingController {
     }
 
     const hook = input.hookLeft === input.hookRight ? 0 : input.hookLeft ? -1 : 1;
-    let vel = strokeVelocity(this.planarVel, input.drive, hook, p, this.serving ? p.serveThreshold : p.swingThreshold, this.serving);
+    // Rally strokes are up/down gestures: sideways mouse speed (moving the bat across to
+    // the ball) only counts a little, so chasing a wide ball isn't read as a stroke.
+    const gesture = this.serving ? this.planarVel : { x: this.planarVel.x * p.lateralStroke, y: this.planarVel.y };
+    let vel = strokeVelocity(gesture, input.drive, hook, p, this.serving ? p.serveThreshold : p.swingThreshold, this.serving);
 
     // Stroke memory: the strongest recent stroke stays "live" for strokeHold seconds,
     // fading out, so contact doesn't have to land on the exact frame of the flick.
@@ -293,11 +261,10 @@ export class SwingController {
     this.pitch += (targetPitch - this.pitch) * (dt > 0 ? 1 - Math.exp(-dt / 0.025) : 1);
     // Contact happens at the rest plane (where the intercept marker is); the forward
     // lunge of the stroke is drawn by the renderer only, so it never shifts timing.
-    const st = this.stroke;
-    const pos = st ? v3(body.x + this.x - st.x, this.y - st.y, restZ) : v3(body.x + this.x, this.y, restZ);
+    const pos = v3(body.x + this.x, this.y, restZ);
     const yaw = (Math.atan2(aim.x - pos.x, -(aim.z - pos.z)) * 180) / Math.PI + this.yawOffset;
     this.pose = { pos, normal: faceNormal(this.pitch, yaw), vel };
-    this.visualPos = v3(body.x + this.x + this.recoverX, this.y + this.recoverY, restZ);
+    this.visualPos = { ...pos };
   }
 
   /** Snap the paddle to a pose without generating a swing (x relative to the body). */
@@ -307,8 +274,6 @@ export class SwingController {
     this.forward = 0;
     this.planarVel = { x: 0, y: 0 };
     this.held = v3();
-    this.stroke = null;
-    this.recoverX = this.recoverY = 0;
     this.pose = { pos: v3(bodyX + x, y, restZ), normal: v3(0, 0, -1), vel: v3() };
     this.visualPos = { ...this.pose.pos };
     this.prevPose = this.pose;
