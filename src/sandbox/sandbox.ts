@@ -377,6 +377,7 @@ export class Sandbox {
         this.sinceResolved = 0.5;
       }
     } else {
+      this.setFov(50);
       this.tossHoldStart = null;
       this.setCamera(this.settings.camera);
     }
@@ -1393,14 +1394,32 @@ export class Sandbox {
     }
   }
 
+  /** Play camera: height above the floor and distance behind your body (adjustable, remembered). */
+  playCam = {
+    height: Number(loadPref('mem.camHeight', '1.5')),
+    distance: Number(loadPref('mem.camDistance', '2.0')),
+    /** Vertical field of view in play, degrees. Narrower = more zoomed in (like a TV camera). */
+    fov: Number(loadPref('mem.camFov', '38')),
+  };
+
   private updatePlayCamera(dt: number) {
     const b = this.player.body;
-    const target = new THREE.Vector3(b.x * 0.5, 1.95, b.z + 1.2);
-    const look = new THREE.Vector3(b.x * 0.2, 0.78, -0.8);
+    const { height, distance } = this.playCam;
+    const target = new THREE.Vector3(b.x * 0.5, height, b.z + distance);
+    // Look a little above the table so the ball's height over the net reads clearly;
+    // the lower the camera, the higher (flatter) the look point.
+    const look = new THREE.Vector3(b.x * 0.2, 0.78 + Math.max(0, 1.95 - height) * 0.25, -0.9);
     const k = 1 - Math.exp(-dt / 0.12);
     this.camera.position.lerp(target, k);
     this.controls.target.lerp(look, k);
     this.camera.lookAt(this.controls.target);
+    this.setFov(this.playCam.fov);
+  }
+
+  private setFov(fov: number) {
+    if (this.camera.fov === fov) return;
+    this.camera.fov = fov;
+    this.camera.updateProjectionMatrix();
   }
 
   /** Advance the simulation by gameDt seconds of game time using fixed ticks. */
@@ -1709,6 +1728,20 @@ export class Sandbox {
     vf.add(this.settings, 'paused').name('Paused  [P]');
     vf.add({ step: () => this.step() }, 'step').name('Step one tick  [.]');
     vf.add(this.settings, 'camera', Object.keys(CAMERA_VIEWS)).name('Camera  [1–5]').onChange((v: CameraView) => this.setCamera(v));
+    vf.add(this.playCam, 'height', 1.1, 2.4, 0.05)
+      .name('Play camera height (m)')
+      .onChange((v: number) => savePref('mem.camHeight', String(v)));
+    vf.add(this.playCam, 'distance', 0.8, 3.5, 0.1)
+      .name('Play camera distance (m)')
+      .onChange((v: number) => savePref('mem.camDistance', String(v)));
+    vf.add(this.playCam, 'fov', 25, 70, 1)
+      .name('Play camera zoom (FOV°)')
+      .onChange((v: number) => savePref('mem.camFov', String(v)));
+    vf.add({ reset: () => {
+      Object.assign(this.playCam, { height: 1.5, distance: 2.0, fov: 38 });
+      for (const k of ['mem.camHeight', 'mem.camDistance', 'mem.camFov']) savePref(k, '');
+      vf.controllersRecursive().forEach((c) => c.updateDisplay());
+    } }, 'reset').name('Reset play camera');
     vf.add(this.settings, 'showPrediction').name('Predicted path').onChange((v: boolean) => (this.predictionLine.visible = v && !!this.sim));
     vf.add(this.settings, 'showTrail').name('Spin trail').onChange((v: boolean) => (this.ball.trailVisible = v));
     vf.add(this.settings, 'showSpinAxis').name('Spin axis').onChange((v: boolean) => (this.ball.showAxis = v));

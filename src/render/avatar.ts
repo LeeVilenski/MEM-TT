@@ -161,14 +161,12 @@ export class Avatar {
     this.group.visible = v;
   }
 
-  /** First person: only the racket arm is drawn (the camera is behind the head). */
+  /** First person: nothing of the body is drawn, only the paddle (handled by the player view). */
   setFirstPerson(on: boolean) {
+    // In first person only the paddle is drawn: from the play camera (behind and
+    // below head height) the body and racket arm would sit between you and the table.
     for (const p of this.bodyParts) p.visible = !on;
-    // See-through racket arm in first person so it never hides the ball.
-    const m = this.arm.material as THREE.MeshStandardMaterial;
-    m.transparent = on;
-    m.opacity = on ? 0.45 : 1;
-    m.depthWrite = !on;
+    this.arm.visible = !on;
   }
 
   dispose() {

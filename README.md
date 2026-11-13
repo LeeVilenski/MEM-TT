@@ -79,7 +79,7 @@ Everything is generated in code: geometry, textures and sound. There are no asse
 | Security Analyst | suit, shades and earpiece |
 | Network Engineer | hi-vis vest, cap and a coil of patch cable |
 
-In first person you see only your racket arm, which is see-through so it never hides the ball. Replays show your full character.
+In first person you see only your paddle, so nothing hides the ball. Replays and the other cameras show your full character.
 
 **Sound** (Web Audio, synthesised live):
 - **Paddle hits:** the tone depends on the rubber and the loudness on impact speed.
