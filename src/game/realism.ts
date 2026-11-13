@@ -15,10 +15,12 @@ export interface RealismSettings {
   footwork: number;
   /** Multiplier on Magnus lift: above 1 exaggerates how spin curves the ball. */
   spinCurve: number;
+  /** Auto face angle (0–1): opens the face on downward strokes, closes it on upward ones. */
+  autoFace: number;
 }
 
-export const REALISM_PRESETS = { Simulation: 0, Balanced: 0.55, Arcade: 1 } as const;
-export const DEFAULT_REALISM = REALISM_PRESETS.Balanced;
+export const REALISM_PRESETS = { Simulation: 0, Balanced: 0.55, Assisted: 0.75, Arcade: 1 } as const;
+export const DEFAULT_REALISM = REALISM_PRESETS.Assisted;
 
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 
@@ -32,6 +34,7 @@ export function realismSettings(arcade: number): RealismSettings {
     footwork: clamp01(0.25 + 0.8 * a),
     // Spin is only exaggerated in the arcade half of the range.
     spinCurve: 1 + 0.8 * Math.max(0, a - 0.5),
+    autoFace: clamp01((a - 0.2) / 0.5),
   };
 }
 

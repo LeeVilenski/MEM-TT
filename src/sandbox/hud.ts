@@ -106,6 +106,7 @@ export class Hud {
   private playing = false;
   onStartPlay: () => void = () => {};
   onCareer: () => void = () => {};
+  onHowTo: () => void = () => {};
   private toastsEl: HTMLDivElement | null = null;
 
   /** Small stacked notification (XP, unlocks, achievements). */
@@ -145,7 +146,14 @@ export class Hud {
       e.stopPropagation();
       this.onCareer();
     });
-    this.startEl.append(careerLink);
+    const howLink = document.createElement('div');
+    howLink.className = 'hud-career';
+    howLink.textContent = '❓ How to play';
+    howLink.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.onHowTo();
+    });
+    this.startEl.append(careerLink, howLink);
     this.startEl.querySelector('button')!.addEventListener('click', (e) => {
       e.stopPropagation();
       this.onStartPlay();

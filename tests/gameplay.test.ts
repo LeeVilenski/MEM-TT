@@ -30,3 +30,23 @@ describe('gameplay pipeline (scripted player vs ball machine)', () => {
     expect(wayEarly.shot?.name ?? 'Block').toBe('Block');
   });
 });
+
+describe('backspin with a downward flick (default realism)', () => {
+  it('a plain downward flick, no keys, returns pushes, chops and drives with backspin', () => {
+    const results: string[] = [];
+    let backspin = 0;
+    const presets = ['Long push', 'Push', 'Chop', 'Drive', 'Opening loop'];
+    for (const preset of presets) {
+      for (const px of [-10, -25]) {
+        // Downward flick (negative px) started ~4 frames before contact, face left square.
+        const r = playBall(preset, 0, 4 / FPS, px, { basePitch: 0, setup: (p) => p.applyRealism(0.75) });
+        // Pushing a push gives light backspin (as in real play); count any clear backspin.
+        const ok = r.result === 'IN' && (r.shot?.top ?? 0) < -5;
+        if (ok) backspin++;
+        results.push(`${preset} ${px}: ${r.result} ${r.shot?.name ?? '-'} top=${Math.round(r.shot?.top ?? 0)}`);
+      }
+    }
+    console.log(results.join('\n'));
+    expect(backspin).toBeGreaterThanOrEqual(7); // of 10
+  });
+});

@@ -4,7 +4,7 @@ A 3D browser table tennis game for 1–4 players, built around spin, pace and a 
 
 ## Status: Milestone 8 — progression (all planned milestones done)
 
-Open **📈 Career, drills & tournaments**, from the start screen or the top of the panel. Progress is saved in your browser; there are no accounts.
+Open **📈 Career, drills & tournaments**, from the start screen or the top of the panel. **❓ How to play** explains each shot; it also opens automatically the first time you play. Progress is saved in your browser; there are no accounts.
 
 **Career and stats**
 - **XP** comes from points, matches (more against Principal AI, and online), practice returns, drills, tournaments and achievements.
@@ -95,16 +95,21 @@ In first person you see only your paddle, so nothing hides the ball. Replays and
 
 ### Milestone 5 — depth: realism, styles, rubbers, AI per style
 
-**Realism slider** (panel → **Realism**; set by the host for an online room). It runs from 0% (Simulation) to 100% (Arcade), and Balanced, 55%, is the default. It sets:
+**Realism slider** (panel → **Realism**; set by the host for an online room). It runs from 0% (Simulation) to 100% (Arcade). The default is **Assisted (75%)** on desktop and 85% on phones. It sets:
 
-| Setting | Simulation | Balanced | Arcade |
-|---|---|---|---|
-| Game speed | 1.0× | 0.78× | 0.6× |
-| Timing window | 60 ms | 137 ms | 200 ms |
-| Angle assist | off | corrects ≤ 46° | always lands if possible |
-| Hit area | +0 cm | +3.9 cm | +7 cm |
-| Footwork assist | 25% | 69% | 100% |
-| Spin curve | real | real (×1.04) | exaggerated ×1.4 |
+| Setting | Simulation | Balanced | Assisted | Arcade |
+|---|---|---|---|---|
+| Game speed | 1.0× | 0.78× | 0.7× | 0.6× |
+| Timing window | 60 ms | 137 ms | 165 ms | 200 ms |
+| Angle assist | off | corrects ≤ 46° | always lands if possible | always lands if possible |
+| Auto face angle | off | 70% | full | full |
+| Hit area | +0 cm | +3.9 cm | +5.3 cm | +7 cm |
+| Footwork assist | 25% | 69% | 85% | 100% |
+| Spin curve | real | ×1.04 | ×1.2 | ×1.4 |
+
+**Auto face angle:** a downward stroke opens the face (push or chop) and an upward one closes it (loop), as real players do. So flicking down gives backspin and flicking up gives topspin, with no keys needed.
+
+**Push and chop strokes:** a downward rally stroke is mostly forward with a little downward brush, so even a gentle downward movement as the ball arrives makes a proper push. Against short balls, the intercept ring sits at the top of the bounce.
 
 Online, the whole room runs at the slider's game speed: the server and every client share the slowed clock.
 

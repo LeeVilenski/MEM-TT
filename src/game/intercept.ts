@@ -1,4 +1,4 @@
-import { TABLE, TICK_DT, predict, type BallState, type PhysicsParams, type Vec3 } from '../physics';
+import { TICK_DT, predict, type BallState, type PhysicsParams, type Vec3 } from '../physics';
 
 export interface PathPoint {
   pos: Vec3;
@@ -27,8 +27,8 @@ export class IncomingPrediction {
    *  - normally where it crosses the hitting plane z = planeZ;
    *  - if it is above `maxHeight` there (a lob), the first reachable point beyond the
    *    plane, i.e. the player backs off and takes it on the way down;
-   *  - if it would bounce twice first (a short ball), the furthest point it reaches at a
-   *    playable height, i.e. the player steps in and reaches over the table.
+   *  - if it would bounce twice first (a short ball), the top of its bounce, i.e. the
+   *    player steps in and reaches over the table.
    * Null once the moment has passed.
    */
   interceptAt(planeZ: number, now: number, maxHeight = Infinity): PathPoint | null {
@@ -38,7 +38,8 @@ export class IncomingPrediction {
       if (p.t <= this.nearBounceTime) continue;
       if (p.t >= this.secondBounceTime - 0.01) break; // must be played before the next bounce
       if (p.pos.z >= planeZ && p.pos.y <= maxHeight) return p.t >= now ? p : null;
-      if (p.pos.y >= TABLE.height + 0.06 && p.pos.y <= maxHeight && (!short || p.pos.z > short.pos.z)) short = p;
+      // Short ball: take it at the top of the bounce (the easiest moment for any stroke).
+      if (p.pos.y <= maxHeight && (!short || p.pos.y > short.pos.y)) short = p;
     }
     return short && short.t >= now ? short : null;
   }

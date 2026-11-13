@@ -35,13 +35,21 @@ describe('realism slider', () => {
     expect(arc.footwork).toBeGreaterThan(sim.footwork);
   });
 
-  it('the default keeps the tuning the game was balanced with, a little slower', () => {
-    const d = realismSettings(DEFAULT_REALISM);
+  it('Balanced keeps the tuning the game was first balanced with, a little slower', () => {
+    const d = realismSettings(REALISM_PRESETS.Balanced);
     expect(d.angleAssist).toBeCloseTo(0.77, 1);
     expect(d.hitArea).toBeCloseTo(0.0385, 2);
     expect(d.footwork).toBeCloseTo(0.69, 1);
     expect(d.strokeHold).toBeCloseTo(0.137, 2);
     expect(d.gameSpeed).toBeLessThan(0.8);
+  });
+
+  it('the default is the more assisted setting, with auto face angle on', () => {
+    const d = realismSettings(DEFAULT_REALISM);
+    expect(DEFAULT_REALISM).toBe(0.75);
+    expect(d.angleAssist).toBe(1);
+    expect(d.autoFace).toBe(1);
+    expect(realismSettings(0).autoFace).toBe(0);
   });
 
   it('applies to a player', () => {

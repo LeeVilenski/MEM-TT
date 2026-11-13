@@ -73,6 +73,7 @@ export class Player {
     this.assists.hitArea = r.hitArea;
     this.assists.footwork = r.footwork;
     this.swing.params.strokeHold = r.strokeHold;
+    this.swing.params.autoFace = r.autoFace;
   }
 
   constructor(id: string, params: PhysicsParams) {

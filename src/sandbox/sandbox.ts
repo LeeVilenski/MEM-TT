@@ -44,6 +44,7 @@ import { DRILLS, DrillSession, drillUnlocked } from '../progress/drills';
 import { TOURNAMENTS, TournamentRun, tournamentUnlocked } from '../progress/tournament';
 import { isUnlocked, newlyUnlocked, unlockedKeys, UNLOCKS, type UnlockKind } from '../progress/unlocks';
 import { CareerScreen } from './career';
+import { HowToPlay } from './howto';
 import { VENUES, setVenue, type Venue, type VenueId } from '../render/venues';
 import { OnlineClient } from '../net/client';
 import { LocalServer, WebSocketTransport, roomUrl, type Transport } from '../net/transport';
@@ -169,6 +170,7 @@ export class Sandbox {
   // Progression
   career = new Career();
   private careerScreen!: CareerScreen;
+  private howTo!: HowToPlay;
   private unlocked = new Set<string>();
   private drill: DrillSession | null = null;
   private drillZone: THREE.Mesh | null = null;
@@ -265,7 +267,7 @@ export class Sandbox {
     if (this.isTouch) {
       document.body.classList.add('touch');
       // A bit more forgiving on a phone.
-      this.realism.percent = 75;
+      this.realism.percent = 85;
     }
 
     // Career: toasts for XP / promotions / achievements / unlocks.
@@ -281,6 +283,8 @@ export class Sandbox {
       this.careerScreen.render();
     };
     this.hud.onCareer = () => this.openCareer();
+    this.howTo = new HowToPlay(container, this.isTouch);
+    this.hud.onHowTo = () => this.howTo.show();
     this.career.on((e) => {
       if (e.type === 'level') {
         this.hud.flash('PROMOTED', `You are now ${e.title}`);
@@ -351,6 +355,16 @@ export class Sandbox {
   // ---------------------------------------------------------------- play mode
 
   requestPlay() {
+    // First time: explain the controls before the first ball.
+    if (loadPref('mem.seenHowTo', '') !== '1') {
+      savePref('mem.seenHowTo', '1');
+      this.howTo.onClose = () => {
+        this.howTo.onClose = () => {};
+        this.requestPlay();
+      };
+      this.howTo.show();
+      return;
+    }
     // Phones have no mouse to capture: just start.
     if (this.isTouch) return this.setPlaying(true);
     const canvas = this.renderer.domElement;
@@ -1564,12 +1578,14 @@ export class Sandbox {
 
     gui.add({ play: () => this.requestPlay() }, 'play').name('▶ Play  (Esc to leave)');
     gui.add({ career: () => this.openCareer() }, 'career').name('📈 Career, drills & tournaments');
+    gui.add({ help: () => this.howTo.show() }, 'help').name('❓ How to play');
 
     const rf = gui.addFolder('Realism');
     rf.add(this.realism, 'percent', 0, 100, 5)
       .name('Arcade %')
       .onChange(() => this.applyRealism());
     for (const [name, v] of Object.entries(REALISM_PRESETS)) {
+      // Presets: Simulation, Balanced, Assisted (default), Arcade.
       rf.add(
         {
           [name]: () => {

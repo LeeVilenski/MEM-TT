@@ -45,6 +45,17 @@ export interface SwingParams {
   serveThreshold: number;
   /** Forward drive per m/s of swing while serving: a serve is mostly a forward brush. */
   serveForwardGain: number;
+  /**
+   * Downward rally strokes (push/chop): base forward speed of a gentle push, extra
+   * forward per m/s of stroke, and how much of the downward motion is kept.
+   */
+  pushBaseForward: number;
+  chopForwardGain: number;
+  chopDownScale: number;
+  /** Auto face-angle assist strength (0–1), and how far it opens/closes the face, degrees. */
+  autoFace: number;
+  autoFaceOpen: number;
+  autoFaceClose: number;
   /** Time constant of velocity smoothing, seconds. */
   velocitySmoothing: number;
   /**
@@ -71,6 +82,12 @@ export const DEFAULT_SWING: SwingParams = {
   swingThreshold: 1.5,
   serveThreshold: 0.3,
   serveForwardGain: 2.0,
+  autoFace: 0,
+  autoFaceOpen: 40,
+  autoFaceClose: 15,
+  pushBaseForward: 3.2,
+  chopForwardGain: 0.6,
+  chopDownScale: 0.45,
   velocitySmoothing: 0.025,
   strokeHold: 0.12,
   strokeTravel: 0.15,
@@ -118,11 +135,22 @@ export function strokeVelocity(mousePlanar: { x: number; y: number }, drive: boo
   const brushScale = drive ? p.driveBrushScale : 1;
   // Forward drive ramps in above the stroke threshold (no jump at the threshold).
   const over = Math.max(0, speed - threshold * p.swingGain);
+  // A downward rally stroke is a push/chop: mostly forward, with a little downward
+  // brush (the open face turns it into backspin). Upward strokes (loops) keep their
+  // steep up-and-forward path. Serves have their own calibration.
+  const chop = !serving && !drive && planar.y < -0.3 * p.swingGain && planar.y < -Math.abs(planar.x);
+  if (chop) {
+    // Even a gentle downward movement as the ball arrives is a push: it always carries
+    // a solid forward component; harder downward strokes become chops.
+    const hookVel = -hook * p.hookGain * speed;
+    return v3(planar.x + hookVel, planar.y * p.chopDownScale, -(p.pushBaseForward + p.chopForwardGain * speed));
+  }
   const gain = drive ? p.driveForwardGain : serving ? p.serveForwardGain : p.brushForwardGain;
   const forward = gain * Math.min(speed, over * 2);
+  const vy = planar.y * brushScale;
   // Brushing the back of the ball to +x makes it curve left (and vice versa).
   const hookVel = -hook * p.hookGain * speed;
-  return v3(planar.x * brushScale + hookVel, planar.y * brushScale, -forward);
+  return v3(planar.x * brushScale + hookVel, vy, -forward);
 }
 
 export class SwingController {
@@ -140,6 +168,8 @@ export class SwingController {
   serving = false;
   /** Player-style multiplier on lateral reach. */
   reachScale = 1;
+  /** Current auto-face contribution, degrees (for the HUD). */
+  autoPitch = 0;
   /** null = automatic forehand/backhand from paddle position. */
   forcedSide: StrokeSide | null = null;
 
@@ -217,7 +247,17 @@ export class SwingController {
     this.side = this.forcedSide ?? (this.x >= 0 ? 'forehand' : 'backhand');
 
     // Face orientation: auto-aim yaw toward the target, plus W/S pitch.
-    const targetPitch = this.basePitch + (input.open ? p.faceStep : 0) - (input.close ? p.faceStep : 0);
+    // Auto face angle (assist): open the face on a downward stroke (push/chop), close it a
+    // little on an upward one (loop) — what real players do, so "flick down = backspin".
+    let auto = 0;
+    const vs = length(vel);
+    if (p.autoFace > 0 && vs > 0.5) {
+      const firm = Math.min(1, vs / 3);
+      if (vel.y < -0.1) auto = p.autoFace * p.autoFaceOpen * firm;
+      else if (vel.y > 0.5) auto = -p.autoFace * p.autoFaceClose * firm;
+    }
+    this.autoPitch = auto;
+    const targetPitch = this.basePitch + auto + (input.open ? p.faceStep : 0) - (input.close ? p.faceStep : 0);
     this.pitch += (targetPitch - this.pitch) * (dt > 0 ? 1 - Math.exp(-dt / 0.04) : 1);
     // Contact happens at the rest plane (where the intercept marker is); the forward
     // lunge of the stroke is drawn by the renderer only, so it never shifts timing.

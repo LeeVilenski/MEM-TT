@@ -87,7 +87,8 @@ describe('paddle contact', () => {
     const up = swingAt(ball, 1.55, strokeVelocity({ x: 0, y: 5 }, false, 0, DEFAULT_SWING), faceNormal(-20, yaw)).hit!;
     const down = swingAt(ball, 1.55, strokeVelocity({ x: 0, y: -3 }, false, 0, DEFAULT_SWING), faceNormal(35, yaw)).hit!;
     expect(spinComponents(up.velOut, up.spinOut).top).toBeGreaterThan(70);
-    expect(spinComponents(down.velOut, down.spinOut).top).toBeLessThan(-40);
+    // A downward rally stroke is a push: mostly forward, so less backspin than a pure brush.
+    expect(spinComponents(down.velOut, down.spinOut).top).toBeLessThan(-25);
   });
 
   it('a hook brush adds sidespin in the requested direction', () => {
