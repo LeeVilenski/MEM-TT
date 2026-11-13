@@ -31,6 +31,11 @@ import { BallView, spinColor } from '../render/ballView';
 import { PlayerView } from '../render/playerView';
 import { createScene } from '../render/scene';
 import { Hud, MatchHud, type ShotReport, type ReturnReport, type PracticeStats } from './hud';
+import { Lobby } from './lobby';
+import { OnlineClient } from '../net/client';
+import { LocalServer, WebSocketTransport, roomUrl, type Transport } from '../net/transport';
+import { fromV, isRoomCode, randomRoomCode, seatSide, type GameMode, type Seat } from '../net/protocol';
+import { mapVec, mapState, type SideId } from '../game/frame';
 import { PRESETS, type Preset } from './presets';
 
 type CameraView = 'Player' | 'Side' | 'Top' | 'Broadcast' | 'Machine';
@@ -119,6 +124,20 @@ export class Sandbox {
   matchSettings = { level: 'medium' as AiLevel, bestOf: 3 };
   private tossHoldStart: number | null = null;
 
+  // Online
+  online: OnlineClient | null = null;
+  private localServer: LocalServer | null = null;
+  private lobby: Lobby;
+  private remoteViews = new Map<Seat, PlayerView>();
+  onlineSettings = {
+    name: loadPref('mem.name', 'Player'),
+    server: loadPref('mem.server', DEFAULT_SERVER),
+    code: '',
+    mode: 'singles' as GameMode,
+    bestOf: 3,
+    aiLevel: 'medium' as AiLevel,
+  };
+
   private report: ShotReport | null = null;
   private markers: THREE.Mesh[] = [];
   private predictionLine: THREE.Line;
@@ -148,8 +167,13 @@ export class Sandbox {
     this.aiView = new PlayerView(this.scene, { bodyColor: 0xe8562a, bodyOpacity: 0.45 });
     this.aiView.visible = false;
     this.matchHud = new MatchHud(container);
-    this.matchHud.onRematch = () => this.startMatch();
-    this.matchHud.onExit = () => this.endMatch();
+    this.matchHud.onRematch = () => (this.online ? this.onlineRematch() : this.startMatch());
+    this.matchHud.onExit = () => (this.online ? this.backToLobby() : this.endMatch());
+    this.lobby = new Lobby(container);
+    this.lobby.onStart = () => {
+      this.online?.start(this.lobby.fillAI);
+    };
+    this.lobby.onLeave = () => this.leaveOnline();
 
     this.predictionLine = new THREE.Line(
       new THREE.BufferGeometry(),
@@ -202,6 +226,13 @@ export class Sandbox {
 
     this.resize();
     this.renderer.setAnimationLoop(() => this.frame());
+
+    // Invite links: ?room=CODE joins that room.
+    const invited = new URLSearchParams(location.search).get('room')?.toUpperCase();
+    if (invited && isRoomCode(invited)) {
+      this.onlineSettings.code = invited;
+      this.joinOnline(invited);
+    }
   }
 
   // ---------------------------------------------------------------- play mode
@@ -471,7 +502,9 @@ export class Sandbox {
     const realDt = Math.min(0.1, (now - this.lastFrame) / 1000);
     this.lastFrame = now;
 
-    if (this.match) this.matchFrame(realDt);
+    this.localServer?.pump();
+    if (this.online) this.onlineFrame(realDt);
+    else if (this.match) this.matchFrame(realDt);
     else {
       if (this.playing) this.updatePlayer(realDt);
       if (!this.settings.paused) this.advance(realDt * this.settings.timeScale, realDt);
@@ -514,6 +547,7 @@ export class Sandbox {
   // ---------------------------------------------------------------- match vs AI
 
   startMatch() {
+    this.leaveOnline();
     this.endMatch(false);
     const ai = (this.ai = new AiPlayer('far', AI_LEVELS[this.matchSettings.level], this.params));
     const match = (this.match = new Match(
@@ -638,10 +672,247 @@ export class Sandbox {
   }
 
   private releaseToss() {
-    if (this.tossHoldStart === null || !this.match) return;
+    if (this.tossHoldStart === null || (!this.match && !this.online)) return;
     const held = Math.min(TOSS_HOLD_MAX, (performance.now() - this.tossHoldStart) / 1000);
     this.tossHoldStart = null;
-    this.match.toss(0.2 + (held / TOSS_HOLD_MAX) * 0.9);
+    const h = 0.2 + (held / TOSS_HOLD_MAX) * 0.9;
+    if (this.online) this.online.toss(h);
+    else this.match!.toss(h);
+  }
+
+  // ---------------------------------------------------------------- online
+
+  createOnline() {
+    this.connectOnline(randomRoomCode(), true);
+  }
+
+  joinOnline(code = this.onlineSettings.code) {
+    code = code.trim().toUpperCase();
+    if (!isRoomCode(code)) {
+      this.hud.flash('INVALID INPUT', 'Room codes are 5 letters');
+      return;
+    }
+    this.connectOnline(code, false);
+  }
+
+  private connectOnline(code: string, create: boolean) {
+    this.leaveOnline();
+    this.endMatch();
+    const o = this.onlineSettings;
+    savePref('mem.name', o.name);
+    savePref('mem.server', o.server);
+    let transport: Transport;
+    if (o.server.trim() === '' || o.server.trim().toLowerCase() === 'local') {
+      // In-browser room server: the full online code path, against the AI, no hosting needed.
+      this.localServer ??= new LocalServer(() => performance.now() / 1000);
+      transport = this.localServer.connect(code);
+    } else {
+      transport = new WebSocketTransport(roomUrl(o.server, code));
+    }
+    const client = (this.online = new OnlineClient(transport, this.player, this.params, () => performance.now() / 1000, {
+      name: o.name || 'Player',
+      create: create ? { mode: o.mode, bestOf: o.bestOf, aiLevel: o.aiLevel } : undefined,
+    }));
+    this.lobby.fillAI = true;
+    this.lobby.setError('');
+    this.lobby.show(client);
+    this.practiceUi(false);
+    client.on((e) => this.onOnlineEvent(e));
+    if (document.pointerLockElement) document.exitPointerLock();
+  }
+
+  leaveOnline() {
+    if (!this.online) return;
+    this.hud.setOverlay(false);
+    this.online.leave();
+    this.online = null;
+    this.lobby.show(null);
+    for (const v of this.remoteViews.values()) v.visible = false;
+    this.matchHud.show(false);
+    this.practiceUi(true);
+    if (location.search.includes('room=')) history.replaceState(null, '', location.pathname);
+  }
+
+  private onlineRematch() {
+    this.matchHud.hideOver();
+    if (this.online?.isHost) this.online.start(this.lobby.fillAI);
+    else this.backToLobby();
+  }
+
+  private backToLobby() {
+    this.matchHud.hideOver();
+    this.lobby.show(this.online);
+    if (document.pointerLockElement) document.exitPointerLock();
+  }
+
+  /** Show/hide the practice-only scene and HUD elements. */
+  private practiceUi(on: boolean) {
+    this.machineMesh.visible = on;
+    this.targetRing.visible = on && !this.playing;
+    this.predictionLine.visible = false;
+    this.ball.visible = !on;
+    this.hud.setMatchMode(!on);
+    if (on) this.matchHud.show(false);
+  }
+
+  /** Names of the team at a side, e.g. "Ada & Bob". */
+  private teamName(side: SideId, mineLabel = true): string {
+    const c = this.online!;
+    const names = Object.entries(c.room?.seats ?? {})
+      .filter(([s]) => seatSide(s as Seat) === side)
+      .map(([s, i]) => (mineLabel && s === c.seat ? 'You' : i!.name));
+    return names.join(' & ') || '—';
+  }
+
+  private onOnlineEvent(e: Parameters<Parameters<OnlineClient['on']>[0]>[0]) {
+    const c = this.online!;
+    switch (e.type) {
+      case 'room':
+        this.lobby.render();
+        if (c.room?.phase === 'lobby' && !this.lobby.visible && c.phase === 'lobby') this.backToLobby();
+        if (c.room && !location.search.includes(c.room.code)) history.replaceState(null, '', `?room=${c.room.code}`);
+        break;
+      case 'error':
+        this.lobby.setError(e.message);
+        this.hud.flash('ERROR', e.message);
+        break;
+      case 'closed':
+        this.lobby.setError(`Disconnected: ${e.reason}`);
+        this.lobby.show(c);
+        break;
+      case 'match':
+        this.lobby.show(null);
+        this.matchHud.show(true);
+        this.matchHud.hideOver();
+        this.matchHud.clearShots();
+        this.clearMarkers();
+        if (c.seat) this.requestPlay();
+        break;
+      case 'toss':
+        this.ball.clearTrail();
+        this.clearMarkers();
+        break;
+      case 'hit': {
+        const info = classifyShot(mapVec(c.side, e.pos), e.velOut, e.spinOut, e.paddleVel, e.velIn, e.spinIn);
+        const who = e.by === c.seat ? 'You' : (c.names[e.by] ?? e.by);
+        this.matchHud.addShot({ who, name: e.serve ? 'Serve' : info.name, speed: info.speed, rpm: info.rpm, top: info.top });
+        this.ball.clearTrail();
+        break;
+      }
+      case 'ball':
+        if (e.event.type === 'table') this.addMarker(mapVec(c.side, e.event.pos), spinColor(e.event.velIn, e.event.spinIn));
+        break;
+      case 'let':
+        this.hud.flash(LET_MESSAGE.title, LET_MESSAGE.sub);
+        break;
+      case 'point': {
+        const names = { near: this.teamName('near'), far: this.teamName('far') };
+        const m = pointMessage(e.result, names);
+        const mine = e.result.winner === c.side;
+        if (e.match) this.hud.flash(mine ? 'SHIPPED TO PROD' : 'INCIDENT REPORT', `${names[e.result.winner]} won the match`);
+        else if (e.game) this.hud.flash(mine ? 'DEPLOYED' : 'ROLLBACK', `Game to ${names[e.result.winner]} — ${m.title}: ${m.sub}`);
+        else this.hud.flash(m.title, m.sub);
+        break;
+      }
+      case 'over':
+        break;
+    }
+  }
+
+  private onlineFrame(realDt: number) {
+    const c = this.online!;
+    const inMatch = c.phase === 'serve-wait' || c.phase === 'rally' || c.phase === 'point-over';
+    this.hud.setOverlay(this.lobby.visible || (!c.seat && inMatch));
+    const { input, move } = this.playing && inMatch ? this.gatherInput() : { input: { ...NO_INPUT }, move: { x: 0, z: 0 } };
+    c.frame(realDt, input, move);
+    const side = c.side;
+    if (this.playing) this.hud.setPaddle(this.player.swing.pitchDeg, this.player.swing.side, this.player.swing.forcedSide !== null, input.drive);
+
+    // Me (view frame), other players (world → view).
+    this.playerView.visible = !!c.seat && inMatch;
+    this.playerView.update(this.player);
+    this.playerView.setMarker(this.settings.showIntercept ? c.interceptView() : null);
+    const seats = Object.keys(c.room?.seats ?? {}) as Seat[];
+    for (const seat of seats) {
+      if (seat === c.seat) continue;
+      let view = this.remoteViews.get(seat);
+      if (!view) {
+        view = new PlayerView(this.scene, { bodyColor: seatSide(seat) === side ? 0x60a5fa : 0xe8562a, bodyOpacity: 0.4 });
+        this.remoteViews.set(seat, view);
+      }
+      const r = c.remotes.get(seat);
+      view.visible = inMatch && !!r;
+      if (!r) continue;
+      const pos = mapVec(side, fromV(r.pose.p));
+      const normal = mapVec(side, fromV(r.pose.n));
+      const body = mapVec(side, { x: r.pose.b[0], y: 0, z: r.pose.b[1] });
+      view.updatePose({ pos, normal, vel: { x: 0, y: 0, z: 0 } }, { x: body.x, z: body.z }, r.pose.wing);
+    }
+    for (const [seat, view] of this.remoteViews) if (!seats.includes(seat)) view.visible = false;
+
+    // Ball: the live flight, or in the server's hand while waiting to serve.
+    this.ball.visible = inMatch;
+    if (c.flight) {
+      const state = mapState(side, c.flight.sim.state);
+      if (this.playing) this.ball.rotate(state.spin, realDt);
+      this.ball.update(state.pos, state);
+    } else if (c.phase === 'serve-wait' && c.serverSeat) {
+      let hand = c.myServe ? c.handView() : null;
+      const r = !hand && c.remotes.get(c.serverSeat);
+      if (r) hand = mapVec(side, { x: r.pose.p[0], y: TABLE.height + 0.06, z: r.pose.p[2] });
+      if (hand) this.ball.update(hand, { pos: hand, vel: v3(), spin: v3() });
+      this.ball.clearTrail();
+    }
+
+    // Scoreboard (my team first).
+    const sc = c.score;
+    if (sc && c.phase !== 'lobby') {
+      const them: SideId = side === 'near' ? 'far' : 'near';
+      const badge = sc.deuce ? 'DEUCE · RACE CONDITION' : sc.matchPoint ? `MATCH POINT · ${this.teamName(sc.matchPoint)}` : sc.gamePoint ? `GAME POINT · ${this.teamName(sc.gamePoint)}` : null;
+      this.matchHud.setScore({
+        you: this.teamName(side),
+        them: this.teamName(them),
+        points: [sc.points[side], sc.points[them]],
+        games: [sc.games[side], sc.games[them]],
+        youServe: !!c.serverSeat && seatSide(c.serverSeat) === side,
+        badge,
+        bestOf: sc.bestOf,
+      });
+    }
+
+    // Prompts and overlays.
+    if (c.phase === 'over' && sc) {
+      const won = sc.winner === side;
+      const them: SideId = side === 'near' ? 'far' : 'near';
+      if (!this.lobby.visible) {
+        this.matchHud.showOver(
+          won ? 'SHIPPED TO PROD' : 'INCIDENT REPORT',
+          `${this.teamName(sc.winner!)} won ${sc.games[sc.winner!]}–${sc.games[sc.winner === 'near' ? 'far' : 'near']}`,
+          sc.history.map((g) => `${g[side]}–${g[them]}`).join('  ·  '),
+          c.isHost ? 'Rematch' : null,
+          'Back to lobby',
+        );
+        if (document.pointerLockElement) document.exitPointerLock();
+      }
+      this.matchHud.setPrompt(null);
+      return;
+    }
+    if (!inMatch) {
+      this.matchHud.setPrompt(null);
+      this.matchHud.setMeter(null);
+    } else if (!this.playing && c.seat) {
+      this.matchHud.setPrompt('Paused locally — click <b>▶ Resume match</b> (the match keeps going online!)');
+      this.matchHud.setMeter(null);
+    } else if (c.myServe) {
+      this.matchHud.setPrompt('Your serve: hold <kbd>Space</kbd> to toss (longer = higher), release, then swing as it drops');
+      this.matchHud.setMeter(this.tossHoldStart !== null ? (performance.now() - this.tossHoldStart) / 1000 / TOSS_HOLD_MAX : null);
+    } else if (c.phase === 'serve-wait' && c.serverSeat) {
+      this.matchHud.setPrompt(`${c.names[c.serverSeat] ?? 'Opponent'} to serve`);
+      this.matchHud.setMeter(null);
+    } else {
+      this.matchHud.setPrompt(null);
+      this.matchHud.setMeter(null);
+    }
   }
 
   private updatePlayCamera(dt: number) {
@@ -714,6 +985,12 @@ export class Sandbox {
     if (down) this.keys.add(e.code);
     else this.keys.delete(e.code);
     if (this.playing && e.code.startsWith('Arrow')) e.preventDefault();
+    if (e.code === 'Space' && this.online) {
+      e.preventDefault();
+      if (down && !e.repeat && this.playing && this.online.myServe) this.tossHoldStart = performance.now();
+      if (!down) this.releaseToss();
+      return;
+    }
     if (e.code === 'Space' && this.match) {
       e.preventDefault();
       if (down && !e.repeat && this.playing && this.match.humanToServe) this.tossHoldStart = performance.now();
@@ -786,6 +1063,16 @@ export class Sandbox {
     const onMachine = () => this.updateMachineVisuals();
 
     gui.add({ play: () => this.requestPlay() }, 'play').name('▶ Play  (Esc to leave)');
+
+    const on = gui.addFolder('Online multiplayer');
+    const o = this.onlineSettings;
+    on.add(o, 'name').name('Your name');
+    on.add(o, 'server').name('Room server');
+    on.add(o, 'mode', { 'Singles (1v1)': 'singles', 'Doubles (2v2)': 'doubles' }).name('New room: mode');
+    on.add(o, 'bestOf', { 'Best of 1': 1, 'Best of 3': 3, 'Best of 5': 5, 'Best of 7': 7 }).name('New room: format');
+    on.add({ create: () => this.createOnline() }, 'create').name('➕ Create room');
+    on.add(o, 'code').name('Room code').listen();
+    on.add({ join: () => this.joinOnline() }, 'join').name('→ Join room');
 
     const mt = gui.addFolder('Match vs AI');
     const levelNames = Object.fromEntries(Object.entries(AI_LEVELS).map(([k, v]) => [`${v.name} (${k})`, k]));
@@ -902,4 +1189,28 @@ function createMachineMesh(): THREE.Group {
   barrel.add(tube);
   g.add(barrel);
   return g;
+}
+
+/**
+ * Room server used by default: VITE_ROOM_SERVER at build time (e.g. the Cloudflare
+ * Worker or Node server URL); a local Node server in development; otherwise the
+ * in-browser server ("local": online mode against the AI, no friends).
+ */
+const DEFAULT_SERVER: string =
+  (import.meta.env.VITE_ROOM_SERVER as string | undefined) || (['localhost', '127.0.0.1'].includes(location.hostname) ? 'ws://localhost:8787' : 'local');
+
+function loadPref(key: string, fallback: string): string {
+  try {
+    return localStorage.getItem(key) || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function savePref(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* storage unavailable */
+  }
 }

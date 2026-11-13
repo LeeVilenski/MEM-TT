@@ -2,7 +2,18 @@
 
 A 3D browser table tennis game for 1–4 players, built around spin, pace and a full range of shots. See [PLAN.md](PLAN.md) for the full design and milestones.
 
-## Status: Milestone 3 — rules, scoring and a match vs AI
+## Status: Milestone 4 — online rooms (singles and doubles)
+
+- **Create a room:** open **Online multiplayer**, then **➕ Create room**. Share the 5-letter code or the invite link, players choose seats, and the host starts the match.
+- **Fill seats with AI:** empty seats can be filled by the AI, so 1 human vs AI, 2 vs 2, or anything in between works.
+- **Doubles follows the real rules:** partners alternate shots, serves go diagonally, and server and receiver rotate.
+- **Everyone plays from the near end:** the view is mirrored for whoever is at the far end.
+- **Your own contacts have no input lag:** your client decides the contact and reports it, and the server re-simulates and referees every rally.
+- **Disconnects:** if a player drops out mid-match, the AI takes over their seat.
+- **Hosting is your choice:** a **Cloudflare** Worker with Durable Objects, or a plain **Node** WebSocket server. Both run the same room code. See **[HOSTING.md](HOSTING.md)**.
+- **No server configured?** The client falls back to an in-browser room server: the full online path, against the AI only.
+
+### Milestone 3 — rules, scoring and a match vs AI
 
 Open **Match vs AI** in the panel, choose an opponent and a format, and press **▶ Start match**.
 
@@ -99,7 +110,11 @@ npm install
 npm run dev      # http://localhost:5173
 npm test         # physics unit tests
 npm run build    # static build in dist/
+npm run server   # local room server on :8787 (online play in dev)
+npm run build:server   # bundle the Node room server → dist-server/node.mjs
 ```
+
+Hosting the room server (Cloudflare or Node) is covered in [HOSTING.md](HOSTING.md).
 
 ### Inspect-mode controls (not playing)
 
@@ -132,11 +147,21 @@ src/game/      Engine-agnostic game logic (shared with AI and netcode later)
   ai.ts        AI opponent (planning, stroke solving, difficulty)
   match.ts     Match orchestration: serving, rallies, scoring (engine-agnostic)
   messages.ts  IT-themed call-outs
+src/net/       Online play
+  protocol.ts  Wire messages (shared by client and servers)
+  room.ts      Room server logic: lobby, seats, refereeing, AI seats (host-agnostic)
+  client.ts    Game client: local contact authority, flight simulation, clock sync
+  transport.ts WebSocket transport + in-process LocalServer (tests, "local" mode)
+server/        Room server adapters
+  node.ts      Node.js (ws) — Fly.io, Render, Railway, VPS
+  cloudflare/  Cloudflare Worker + Durable Object (wrangler.toml)
 src/render/    Three.js scene, ball, paddle and player views
 src/sandbox/   Sandbox app (ball machine, play mode, HUD, controls)
 tests/         Vitest: physics, paddle contact, swing, assist, rules, an end-to-end
-               gameplay test vs every machine preset, full AI-vs-AI matches, and
-               scripted human serves/rallies against the AI
+               gameplay test vs every machine preset, full AI-vs-AI matches,
+               scripted human serves/rallies against the AI, online rooms with
+               simulated latency (singles, doubles, AI seats, near/far symmetry),
+               and end-to-end over real WebSockets (Node or Cloudflare adapter)
 ```
 
 World conventions: metres and seconds, +y up, the net at z = 0, and the player's (near) end at +z.

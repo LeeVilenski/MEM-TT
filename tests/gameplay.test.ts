@@ -50,7 +50,9 @@ function playBall(presetName: string, angleAssist: number, flickLead = 2 / FPS, 
         flick--;
       } else {
         const clamp = (v: number) => Math.max(-maxStep, Math.min(maxStep, v));
-        input.dx = clamp((ic.pos.x - player.swing.pose.pos.x) / sens);
+        // Footwork assist handles fine left–right alignment; only correct big errors.
+        const ex = ic.pos.x - player.swing.pose.pos.x;
+        if (Math.abs(ex) > 0.3) input.dx = clamp(ex / sens);
         input.dy = clamp(-(ic.pos.y - player.swing.y) / sens);
       }
     } else if (flick > 0) {

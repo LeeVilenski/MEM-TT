@@ -84,7 +84,7 @@ export class Player {
         if (this.intercept.z < this.homeZ - ARM_REACH) tz = this.intercept.z + ARM_REACH;
         else if (this.intercept.z > this.homeZ - ARM_REACH + 0.05) tz = this.intercept.z + ARM_REACH;
       }
-      const pull = (d: number) => clamp(d * 8, -ASSIST_SPEED, ASSIST_SPEED) * a;
+      const pull = (d: number) => clamp(d * 16, -ASSIST_SPEED, ASSIST_SPEED) * a;
       if (move.x === 0) vx += pull(tx - this.body.x);
       if (move.z === 0) vz += pull(tz - this.body.z);
     }

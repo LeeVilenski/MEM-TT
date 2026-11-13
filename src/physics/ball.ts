@@ -241,6 +241,12 @@ export class BallSim {
       const spinIn = clone(s.spin);
       s.pos.y = TABLE_TOP + r;
       surfaceBounce(s, v3(0, 1, 0), tableRestitution(impactSpeed, p), p.tableFriction, p.tableSpinBite, p.tableFrictionMax);
+      // A ball that has almost stopped bouncing is dead: stop instead of micro-bouncing forever.
+      if (impactSpeed < 0.15 && Math.hypot(s.vel.x, s.vel.z) < 0.5) {
+        s.vel = v3();
+        s.spin = v3();
+        this.atRest = true;
+      }
       events?.push({
         type: 'table',
         time: this.time,

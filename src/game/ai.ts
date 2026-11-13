@@ -112,6 +112,8 @@ export class AiPlayer {
   body = { ...READY };
   rubber: Rubber = RUBBERS.inverted;
   plan: AiPlan | null = null;
+  /** Doubles: serves must go diagonally (own right half → receiver's right half). */
+  doubles = false;
   private moveFrom = 0;
   private pose: PaddlePose = { pos: v3(0.3, TABLE.height + 0.25, READY.z - ARM), normal: v3(0, 0, -1), vel: v3() };
   private prevPose: PaddlePose = this.pose;
@@ -159,7 +161,9 @@ export class AiPlayer {
    */
   planServe(now: number): { hand: Vec3; tossVy: number } {
     this.body = { ...READY };
-    const hand = v3(this.body.x + 0.3 + (this.rng() - 0.5) * 0.3, TABLE.height + 0.06, TABLE.halfLength + 0.15);
+    // Doubles: serve from the right half (+x locally) so the ball can go diagonally.
+    const handX = this.doubles ? 0.25 + this.rng() * 0.3 : this.body.x + 0.3 + (this.rng() - 0.5) * 0.3;
+    const hand = v3(handX, TABLE.height + 0.06, TABLE.halfLength + 0.15);
     const tossHeight = 0.3 + this.rng() * 0.35;
     const tossVy = Math.sqrt(2 * GRAVITY * tossHeight);
     const toss: BallState = { pos: hand, vel: v3(0, tossVy, 0), spin: v3() };
@@ -198,7 +202,9 @@ export class AiPlayer {
 
     for (const stroke of choices) {
       const halfW = TABLE.halfWidth - p.margin;
-      const target = { x: (this.rng() * 2 - 1) * halfW, z: -DEPTH[stroke] };
+      const diagonal = mode === 'serve' && this.doubles;
+      // Receiver's right half-court is −x in the server's frame.
+      const target = { x: diagonal ? -(0.15 + this.rng() * (halfW - 0.15)) : (this.rng() * 2 - 1) * halfW, z: -DEPTH[stroke] };
       let vel = STROKES[stroke];
       // Occasionally hook the loop for sidespin.
       if (stroke === 'loop' && this.rng() < 0.25 * p.aggression) vel = v3((this.rng() < 0.5 ? -1 : 1) * 3, vel.y, vel.z);
@@ -212,7 +218,8 @@ export class AiPlayer {
       for (let pitch = -72; pitch <= 72; pitch += STEP) {
         const normal = faceNormal(pitch, yaw);
         const res = landingOutcome(at, { ...pose, normal }, normal, this.rubber, this.params, mode);
-        scan.push({ pitch, pos: res.outcome === 'in' ? res.pos : undefined });
+        const diagonalOk = !diagonal || (res.first !== undefined && res.first.x >= 0.02 && res.pos !== undefined && res.pos.x <= -0.02);
+        scan.push({ pitch, pos: res.outcome === 'in' && diagonalOk ? res.pos : undefined });
       }
       let bestPitch: number | null = null;
       let bestScore = Infinity;

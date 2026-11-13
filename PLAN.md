@@ -111,7 +111,7 @@ The host sets it for the room. It adjusts:
 1. ✅ **Physics sandbox** (done): ball, table and net, plus a ball machine firing set spins. Tune against real ball speeds (up to about 30 m/s) and spin rates (up to about 150 rps).
 2. ✅ **Swing → contact** (done): the mouse paddle and keyboard modifiers produce every shot above, played against the ball machine.
 3. ✅ **Rules + 1v1 against AI** (done): scoring, serves with the legality check, a basic AI.
-4. **Online rooms:** room codes, 1v1, then 2v2 doubles with partners taking turns, plus spectators.
+4. ✅ **Online rooms** (done): room codes, 1v1, then 2v2 doubles with partners taking turns, plus spectators.
 5. **Depth:** rubbers, player styles, AI per style, the realism slider.
 6. **Look and theme:** IT venues and characters, audio, replays.
 7. **Mobile:** touch-swipe swings, optional phone tilt, performance tuning.

@@ -39,7 +39,7 @@ export function landingOutcome(
   rubber: Rubber,
   params: PhysicsParams,
   mode: ShotMode = 'rally',
-): { outcome: LandingOutcome; pos?: Vec3 } {
+): { outcome: LandingOutcome; pos?: Vec3; first?: Vec3 } {
   const s = cloneState(ball);
   if (paddleImpulse(s, { ...pose, normal }, rubber) <= 0) return { outcome: 'short' };
   let tables = 0;
@@ -61,7 +61,7 @@ export function landingOutcome(
     if (first.pos.z < 0) return { outcome: 'long' }; // didn't bounce on own half first
     if (!second) return { outcome: crossedFar ? 'long' : 'short' };
     if (second.pos.z > 0 || netTouched) return { outcome: 'short' };
-    return { outcome: 'in', pos: second.pos };
+    return { outcome: 'in', pos: second.pos, first: first.pos };
   }
 
   const land = bounces[0] ?? floor;

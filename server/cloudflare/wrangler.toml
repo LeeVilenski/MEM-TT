@@ -1,0 +1,19 @@
+# Cloudflare room server for MEM Table Tennis.
+#   cd server/cloudflare && npx wrangler deploy
+# Then set VITE_ROOM_SERVER=wss://<name>.<your-subdomain>.workers.dev for the web build.
+name = "mem-table-tennis-rooms"
+main = "worker.ts"
+compatibility_date = "2025-09-01"
+
+[[durable_objects.bindings]]
+name = "ROOMS"
+class_name = "RoomDO"
+
+# SQLite-backed Durable Objects are available on the Workers free plan.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["RoomDO"]
+
+# Optional: restrict which sites may connect (comma-separated origins).
+# [vars]
+# ALLOWED_ORIGINS = "https://mem-table-tennis-leevproject.vercel.app"

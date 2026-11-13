@@ -19,7 +19,9 @@ export type PointReason =
   | 'missed'
   | 'double-hit'
   | 'obstruction'
-  | 'volley-out';
+  | 'volley-out'
+  | 'wrong-order'
+  | 'serve-diagonal';
 
 export interface PointResult {
   winner: SideId;
@@ -67,7 +69,36 @@ export class RallyReferee {
   /** Number of paddle contacts in the rally (serve included). */
   hits = 0;
 
-  constructor(readonly server: SideId) {}
+  /**
+   * @param doubles in doubles the serve must go diagonally: it bounces in the server's
+   * right half-court, then the receiver's right half-court (the centre line counts for both).
+   */
+  constructor(
+    readonly server: SideId,
+    readonly doubles = false,
+  ) {}
+
+  /** Independent copy (the online server judges on a copy while late hits may still arrive). */
+  clone(): RallyReferee {
+    const r = new RallyReferee(this.server, this.doubles);
+    r.state = { ...this.state } as RallyState;
+    r.serveNet = this.serveNet;
+    r.receiverTouched = this.receiverTouched;
+    r.hits = this.hits;
+    return r;
+  }
+
+  /** True while the serve has been tossed but not yet struck. */
+  get awaitingServe() {
+    return this.state.kind === 'serve-toss';
+  }
+
+  /** Doubles diagonal check, in the server's frame: right half is +x for the server, −x for the receiver. */
+  private inRightHalf(x: number, of: SideId) {
+    const local = this.server === 'near' ? x : -x;
+    const CENTRE_LINE = 0.0015;
+    return of === this.server ? local >= -CENTRE_LINE : local <= CENTRE_LINE;
+  }
 
   get receiver(): SideId {
     return other(this.server);
@@ -107,6 +138,11 @@ export class RallyReferee {
       default:
         return null;
     }
+  }
+
+  /** End the rally from outside (e.g. a doubles partner hitting out of turn). */
+  forfeit(loser: SideId, reason: PointReason, detail?: string): RallyOutcome {
+    return this.end(other(loser), reason, detail);
   }
 
   private end(winner: SideId, reason: PointReason, detail?: string): RallyOutcome {
@@ -165,10 +201,12 @@ export class RallyReferee {
           return this.end(this.receiver, 'serve-missed', 'The toss landed on the table');
         case 'serve-own-bounce':
           if (side !== this.server) return this.end(this.receiver, 'serve-wrong-bounce', 'A serve must bounce on your own half first');
+          if (this.doubles && !this.inRightHalf(e.pos.x, this.server)) return this.end(this.receiver, 'serve-diagonal', 'Doubles serves start from your right half-court');
           this.state = { kind: 'serve-opp-bounce' };
           return null;
         case 'serve-opp-bounce':
           if (side === this.server) return this.end(this.receiver, 'serve-wrong-bounce', 'Bounced twice on the server’s half');
+          if (this.doubles && !this.inRightHalf(e.pos.x, this.receiver)) return this.end(this.receiver, 'serve-diagonal', 'Doubles serves must land in the receiver’s right half-court');
           if (this.serveNet) {
             this.state = { kind: 'over' };
             return { kind: 'let' };
@@ -236,13 +274,19 @@ export class Scoreboard {
     return this.gameNumber % 2 === 1 ? this.config.firstServer : other(this.config.firstServer);
   }
 
-  /** Serve changes every 2 points; from deuce (both at pointsToWin − 1) it changes every point. */
-  get server(): SideId {
+  /**
+   * How many times the serve has changed hands this game: every 2 points, and every
+   * point from deuce (both at pointsToWin − 1). Doubles rotation uses this directly.
+   */
+  get rotation(): number {
     const { near, far } = this.points;
     const total = near + far;
     const d = this.config.pointsToWin - 1;
-    const flips = near >= d && far >= d ? d + (total - 2 * d) : Math.floor(total / 2);
-    return flips % 2 === 0 ? this.gameFirstServer : other(this.gameFirstServer);
+    return near >= d && far >= d ? d + (total - 2 * d) : Math.floor(total / 2);
+  }
+
+  get server(): SideId {
+    return this.rotation % 2 === 0 ? this.gameFirstServer : other(this.gameFirstServer);
   }
 
   get deuce() {

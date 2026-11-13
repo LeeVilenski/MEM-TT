@@ -17,6 +17,8 @@ const REASONS: Record<PointReason, { title: string; sub: string }> = {
   'double-hit': { title: 'DUPLICATE REQUEST', sub: 'hit the ball twice' },
   obstruction: { title: 'ACCESS DENIED', sub: 'volleyed a ball that would have landed (obstruction)' },
   'volley-out': { title: 'EARLY RETURN', sub: 'volleyed a ball that was going out' },
+  'wrong-order': { title: 'MERGE CONFLICT', sub: 'hit out of turn — doubles partners must alternate' },
+  'serve-diagonal': { title: 'BAD ROUTE', sub: 'doubles serves go diagonally, right half-court to right half-court' },
 };
 
 export function pointMessage(r: PointResult, names: Record<'near' | 'far', string>): { title: string; sub: string } {

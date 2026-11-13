@@ -8,14 +8,22 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "server": "tsx server/node.ts",
+    "build:server": "esbuild server/node.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist-server/node.mjs --banner:js=\"import { createRequire } from 'module'; const require = createRequire(import.meta.url);\"",
+    "start:server": "node dist-server/node.mjs"
   },
   "dependencies": {
     "lil-gui": "^0.21.0",
-    "three": "^0.187.0"
+    "three": "^0.187.0",
+    "ws": "^8.23.0"
   },
   "devDependencies": {
+    "@types/node": "^26.6.6",
     "@types/three": "^0.187.0",
+    "@types/ws": "^8.18.2",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vite": "^8.3.8",
     "vitest": "^5.1.0"

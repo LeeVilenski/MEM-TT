@@ -106,11 +106,21 @@ export class Hud {
 
   private matchMode = false;
 
+  private hiddenByOverlay = false;
+
+  /** Hide the start button and help while a full-screen overlay (the lobby) is open. */
+  setOverlay(on: boolean) {
+    if (this.hiddenByOverlay === on) return;
+    this.hiddenByOverlay = on;
+    this.setPlaying(this.playing);
+  }
+
   setPlaying(on: boolean) {
     this.playing = on;
+    this.help.style.display = this.hiddenByOverlay ? 'none' : '';
     const help = on ? (this.matchMode ? [MATCH_HELP, ...PLAY_HELP] : PLAY_HELP) : INSPECT_HELP;
     this.help.innerHTML = help.join('<span class="sep">·</span>');
-    this.startEl.style.display = on ? 'none' : 'flex';
+    this.startEl.style.display = on || this.hiddenByOverlay ? 'none' : 'flex';
     this.paddleEl.style.display = on ? 'block' : 'none';
     this.statsEl.style.display = on && !this.matchMode ? 'block' : 'none';
   }
@@ -293,15 +303,22 @@ export class MatchHud {
     this.shots.innerHTML = '';
   }
 
-  showOver(title: string, sub: string, games: string) {
+  private overKey = '';
+
+  showOver(title: string, sub: string, games: string, rematch: string | null = 'Rematch', exit = 'Back to practice') {
+    // Called every frame while the match is over: only rebuild when something changed.
+    const key = [title, sub, games, rematch, exit].join('|');
+    if (this.overKey === key && this.over.style.display === 'flex') return;
+    this.overKey = key;
     this.over.innerHTML = `<div class="mover-card"><div class="mover-title">${title}</div><div class="mover-sub">${sub}</div><div class="mover-games">${games}</div>
-      <div class="mover-buttons"><button type="button" data-a="rematch">Rematch</button><button type="button" data-a="exit" class="secondary">Back to practice</button></div></div>`;
+      <div class="mover-buttons">${rematch ? `<button type="button" data-a="rematch">${rematch}</button>` : ''}<button type="button" data-a="exit" class="secondary">${exit}</button></div></div>`;
     this.over.style.display = 'flex';
-    this.over.querySelector('[data-a=rematch]')!.addEventListener('click', () => this.onRematch());
+    this.over.querySelector('[data-a=rematch]')?.addEventListener('click', () => this.onRematch());
     this.over.querySelector('[data-a=exit]')!.addEventListener('click', () => this.onExit());
   }
 
   hideOver() {
     this.over.style.display = 'none';
+    this.overKey = '';
   }
 }

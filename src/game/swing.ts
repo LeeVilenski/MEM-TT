@@ -43,6 +43,8 @@ export interface SwingParams {
   swingThreshold: number;
   /** Stroke threshold while serving: serves are gentle strokes, and nothing can be hit by accident. */
   serveThreshold: number;
+  /** Forward drive per m/s of swing while serving: a serve is mostly a forward brush. */
+  serveForwardGain: number;
   /** Time constant of velocity smoothing, seconds. */
   velocitySmoothing: number;
   /**
@@ -68,9 +70,10 @@ export const DEFAULT_SWING: SwingParams = {
   recoverySpeed: 2.5,
   swingThreshold: 1.5,
   serveThreshold: 0.3,
+  serveForwardGain: 2.0,
   velocitySmoothing: 0.025,
   strokeHold: 0.12,
-  strokeTravel: 0.3,
+  strokeTravel: 0.15,
   maxSpeed: 12,
 };
 
@@ -109,13 +112,14 @@ export function faceNormal(pitchDeg: number, yawDeg: number): Vec3 {
  * Paddle velocity for a planar swing velocity (in the hitting plane, m/s).
  * Exported for tests and for the AI later on.
  */
-export function strokeVelocity(mousePlanar: { x: number; y: number }, drive: boolean, hook: -1 | 0 | 1, p: SwingParams, threshold = p.swingThreshold): Vec3 {
+export function strokeVelocity(mousePlanar: { x: number; y: number }, drive: boolean, hook: -1 | 0 | 1, p: SwingParams, threshold = p.swingThreshold, serving = false): Vec3 {
   const planar = { x: mousePlanar.x * p.swingGain, y: mousePlanar.y * p.swingGain };
   const speed = Math.hypot(planar.x, planar.y);
   const brushScale = drive ? p.driveBrushScale : 1;
   // Forward drive ramps in above the stroke threshold (no jump at the threshold).
   const over = Math.max(0, speed - threshold * p.swingGain);
-  const forward = (drive ? p.driveForwardGain : p.brushForwardGain) * Math.min(speed, over * 2);
+  const gain = drive ? p.driveForwardGain : serving ? p.serveForwardGain : p.brushForwardGain;
+  const forward = gain * Math.min(speed, over * 2);
   // Brushing the back of the ball to +x makes it curve left (and vice versa).
   const hookVel = -hook * p.hookGain * speed;
   return v3(planar.x * brushScale + hookVel, planar.y * brushScale, -forward);
@@ -173,7 +177,9 @@ export class SwingController {
     // it past. Lateral position is relative to the body, like an arm.
     const mouseSpeed = Math.hypot(rawVx, rawVy);
     const thr = this.serving ? p.serveThreshold : p.swingThreshold;
-    const posScale = mouseSpeed > thr ? thr / mouseSpeed + (1 - thr / mouseSpeed) * p.strokeTravel : 1;
+    // Full movement up to the stroke threshold, then falling off with the square of the
+    // speed (down to strokeTravel): positioning is unaffected, hard flicks barely move it.
+    const posScale = mouseSpeed > thr ? Math.max(p.strokeTravel, (thr / mouseSpeed) ** 2) : 1;
     this.x = clamp(this.x + mx * posScale, -REACH.lateral, REACH.lateral);
     this.y = clamp(this.y + my * posScale, REACH.minHeight, REACH.maxHeight);
 
@@ -188,7 +194,7 @@ export class SwingController {
     }
 
     const hook = input.hookLeft === input.hookRight ? 0 : input.hookLeft ? -1 : 1;
-    let vel = strokeVelocity(this.planarVel, input.drive, hook, p, this.serving ? p.serveThreshold : p.swingThreshold);
+    let vel = strokeVelocity(this.planarVel, input.drive, hook, p, this.serving ? p.serveThreshold : p.swingThreshold, this.serving);
 
     // Stroke memory: the strongest recent stroke stays "live" for strokeHold seconds,
     // fading out, so contact doesn't have to land on the exact frame of the flick.

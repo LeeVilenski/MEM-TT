@@ -117,6 +117,7 @@ export class Match {
     this.rallyStart = this.clock;
     this.accumulator = 0;
     this.referee = new RallyReferee(this.server);
+    this.bouncedOn = { near: false, far: false };
     this.tossStartY = hand.y;
     this.tossApex = hand.y;
     this.phase = 'rally';
@@ -188,7 +189,12 @@ export class Match {
     // The server can only strike the toss on its way down.
     if (side === this.server && this.referee.hits === 0 && this.sim.state.vel.y >= 0) return undefined;
     const c = this.sides[side];
-    return [c.kind === 'ai' ? c.ai.collider(index, count) : c.player.collider(index, count)];
+    if (c.kind === 'ai') return [c.ai.collider(index, count)];
+    // Humans: no accidental volleys (the assisted paddle can sit in the ball's path over
+    // the table). Contact only after the bounce, or once the ball is past the end line.
+    const localZ = side === 'near' ? this.sim.state.pos.z : -this.sim.state.pos.z;
+    if (this.referee.hits > 0 && this.referee.ballHeadingTo === side && this.referee.expectedHitter === side && !this.bouncedOn[side] && localZ < TABLE.halfLength) return undefined;
+    return [c.player.collider(index, count)];
   }
 
   private sideOfPaddle(id: string): SideId {
@@ -216,8 +222,14 @@ export class Match {
     const events: BallEvent[] = [];
     sim.step(TICK_DT, events, this.collidersFor(index, count));
     if (this.referee && this.referee.hits === 0) this.tossApex = Math.max(this.tossApex, sim.state.pos.y);
-    for (const e of events) this.onBallEvent(e);
+    for (const e of events) {
+      if (e.type === 'table') this.bouncedOn[e.side] = true;
+      if (e.type === 'paddle') this.bouncedOn = { near: false, far: false };
+      this.onBallEvent(e);
+    }
   }
+
+  private bouncedOn: Record<SideId, boolean> = { near: false, far: false };
 
   private onBallEvent(e: BallEvent) {
     this.emit({ type: 'ball', event: e });
