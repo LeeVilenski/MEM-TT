@@ -34,6 +34,8 @@ export interface SwingParams {
   faceStep: number;
   /** How far the paddle can travel forward during a stroke, metres. */
   maxForwardTravel: number;
+  /** Soft cap on gesture speed (m/s, mouse plane); 0 = no cap. Set by the realism slider. */
+  powerCap: number;
   /** Rally strokes: fraction of sideways mouse speed that counts toward the stroke. */
   lateralStroke: number;
   /** How fast the paddle returns to the ready position after a stroke, m/s. */
@@ -79,6 +81,7 @@ export const DEFAULT_SWING: SwingParams = {
   faceStep: 22,
   maxForwardTravel: 0.3,
   lateralStroke: 0.3,
+  powerCap: 0,
   recoverySpeed: 2.5,
   swingThreshold: 1.5,
   serveThreshold: 0.3,
@@ -225,7 +228,14 @@ export class SwingController {
     const hook = input.hookLeft === input.hookRight ? 0 : input.hookLeft ? -1 : 1;
     // Rally strokes are up/down gestures: sideways mouse speed (moving the bat across to
     // the ball) only counts a little, so chasing a wide ball isn't read as a stroke.
-    const gesture = this.serving ? this.planarVel : { x: this.planarVel.x * p.lateralStroke, y: this.planarVel.y };
+    let gesture = this.serving ? this.planarVel : { x: this.planarVel.x * p.lateralStroke, y: this.planarVel.y };
+    // Soft power cap (assist): a hard swipe gives a strong shot that can still land, rather
+    // than one so fast no face angle keeps it on the table. Near-linear for gentle strokes.
+    const gs = Math.hypot(gesture.x, gesture.y);
+    if (p.powerCap > 0 && gs > 0) {
+      const f = (p.powerCap * Math.tanh(gs / p.powerCap)) / gs;
+      gesture = { x: gesture.x * f, y: gesture.y * f };
+    }
     let vel = strokeVelocity(gesture, input.drive, hook, p, this.serving ? p.serveThreshold : p.swingThreshold, this.serving);
 
     // Stroke memory: the strongest recent stroke stays "live" for strokeHold seconds,

@@ -88,6 +88,7 @@ export class Player {
     this.assists.hitArea = r.hitArea;
     this.assists.footwork = r.footwork;
     this.assists.magnet = r.magnet;
+    this.swing.params.powerCap = r.powerCap;
     this.swing.params.strokeHold = r.strokeHold;
     this.swing.params.autoFace = r.autoFace;
   }
@@ -105,6 +106,7 @@ export class Player {
     return this.body.z - ARM_REACH - this.lean;
   }
 
+  private magnetLocked = false;
   /** The wing the footwork assist is setting up for. */
   private wing: StrokeSide = 'forehand';
 
@@ -166,12 +168,16 @@ export class Player {
     // Bat magnet: as the ball arrives, a bat held near its path is pulled onto it, so the
     // mouse gesture (the stroke) is what matters, not pixel-perfect placement.
     const ic = this.intercept;
+    if (!ic || this.interceptEta >= MAGNET_WINDOW) this.magnetLocked = false;
     if (ic && this.assists.magnet > 0 && this.interceptEta < MAGNET_WINDOW) {
       const dx = ic.x - pose.pos.x;
       const dy = ic.y - pose.pos.y;
       const d = Math.hypot(dx, dy);
       const r = this.assists.magnet;
-      const near = d <= r ? 1 : Math.max(0, 1 - (d - r) / 0.1);
+      // Once the bat is on the ball's path it stays locked for this ball, however far the
+      // swipe itself carries the hand.
+      if (d <= r) this.magnetLocked = true;
+      const near = this.magnetLocked || d <= r ? 1 : Math.max(0, 1 - (d - r) / 0.1);
       const soon = smoothstep(clamp(1 - this.interceptEta / MAGNET_WINDOW, 0, 1));
       const k = near * soon;
       pose.pos.x += dx * k;

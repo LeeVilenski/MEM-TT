@@ -322,6 +322,7 @@ export class Sandbox {
     window.addEventListener('pointerup', (e) => {
       if (e.button === 0) this.input.drive = false;
     });
+    window.addEventListener('pointercancel', () => (this.input.drive = false));
     window.addEventListener('mousemove', (e) => {
       if (!this.playing) return;
       this.input.dx += e.movementX;
@@ -1542,7 +1543,8 @@ export class Sandbox {
 
   private onPointerDown(e: PointerEvent) {
     if (this.playing) {
-      if (e.button === 0) this.input.drive = true;
+      // Left mouse button = Drive. Touches (swipes) never are: touch has its own Drive button.
+      if (e.button === 0 && e.pointerType === 'mouse') this.input.drive = true;
       return;
     }
     if (!e.shiftKey) return;

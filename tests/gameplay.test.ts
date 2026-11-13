@@ -50,3 +50,18 @@ describe('backspin with a downward flick (default realism)', () => {
     expect(backspin).toBeGreaterThanOrEqual(7); // of 10
   });
 });
+
+describe('swipes of any strength (touch default realism)', () => {
+  it('gentle to hard swipes, up or down, land consistently without Drive', () => {
+    let landed = 0;
+    const results: string[] = [];
+    for (const preset of ['Long push', 'Push', 'Drive', 'Block'])
+      for (const px of [40, 80, 150, -40, -100]) {
+        const r = playBall(preset, 0.75, 3 / FPS, px, { setup: (p) => p.applyRealism(0.85) });
+        if (r.result === 'IN') landed++;
+        results.push(`${preset} ${px}: ${r.result} ${r.shot?.name ?? '-'}`);
+      }
+    console.log(results.join('\n'));
+    expect(landed).toBeGreaterThanOrEqual(17); // of 20
+  });
+});

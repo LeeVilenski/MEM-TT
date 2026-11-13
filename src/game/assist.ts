@@ -11,11 +11,15 @@ import {
   scale,
   add,
   type BallState,
+  type ContactAdjust,
   type PaddlePose,
   type PhysicsParams,
   type Rubber,
   type Vec3,
 } from '../physics';
+
+/** Landing margin for "in" (metres from the net and the end line; half that from the sides). */
+const MARGIN = 0.1;
 
 /** Rotate v around a unit axis by an angle (Rodrigues). */
 function rotate(v: Vec3, axis: Vec3, rad: number): Vec3 {
@@ -43,12 +47,15 @@ export function landingOutcome(
   const s = cloneState(ball);
   if (paddleImpulse(s, { ...pose, normal }, rubber) <= 0) return { outcome: 'short' };
   let tables = 0;
-  const { events } = predict(s, params, {
+  const { events, path } = predict(s, params, {
     maxTime: 2.5,
-    dt: 1 / 120,
+    // Same stepping as the live ball, so net-skimmers and edge balls are judged the same way.
+    dt: 1 / 240,
     sampleEvery: 1000,
-    maxTravel: 0.018,
     stop: (e) => e.type === 'floor' || (e.type === 'table' && ++tables >= (mode === 'serve' ? 2 : 1)),
+    // Rally: once the ball is below the table top or heading back to us, the outcome is
+    // settled (it can no longer land on the far half), so stop simulating.
+    until: mode === 'rally' ? (b) => b.pos.y < TABLE.height - 0.01 || b.vel.z > 0.5 : undefined,
   });
   const bounces = events.filter((e) => e.type === 'table');
   const netTouched = events.some((e) => e.type === 'net');
@@ -65,9 +72,19 @@ export function landingOutcome(
   }
 
   const land = bounces[0] ?? floor;
-  if (!land) return { outcome: 'long' };
+  if (!land) {
+    // Stopped early (below the table top, or coming back): it never reached the far half.
+    if (!crossedFar) return { outcome: 'short' };
+    const end = path[path.length - 1];
+    return { outcome: Math.abs(end.x) > TABLE.halfWidth && end.z > -TABLE.halfLength ? 'wide' : 'long' };
+  }
   if (land.type === 'table') {
     if (land.pos.z > 0) return { outcome: 'short' };
+    // Safety margin: a net cord or a ball within a few cm of the edge counts as a miss, so
+    // the assists aim for shots that land with room to spare.
+    if (netTouched || land.pos.z > -MARGIN) return { outcome: 'short' };
+    if (land.pos.z < -TABLE.halfLength + MARGIN) return { outcome: 'long' };
+    if (Math.abs(land.pos.x) > TABLE.halfWidth - MARGIN / 2) return { outcome: 'wide' };
     return { outcome: 'in', pos: land.pos };
   }
   if (!crossedFar) return { outcome: 'short' };
@@ -93,18 +110,18 @@ export function pitchRotator(normal: Vec3): ((deg: number) => Vec3) | null {
 export function makeAngleAssist(params: PhysicsParams, strength: () => number, mode: () => ShotMode = () => 'rally') {
   const STEP = 6;
   const RANGE = 60;
-  return (ball: BallState, pose: PaddlePose, normal: Vec3, rubber: Rubber): Vec3 => {
-    const k = strength();
-    if (k <= 0) return normal;
-    const at = pitchRotator(normal);
-    if (!at) return normal;
-    const m = mode();
-    const outcomeAt = (deg: number) => landingOutcome(ball, pose, at(deg), rubber, params, m).outcome;
-    if (outcomeAt(0) === 'in') return normal;
+  /** Pace the power assist may take off, at full strength. */
+  const MAX_PACE_CUT = 0.6;
 
+  /** Where the outcome flips between net/short and long nearest the player's angle (a best guess when no angle clearly lands). */
+  let edge: number | null = null;
+
+  /** The landing pitch (degrees from the player's) nearest the player's angle, or null. */
+  const solve = (outcomeAt: (deg: number) => LandingOutcome, step = STEP): number | null => {
+    edge = null;
     // Coarse scan of the whole pitch range; pick the landing angle nearest the player's.
     const samples: { deg: number; out: LandingOutcome }[] = [];
-    for (let d = -RANGE; d <= RANGE; d += STEP) samples.push({ deg: d, out: outcomeAt(d) });
+    for (let d = -RANGE; d <= RANGE; d += step) samples.push({ deg: d, out: outcomeAt(d) });
 
     let found: number | null = null;
     let best = Infinity;
@@ -128,14 +145,55 @@ export function makeAngleAssist(params: PhysicsParams, strength: () => number, m
         if (out === a.out) lo = mid;
         else hi = mid;
       }
+      const flipAt = (lo + hi) / 2;
+      if (edge === null || Math.abs(flipAt) < Math.abs(edge)) edge = flipAt;
     }
-    if (found === null) return normal;
-    // Step slightly into the window when it continues, so the ball isn't on the edge.
-    const deeper = found + Math.sign(found) * 1.5;
-    const target = outcomeAt(deeper) === 'in' ? deeper : found;
+    if (found === null) return null;
+    // Step into the window, not onto its edge (where a tiny difference misses): toward the
+    // middle of the window, at most 4° past the edge.
+    const dir = Math.sign(found) || 1;
+    let lastIn = found;
+    for (let d = 1; d <= 8; d++) {
+      if (outcomeAt(found + dir * d) !== 'in') break;
+      lastIn = found + dir * d;
+    }
+    return found + dir * Math.min(4, (lastIn - found) * dir * 0.5);
+  };
+
+  return (ball: BallState, pose: PaddlePose, normal: Vec3, rubber: Rubber): Vec3 | ContactAdjust => {
+    const k = strength();
+    if (k <= 0) return normal;
+    const at = pitchRotator(normal);
+    if (!at) return normal;
+    const m = mode();
+    const outcomeWith = (p: PaddlePose) => (deg: number) => landingOutcome(ball, p, at(deg), rubber, params, m).outcome;
+    const outcomeAt = outcomeWith(pose);
+    if (outcomeAt(0) === 'in') return normal;
+
     // Strength = how large an angle error gets fully corrected (1 → the whole ±60° range).
-    // Beyond that the face is only nudged, so a wild swing still misses.
     const reach = k * RANGE;
-    return at(Math.abs(target) <= reach ? target : Math.sign(target) * reach);
+    const target = solve(outcomeAt);
+    if (target !== null && Math.abs(target) <= reach) return at(target);
+
+    // Power assist: no face angle lands a swing this hot, so take some pace off (up to
+    // MAX_PACE_CUT × strength) — a hard swing becomes a strong shot that lands.
+    const minScale = 1 - MAX_PACE_CUT * k;
+    let guess: ContactAdjust | null = null;
+    for (const f of [0.7, 0.4]) {
+      if (f < minScale - 1e-9) break;
+      const slower = { ...pose, vel: scale(pose.vel, f) };
+      const out = outcomeWith(slower);
+      if (out(0) === 'in') return { normal, velScale: f };
+      const t = solve(out, 10);
+      if (t !== null && Math.abs(t) <= reach) return { normal: at(t), velScale: f };
+      // No clear landing even here: remember the net↔long tipping point as a best guess.
+      const e = edge as number | null;
+      if (e !== null && Math.abs(e) <= reach) guess = { normal: at(e), velScale: f };
+    }
+    if (guess) return guess;
+
+    // Beyond that the face is only nudged, so a wild swing still misses.
+    if (target === null) return normal;
+    return at(Math.sign(target) * reach);
   };
 }

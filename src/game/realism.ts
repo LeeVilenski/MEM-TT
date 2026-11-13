@@ -15,6 +15,8 @@ export interface RealismSettings {
   footwork: number;
   /** Bat magnet radius, metres (pulls the bat onto the ball's path as it arrives). */
   magnet: number;
+  /** Soft cap on stroke speed (m/s of mouse movement); 0 = none (simulation). */
+  powerCap: number;
   /** Multiplier on Magnus lift: above 1 exaggerates how spin curves the ball. */
   spinCurve: number;
   /** Auto face angle (0–1): opens the face on downward strokes, closes it on upward ones. */
@@ -35,6 +37,7 @@ export function realismSettings(arcade: number): RealismSettings {
     hitArea: 0.07 * a,
     footwork: clamp01(0.25 + 0.8 * a),
     magnet: 0.1 + 0.3 * a,
+    powerCap: a < 0.2 ? 0 : 10 - 7 * a,
     // Spin is only exaggerated in the arcade half of the range.
     spinCurve: 1 + 0.8 * Math.max(0, a - 0.5),
     autoFace: clamp01((a - 0.2) / 0.5),

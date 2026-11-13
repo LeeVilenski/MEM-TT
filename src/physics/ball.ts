@@ -49,7 +49,13 @@ export interface PaddleCollider {
    * Optional hook to adjust the face normal at the moment of contact (the angle
    * assist). Receives a copy of the ball state just before impact.
    */
-  adjustNormal?: (ball: BallState, pose: PaddlePose, normal: Vec3, rubber: Rubber) => Vec3;
+  adjustNormal?: (ball: BallState, pose: PaddlePose, normal: Vec3, rubber: Rubber) => Vec3 | ContactAdjust;
+}
+
+/** An assist's contact correction: a face normal, and optionally a scale on the paddle's speed. */
+export interface ContactAdjust {
+  normal: Vec3;
+  velScale: number;
 }
 
 /** Minimum time between two hits by the same paddle (prevents double contacts). */
@@ -164,8 +170,9 @@ export class BallSim {
       const rubber = face === 'front' ? p.front : p.back;
       const velIn = clone(s.vel);
       const spinIn = clone(s.spin);
-      const normal = p.adjustNormal ? p.adjustNormal(cloneState(s), pose, n, rubber) : n;
-      const impact = paddleImpulse(s, { ...pose, normal }, rubber);
+      const adj = p.adjustNormal ? p.adjustNormal(cloneState(s), pose, n, rubber) : n;
+      const { normal, velScale } = 'normal' in adj ? adj : { normal: adj, velScale: 1 };
+      const impact = paddleImpulse(s, { ...pose, normal, vel: velScale === 1 ? pose.vel : scale(pose.vel, velScale) }, rubber);
       if (impact <= 0) continue;
       // Place the ball just off the face.
       const d = sub(s.pos, pose.pos);
@@ -287,9 +294,9 @@ export interface PredictResult {
 export function predict(
   start: BallState,
   params: PhysicsParams,
-  opts: { maxTime?: number; dt?: number; sampleEvery?: number; maxTravel?: number; stop?: (e: BallEvent) => boolean } = {},
+  opts: { maxTime?: number; dt?: number; sampleEvery?: number; maxTravel?: number; stop?: (e: BallEvent) => boolean; until?: (s: BallState) => boolean } = {},
 ): PredictResult {
-  const { maxTime = 3, dt = 1 / 240, sampleEvery = 2, maxTravel, stop } = opts;
+  const { maxTime = 3, dt = 1 / 240, sampleEvery = 2, maxTravel, stop, until } = opts;
   const sim = new BallSim(start, params, maxTravel);
   const path: Vec3[] = [clone(sim.state.pos)];
   const events: BallEvent[] = [];
@@ -299,6 +306,10 @@ export function predict(
     sim.step(dt, events);
     tick++;
     if (tick % sampleEvery === 0) path.push(clone(sim.state.pos));
+    if (until?.(sim.state)) {
+      path.push(clone(sim.state.pos));
+      break;
+    }
     if (stop) {
       for (let i = before; i < events.length; i++) {
         if (stop(events[i])) {
