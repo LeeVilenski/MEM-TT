@@ -51,7 +51,7 @@ export function makeBot(c: OnlineClient) {
       } else {
         const ex = ic.pos.x - p.swing.pose.pos.x;
         if (Math.abs(ex) > 0.3) input.dx = clamp(ex / sens);
-        input.dy = clamp(-(ic.pos.y - p.swing.y) / sens);
+        input.dy = clamp(-(ic.pos.y - p.swing.pose.pos.y) / sens);
       }
     }
     return input;

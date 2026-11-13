@@ -50,6 +50,14 @@ export class Player {
   assists: AssistSettings = { ...DEFAULT_ASSISTS };
   /** Where the incoming ball is expected to reach the hitting zone (set by the game each frame). */
   intercept: Vec3 | null = null;
+  /** Seconds until the ball reaches the intercept (set with `intercept`; Infinity if unknown). */
+  interceptEta = Infinity;
+
+  /** Set the incoming ball's intercept (point and time) as of time `now`. */
+  setIntercept(ic: { pos: Vec3; t: number } | null, now: number) {
+    this.intercept = ic?.pos ?? null;
+    this.interceptEta = ic ? ic.t - now : Infinity;
+  }
   /** 'serve' while serving: the angle assist then targets own half → opponent's half. */
   shotMode: ShotMode = 'rally';
   private angleAssist;
@@ -122,6 +130,8 @@ export class Player {
     this.lean += (needLean - this.lean) * (1 - Math.exp(-dt / 0.08));
 
     this.swing.serving = this.shotMode === 'serve';
+    // A ball arriving soon (or the serve toss in the air) pins the contact point during a flick.
+    this.swing.ballNear = this.shotMode === 'serve' || (this.intercept !== null && this.interceptEta < 0.45);
     this.swing.update(dt, input, this.body, this.restZ, aim);
 
     // Keep the paddle above the table surface when reaching over it.

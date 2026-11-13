@@ -135,10 +135,14 @@ export class Match {
 
   /** The human's predicted contact point (for the intercept marker), if a ball is coming. */
   interceptFor(side: SideId): Vec3 | null {
+    return this.interceptPointFor(side)?.pos ?? null;
+  }
+
+  private interceptPointFor(side: SideId): { pos: Vec3; t: number } | null {
     const c = this.sides[side];
     const pred = this.incoming[side];
     if (c.kind !== 'human' || !pred || this.phase !== 'rally') return null;
-    return pred.interceptAt(c.player.restZ, this.ballTime, REACH.maxHeight - 0.05)?.pos ?? null;
+    return pred.interceptAt(c.player.restZ, this.ballTime, REACH.maxHeight - 0.05);
   }
 
   /**
@@ -158,7 +162,7 @@ export class Match {
       // previous pose to this one, so the blade is exactly on its planned path.
       if (c.kind === 'ai') c.ai.update(gameDt, this.ballTime + gameDt);
       else {
-        c.player.intercept = this.interceptFor(s);
+        c.player.setIntercept(this.interceptPointFor(s), this.ballTime);
         const h = human && human.side === s ? human : { input: { dx: 0, dy: 0, drive: false, close: false, open: false, hookLeft: false, hookRight: false }, move: { x: 0, z: 0 } };
         c.player.update(realDt, h.input, h.move, { x: 0, z: -0.85 });
       }

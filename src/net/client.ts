@@ -226,7 +226,7 @@ export class OnlineClient {
 
     // Local player (view frame).
     const p = this.player;
-    p.intercept = this.interceptView();
+    p.setIntercept(this.interceptPoint(), now);
     if (!this.serving) p.shotMode = 'rally';
     // Doubles serves go to the receiver's right half-court (−x from the server's view).
     const aim = this.serving && this.mode === 'doubles' ? { x: -0.35, z: -0.8 } : { x: 0, z: -0.85 };

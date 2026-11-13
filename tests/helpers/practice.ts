@@ -44,7 +44,7 @@ export function playBall(presetName: string, angleAssist: number, flickLead = 2 
   for (let frame = 0; frame < FPS * 4 && !result; frame++) {
     const input = { ...NO_INPUT };
     const ic = hit ? null : pred.interceptAt(player.restZ, sim.time, REACH.maxHeight - 0.05);
-    player.intercept = ic?.pos ?? null;
+    player.setIntercept(ic, sim.time);
     if (ic) {
       const ttc = ic.t - sim.time;
       if (!flicked && ttc <= flickLead) {
@@ -59,7 +59,7 @@ export function playBall(presetName: string, angleAssist: number, flickLead = 2 
         // Footwork assist handles fine left–right alignment; only correct big errors.
         const ex = ic.pos.x - player.swing.pose.pos.x;
         if (Math.abs(ex) > 0.3) input.dx = clamp(ex / sens);
-        input.dy = clamp(-(ic.pos.y - player.swing.y) / sens);
+        input.dy = clamp(-(ic.pos.y - player.swing.pose.pos.y) / sens);
       }
     } else if (flick > 0) {
       input.dy = -flickPx;

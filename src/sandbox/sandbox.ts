@@ -710,8 +710,9 @@ export class Sandbox {
   private updatePlayer(realDt: number) {
     const { input, move } = this.gatherInput();
     const now = this.sim?.time ?? 0;
-    const intercept = this.computeIntercept(now)?.pos ?? null;
-    this.player.intercept = intercept;
+    const ic = this.computeIntercept(now);
+    const intercept = ic?.pos ?? null;
+    this.player.setIntercept(ic, now);
     this.player.update(realDt, input, move, AIM_POINT);
     this.playerView.update(this.player);
     this.playerView.setMarker(this.settings.showIntercept ? intercept : null);

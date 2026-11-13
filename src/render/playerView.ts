@@ -114,7 +114,8 @@ export class PlayerView {
   }
 
   update(player: Player) {
-    this.updatePose(player.swing.pose, player.body, player.swing.side, player.swing.forward);
+    // Draw the paddle where the mouse put it (the contact point may be pinned during a flick).
+    this.updatePose({ ...player.swing.pose, pos: player.swing.visualPos }, player.body, player.swing.side, player.swing.forward);
   }
 
   /** Generic update (used for AI players too). Pose and body in world coordinates. */
@@ -140,7 +141,7 @@ export class PlayerView {
     const m = new THREE.Matrix4().makeBasis(new THREE.Vector3(x.x, x.y, x.z), new THREE.Vector3(tipUp.x, tipUp.y, tipUp.z), new THREE.Vector3(n.x, n.y, n.z));
     this.paddle.quaternion.setFromRotationMatrix(m);
     // Draw the stroke's forward lunge along the face normal (contact itself happens at the rest plane).
-    this.paddle.position.set(pose.pos.x + n.x * forward * 0.6, pose.pos.y, pose.pos.z + n.z * forward * 0.6);
+    this.paddle.position.set(pose.pos.x + n.x * forward, pose.pos.y, pose.pos.z + n.z * forward);
 
     // The hitting face shows the rubber colour for the current wing (red forehand, black backhand).
     const fh = wing === 'forehand';
