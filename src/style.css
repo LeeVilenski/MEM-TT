@@ -954,3 +954,324 @@ body.touch .hud-paddle {
     top: 18%;
   }
 }
+
+/* ---------------------------------------------------------------- career */
+
+.career {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 12, 16, 0.65);
+  z-index: 6;
+}
+
+.career-card {
+  width: 760px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 24px);
+  display: flex;
+  flex-direction: column;
+  border-radius: 14px;
+  background: #171a21;
+  border: 1px solid #2c3140;
+  overflow: hidden;
+}
+
+.cs-head {
+  display: flex;
+  align-items: flex-end;
+  gap: 18px;
+  padding: 16px 18px 10px;
+}
+
+.cs-title {
+  font-family: var(--mono);
+  font-weight: 800;
+  font-size: 28px;
+  color: var(--accent);
+}
+
+.cs-sub {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.cs-xp {
+  flex: 1;
+}
+
+.cs-bar {
+  margin-top: 4px;
+  height: 8px;
+  border-radius: 4px;
+  background: #1f232c;
+  overflow: hidden;
+}
+
+.cs-bar div {
+  height: 100%;
+  background: linear-gradient(90deg, #4ade80, var(--accent));
+}
+
+.cs-close {
+  align-self: flex-start;
+  background: none !important;
+  color: var(--muted) !important;
+  font-size: 20px !important;
+  padding: 2px 6px !important;
+}
+
+.cs-banner {
+  margin: 0 18px 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(232, 86, 42, 0.15);
+  border: 1px solid rgba(232, 86, 42, 0.4);
+}
+
+.cs-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 14px;
+  border-bottom: 1px solid #2c3140;
+  overflow-x: auto;
+}
+
+.cs-tabs button {
+  background: none !important;
+  color: var(--muted) !important;
+  border-radius: 0 !important;
+  border-bottom: 2px solid transparent !important;
+  white-space: nowrap;
+}
+
+.cs-tabs button.on {
+  color: #fff !important;
+  border-bottom-color: var(--accent) !important;
+}
+
+.cs-body {
+  padding: 12px 18px 16px;
+  overflow: auto;
+}
+
+.career button {
+  font: inherit;
+  font-weight: 700;
+  padding: 7px 14px;
+  border-radius: 8px;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}
+
+.career button.secondary {
+  background: #2c3140;
+}
+
+.career button.danger {
+  background: #7f1d1d;
+}
+
+.cs-grid,
+.cs-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 24px;
+}
+
+@media (max-width: 640px) {
+  .cs-grid,
+  .cs-cols {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cs-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 0;
+  border-bottom: 1px solid #22262f;
+  font-size: 13px;
+}
+
+.cs-row span {
+  color: var(--muted);
+}
+
+.cs-row b {
+  text-align: right;
+  font-weight: 600;
+}
+
+.cs-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid #22262f;
+}
+
+.cs-item.locked {
+  opacity: 0.55;
+}
+
+.cs-item-main {
+  flex: 1;
+}
+
+.cs-item-title {
+  font-weight: 700;
+}
+
+.cs-item-sub {
+  color: var(--muted);
+  font-size: 12.5px;
+  margin-top: 2px;
+}
+
+.cs-lock {
+  color: var(--muted);
+  font-size: 12px;
+  max-width: 160px;
+  text-align: right;
+}
+
+.stars {
+  color: #facc15;
+  letter-spacing: 1px;
+}
+
+.stars .off {
+  color: #3a3f4b;
+}
+
+.cs-bracket {
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  border-radius: 10px;
+  background: #1f232c;
+}
+
+.cs-round {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 6px 0;
+  font-size: 13px;
+  border-bottom: 1px solid #2c3140;
+}
+
+.cs-round span:first-child {
+  flex: 1;
+}
+
+.cs-round.next {
+  color: #fff;
+}
+
+.cs-opp {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.cs-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+
+.cs-h {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin: 4px 0 6px;
+}
+
+.cs-unlock,
+.cs-ach {
+  padding: 5px 0;
+  font-size: 13px;
+  border-bottom: 1px solid #22262f;
+  opacity: 0.6;
+}
+
+.cs-unlock.ok,
+.cs-ach.ok {
+  opacity: 1;
+}
+
+.cs-unlock span,
+.cs-ach span {
+  display: block;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.cs-check {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 10px;
+  font-size: 13px;
+}
+
+.hud-toasts {
+  position: absolute;
+  right: 12px;
+  bottom: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  pointer-events: none;
+  z-index: 4;
+}
+
+.hud-toast {
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: rgba(23, 26, 33, 0.95);
+  border: 1px solid #2c3140;
+  font-size: 13px;
+  animation: toast 3.2s ease forwards;
+}
+
+.hud-toast b {
+  color: var(--accent);
+}
+
+@keyframes toast {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  8% {
+    opacity: 1;
+    transform: none;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.hud-start .hud-career {
+  font-size: 13px;
+  color: var(--text);
+  background: var(--panel);
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  pointer-events: auto;
+  text-decoration: underline;
+}

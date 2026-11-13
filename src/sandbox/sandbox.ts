@@ -39,6 +39,11 @@ import { Sfx } from '../audio/sfx';
 import { TouchControls, isTouchDevice } from '../input/touch';
 import { TiltControl } from '../input/tilt';
 import { AutoQuality, QUALITY_LEVELS, type QualitySetting } from '../render/quality';
+import { Career } from '../progress/profile';
+import { DRILLS, DrillSession, drillUnlocked } from '../progress/drills';
+import { TOURNAMENTS, TournamentRun, tournamentUnlocked } from '../progress/tournament';
+import { isUnlocked, newlyUnlocked, unlockedKeys, UNLOCKS, type UnlockKind } from '../progress/unlocks';
+import { CareerScreen } from './career';
 import { VENUES, setVenue, type Venue, type VenueId } from '../render/venues';
 import { OnlineClient } from '../net/client';
 import { LocalServer, WebSocketTransport, roomUrl, type Transport } from '../net/transport';
@@ -161,6 +166,16 @@ export class Sandbox {
   private autoReplayed: unknown = null;
   private savedCamera: { pos: THREE.Vector3; target: THREE.Vector3; visible: Map<string, boolean> } | null = null;
 
+  // Progression
+  career = new Career();
+  private careerScreen!: CareerScreen;
+  private unlocked = new Set<string>();
+  private drill: DrillSession | null = null;
+  private drillZone: THREE.Mesh | null = null;
+  private tournament: TournamentRun | null = null;
+  private matchRecorded = false;
+  private rallyHits = 0;
+
   // Mobile and performance
   readonly isTouch = isTouchDevice();
   private touch: TouchControls;
@@ -253,11 +268,37 @@ export class Sandbox {
       this.realism.percent = 75;
     }
 
+    // Career: toasts for XP / promotions / achievements / unlocks.
+    this.unlocked = unlockedKeys(this.career.data, this.career.levelIndex);
+    this.careerScreen = new CareerScreen(container, this.career);
+    this.careerScreen.onClose = () => this.careerScreen.hide();
+    this.careerScreen.onStartDrill = (id) => this.startDrill(id);
+    this.careerScreen.onStartTournament = (id) => this.startTournament(id);
+    this.careerScreen.onPlayRound = () => this.playTournamentRound();
+    this.careerScreen.onAbandonTournament = () => {
+      this.tournament = null;
+      this.careerScreen.run = null;
+      this.careerScreen.render();
+    };
+    this.hud.onCareer = () => this.openCareer();
+    this.career.on((e) => {
+      if (e.type === 'level') {
+        this.hud.flash('PROMOTED', `You are now ${e.title}`);
+        this.sfx.point(true, true);
+      } else if (e.type === 'achievement') this.hud.toast(`🏅 <b>${e.achievement.name}</b> — ${e.achievement.description}`);
+      else if (e.type === 'xp' && e.amount >= 20) this.hud.toast(`+${e.amount} XP · ${e.reason}`);
+      for (const u of newlyUnlocked(this.unlocked, this.career.data, this.career.levelIndex)) {
+        this.unlocked.add(`${u.kind}:${u.id}`);
+        this.hud.toast(`🔓 Unlocked <b>${this.unlockLabel(u.kind, u.id)}</b>`);
+      }
+    });
+
     this.buildGui();
     if (this.isTouch || window.innerWidth < 700) this.gui.close();
     this.applyQuality();
     this.applyRealism();
-    this.setVenue(this.look.venue);
+    // A venue saved before progression existed might still be locked.
+    this.setVenue(isUnlocked('venue', this.look.venue, this.career.data, this.career.levelIndex) ? this.look.venue : 'office');
     this.playerView.setStyle(this.player.style.id);
     this.sfx.volume = this.look.volume;
     this.sfx.muted = this.look.muted;
@@ -376,7 +417,13 @@ export class Sandbox {
     if (this.match) return;
     this.recorder.start(this.clock());
     this.recorder.caption(this.clock(), `Ball machine: ${this.machine.preset}`);
-    if (this.playing && this.machine.mix) {
+    if (this.drill) {
+      const name = this.drill.nextPreset();
+      if (!name) return this.finishDrill();
+      Object.assign(this.machine, this.settingsFromPreset(PRESETS.find((p) => p.name === name)!), { scatter: 0.12 });
+      this.updateMachineVisuals();
+      this.updateDrillHud();
+    } else if (this.playing && this.machine.mix) {
       const p = PRESETS[this.mixIndex++ % PRESETS.length];
       Object.assign(this.machine, this.settingsFromPreset(p));
       this.gui.controllersRecursive().forEach((c) => c.updateDisplay());
@@ -471,7 +518,7 @@ export class Sandbox {
       case 'table': {
         this.addMarker(e.pos, spinColor(e.velIn, e.spinIn));
         if (returned) {
-          if (this.lastReturn && !this.lastReturn.result) this.resolveReturn(e.side === 'far' ? 'IN' : 'OWN SIDE');
+          if (this.lastReturn && !this.lastReturn.result) this.resolveReturn(e.side === 'far' ? 'IN' : 'OWN SIDE', e.pos);
           break;
         }
         r.bounces.push({
@@ -517,15 +564,18 @@ export class Sandbox {
     const info = classifyShot(e.pos, e.velOut, e.spinOut, e.paddleVel, e.velIn, e.spinIn);
     this.lastReturn = { ...info, paddleSpeed: length(e.paddleVel), wing: this.player.swing.side, rubber: this.player.rubbers[this.player.swing.side].name };
     this.hitSound(e.impactSpeed + length(e.paddleVel), this.player.rubbers[this.player.swing.side].kind, e.pos.x);
+    this.career.recordShot(info.name, info.speed, info.rpm);
     this.recorder.caption(this.clock(), `You: ${info.name} · ${info.speed.toFixed(1)} m/s · ${Math.round(info.rpm).toLocaleString()} rpm`);
     this.ball.clearTrail();
     this.player.intercept = null;
     this.hud.showShot(this.report!, this.lastReturn);
   }
 
-  private resolveReturn(result: ReturnReport['result']) {
+  private resolveReturn(result: ReturnReport['result'], landing?: Vec3) {
     if (!this.lastReturn) return;
     this.lastReturn.result = result;
+    this.career.recordPractice(result === 'IN');
+    this.drillRegister(result!, landing);
     this.stats.attempts++;
     if (result === 'IN') {
       this.stats.made++;
@@ -537,6 +587,7 @@ export class Sandbox {
       if (result === 'OWN SIDE') this.hud.flash('SEGFAULT', 'Bounced on your own side');
     }
     this.hud.setStats(this.stats);
+    this.updateDrillHud();
     this.resolve();
   }
 
@@ -544,8 +595,11 @@ export class Sandbox {
     this.lastReturn = { name: 'Missed', speed: 0, top: 0, side: 0, cork: 0, rpm: 0, elevation: 0, paddleSpeed: 0, wing: null, rubber: '', result: 'MISSED' };
     this.stats.attempts++;
     this.stats.streak = 0;
+    this.career.recordPractice(false);
+    this.drillRegister('MISSED');
     this.hud.flash('TIMEOUT', 'Request not handled');
     this.hud.setStats(this.stats);
+    this.updateDrillHud();
     this.resolve();
   }
 
@@ -654,6 +708,9 @@ export class Sandbox {
   startMatch() {
     this.leaveOnline();
     this.endMatch(false);
+    this.stopDrill();
+    this.careerScreen?.hide();
+    this.matchRecorded = false;
     const ai = (this.ai = new AiPlayer('far', AI_LEVELS[this.matchSettings.level], this.params));
     const st = this.matchSettings.aiStyle === 'random' ? STYLE_IDS[Math.floor(Math.random() * STYLE_IDS.length)] : this.matchSettings.aiStyle;
     ai.setStyle(STYLES[st]);
@@ -680,6 +737,7 @@ export class Sandbox {
           this.matchHud.addShot({ who, name, speed: info.speed, rpm: info.rpm, top: info.top });
           this.hitSound(h.impactSpeed + length(h.paddleVel), e.side === 'near' ? this.player.rubbers[this.player.swing.side].kind : ai.rubber.kind, h.pos.x);
           this.recorder.caption(this.clock(), `${who}: ${name} · ${info.speed.toFixed(1)} m/s · ${Math.round(info.rpm).toLocaleString()} rpm`);
+          if (e.side === 'near' && !e.serve) this.career.recordShot(info.name, info.speed, info.rpm);
           this.ball.clearTrail();
           break;
         }
@@ -695,6 +753,7 @@ export class Sandbox {
           this.recorder.end(this.clock());
           this.sfx.point(e.result.winner === 'near', e.game);
           this.updateVenueScreen();
+          this.career.recordPoint(e.result.winner === 'near', { ace: e.result.ace, rallyHits: match.referee?.hits });
           const m = pointMessage(e.result, names);
           if (e.match) this.hud.flash(e.result.winner === 'near' ? 'SHIPPED TO PROD' : 'INCIDENT REPORT', e.result.winner === 'near' ? 'You won the match!' : `${ai.displayName} won the match`);
           else if (e.game) this.hud.flash(e.result.winner === 'near' ? 'DEPLOYED' : 'ROLLBACK', `Game to ${names[e.result.winner]} — ${m.title}: ${m.sub}`);
@@ -771,6 +830,12 @@ export class Sandbox {
     // Prompts.
     if (match.phase === 'match-over') {
       const won = sc.winner === 'near';
+      if (!this.matchRecorded) {
+        this.matchRecorded = true;
+        this.career.recordMatch(won, { aiLevel: this.matchSettings.level, style: this.player.style.id });
+        if (this.tournament) return this.reportTournamentMatch(won, `${sc.games.near}–${sc.games.far}`);
+      }
+      if (this.tournament) return;
       const games = sc.history.map((g) => `${g.near}–${g.far}`).join('  ·  ');
       this.matchHud.setPrompt(null);
       this.matchHud.setMeter(null);
@@ -803,6 +868,125 @@ export class Sandbox {
     return this.isTouch
       ? 'Your serve: hold <b>Serve</b> to toss (longer = higher), release, then swipe as it drops'
       : 'Your serve: hold <kbd>Space</kbd> to toss (longer = higher), release, then swing as it drops';
+  }
+
+  // ---------------------------------------------------------------- career, drills, tournaments
+
+  private unlockLabel(kind: UnlockKind, id: string) {
+    if (kind === 'venue') return VENUES[id as VenueId]?.name ?? id;
+    if (kind === 'style') return STYLES[id as StyleId]?.character ?? id;
+    return `${RUBBERS[id]?.name} (${RUBBERS[id]?.kind})`;
+  }
+
+  /** True (and tells the player how to unlock it) if an item is still locked. */
+  private locked(kind: UnlockKind, id: string): boolean {
+    if (isUnlocked(kind, id, this.career.data, this.career.levelIndex)) return false;
+    const rule = UNLOCKS.find((u) => u.kind === kind && u.id === id)!;
+    this.hud.flash('LOCKED', `${this.unlockLabel(kind, id)}: ${rule.requirement}`);
+    return true;
+  }
+
+  openCareer() {
+    if (document.pointerLockElement) document.exitPointerLock();
+    this.setPlaying(false);
+    this.careerScreen.run = this.tournament;
+    this.careerScreen.show();
+  }
+
+  startDrill(id: string) {
+    const idx = DRILLS.findIndex((d) => d.id === id);
+    if (idx < 0 || !drillUnlocked(idx, this.career.data.drills, this.career.data.unlockAll)) return;
+    this.leaveOnline();
+    this.endMatch();
+    this.tournament = null;
+    this.careerScreen.hide();
+    this.drill = new DrillSession(DRILLS[idx]);
+    this.machine.mix = false;
+    this.clearMarkers();
+    // Target zone, if the drill has one.
+    if (this.drillZone) this.scene.remove(this.drillZone);
+    this.drillZone = null;
+    const z = this.drill.drill.target;
+    if (z) {
+      this.drillZone = new THREE.Mesh(new THREE.PlaneGeometry(z.x1 - z.x0, z.z1 - z.z0), new THREE.MeshBasicMaterial({ color: 0x4ade80, transparent: true, opacity: 0.28, depthWrite: false }));
+      this.drillZone.rotation.x = -Math.PI / 2;
+      this.drillZone.position.set((z.x0 + z.x1) / 2, TABLE.height + 0.002, (z.z0 + z.z1) / 2);
+      this.scene.add(this.drillZone);
+    }
+    this.hud.flash('DRILL', this.drill.drill.description);
+    this.phase = 'done';
+    this.sinceResolved = -1.2; // give the player a moment to read
+    this.updateDrillHud();
+    this.requestPlay();
+  }
+
+  private drillRegister(result: NonNullable<ReturnReport['result']>, landing?: Vec3) {
+    if (!this.drill) return;
+    const r = this.lastReturn;
+    const ok = this.drill.register({ result, shot: r?.name ?? '-', top: r?.top ?? 0, speed: r?.speed ?? 0, landing: landing && { x: landing.x, z: landing.z } });
+    if (ok) this.sfx.point(true);
+    if (this.drill.done) setTimeout(() => this.finishDrill(), 900);
+  }
+
+  private updateDrillHud() {
+    if (!this.drill) return;
+    const d = this.drill;
+    const marks = d.log.map((ok) => (ok ? '✓' : '✗')).join('');
+    this.hud.setStatsText(`<b>${d.drill.name}</b> · ball ${Math.min(d.fed, d.drill.balls)}/${d.drill.balls} · ${d.successes} ✓ · goal: ${d.drill.goal} <span style="letter-spacing:1px">${marks}</span>`);
+  }
+
+  private finishDrill() {
+    const d = this.drill;
+    if (!d) return;
+    this.career.recordDrill(d.drill.id, d.stars, DRILLS.map((x) => x.id));
+    this.stopDrill();
+    this.openCareer();
+    this.careerScreen.drillResult(d);
+  }
+
+  private stopDrill() {
+    if (this.drillZone) this.scene.remove(this.drillZone);
+    this.drillZone = null;
+    this.drill = null;
+    this.hud.setStats(this.stats);
+  }
+
+  startTournament(id: string) {
+    const t = TOURNAMENTS.find((x) => x.id === id);
+    if (!t || !tournamentUnlocked(t, this.career.data.tournaments, this.career.data.unlockAll)) return;
+    this.tournament = new TournamentRun(t);
+    this.careerScreen.run = this.tournament;
+    this.careerScreen.show('tournaments', `Entered the <b>${t.name}</b>. Win every round to take the trophy — one loss and you're out.`);
+  }
+
+  private playTournamentRound() {
+    const r = this.tournament?.current;
+    if (!r) return;
+    const keep = this.tournament;
+    this.matchSettings.level = r.level;
+    this.matchSettings.aiStyle = r.style;
+    this.matchSettings.bestOf = r.bestOf;
+    this.setVenue(r.venue); // tournaments may use venues you haven't unlocked yet
+    this.startMatch();
+    this.tournament = keep; // startMatch clears ongoing modes; keep the run
+    this.hud.flash(r.name.toUpperCase(), `${STYLES[r.style].character} · ${AI_LEVELS[r.level].name} · best of ${r.bestOf}`);
+  }
+
+  private reportTournamentMatch(won: boolean, score: string) {
+    const run = this.tournament!;
+    const round = run.current!;
+    const state = run.report(won, score);
+    if (document.pointerLockElement) document.exitPointerLock();
+    let banner: string;
+    if (state === 'won') {
+      this.career.recordTournament(run.tournament.id, run.tournament.xp, run.tournament.achievement);
+      banner = `🏆 <b>You won the ${run.tournament.name}!</b> +${run.tournament.xp} XP`;
+    } else if (state === 'eliminated') banner = `Knocked out in ${round.name} (${score}). Enter again to have another go.`;
+    else banner = `✓ ${round.name} won ${score}. Next: <b>${run.current!.name}</b>.`;
+    this.endMatch();
+    this.careerScreen.run = run;
+    this.openCareer();
+    this.careerScreen.show('tournaments', banner);
   }
 
   // ---------------------------------------------------------------- quality
@@ -1066,6 +1250,7 @@ export class Sandbox {
         break;
       case 'toss':
         this.stopReplay();
+        this.rallyHits = 0;
         this.ball.clearTrail();
         this.clearMarkers();
         this.recorder.start(this.clock());
@@ -1079,6 +1264,8 @@ export class Sandbox {
         const rubber = e.by === c.seat ? this.player.rubbers[this.player.swing.side].kind : 'Inverted';
         this.hitSound(length(e.velOut) + length(e.paddleVel), rubber, mapVec(c.side, e.pos).x);
         this.recorder.caption(this.clock(), `${who}: ${name} · ${info.speed.toFixed(1)} m/s · ${Math.round(info.rpm).toLocaleString()} rpm`);
+        this.rallyHits++;
+        if (e.by === c.seat && !e.serve) this.career.recordShot(info.name, info.speed, info.rpm);
         this.ball.clearTrail();
         if (c.next === c.seat) this.stopReplay();
         break;
@@ -1095,6 +1282,7 @@ export class Sandbox {
         this.recorder.end(this.clock());
         this.sfx.point(e.result.winner === c.side, e.game);
         this.updateVenueScreen();
+        if (c.seat) this.career.recordPoint(e.result.winner === c.side, { ace: e.result.ace, rallyHits: this.rallyHits });
         const names = { near: this.teamName('near'), far: this.teamName('far') };
         const m = pointMessage(e.result, names);
         const mine = e.result.winner === c.side;
@@ -1104,6 +1292,7 @@ export class Sandbox {
         break;
       }
       case 'over':
+        if (c.seat && c.score) this.career.recordMatch(c.score.winner === c.side, { online: true, style: this.player.style.id });
         break;
     }
   }
@@ -1355,6 +1544,7 @@ export class Sandbox {
     const onMachine = () => this.updateMachineVisuals();
 
     gui.add({ play: () => this.requestPlay() }, 'play').name('▶ Play  (Esc to leave)');
+    gui.add({ career: () => this.openCareer() }, 'career').name('📈 Career, drills & tournaments');
 
     const rf = gui.addFolder('Realism');
     rf.add(this.realism, 'percent', 0, 100, 5)
@@ -1375,7 +1565,14 @@ export class Sandbox {
     const lf = gui.addFolder('Look & sound');
     lf.add(this.look, 'venue', Object.fromEntries(Object.entries(VENUES).map(([id, v]) => [v.name, id])))
       .name('Venue')
-      .onChange((id: VenueId) => this.setVenue(id));
+      .onChange((id: VenueId) => {
+        if (this.locked('venue', id)) {
+          this.look.venue = this.venue?.id ?? 'sandbox';
+          lf.controllersRecursive().forEach((c) => c.updateDisplay());
+          return;
+        }
+        this.setVenue(id);
+      });
     lf.add(this.look, 'volume', 0, 1, 0.05)
       .name('Volume')
       .onChange((v: number) => {
@@ -1446,6 +1643,11 @@ export class Sandbox {
     pl.add(this.realism, 'style', styleNames)
       .name('Your style')
       .onChange((id: StyleId) => {
+        if (this.locked('style', id)) {
+          this.realism.style = this.player.style.id;
+          pl.controllersRecursive().forEach((c) => c.updateDisplay());
+          return;
+        }
         this.player.applyStyle(id);
         this.playerView.setStyle(id);
         rubberSel.forehand = this.player.rubbers.forehand.id;
@@ -1454,8 +1656,16 @@ export class Sandbox {
         pl.controllersRecursive().forEach((c) => c.updateDisplay());
         this.hud.flash(STYLES[id].character.toUpperCase(), STYLES[id].description);
       });
-    pl.add(rubberSel, 'forehand', rubberNames).name('Forehand rubber').onChange((id: string) => (this.player.rubbers.forehand = RUBBERS[id]));
-    pl.add(rubberSel, 'backhand', rubberNames).name('Backhand rubber').onChange((id: string) => (this.player.rubbers.backhand = RUBBERS[id]));
+    const pickRubber = (wing: 'forehand' | 'backhand') => (id: string) => {
+      if (this.locked('rubber', id)) {
+        rubberSel[wing] = this.player.rubbers[wing].id;
+        pl.controllersRecursive().forEach((c) => c.updateDisplay());
+        return;
+      }
+      this.player.rubbers[wing] = RUBBERS[id];
+    };
+    pl.add(rubberSel, 'forehand', rubberNames).name('Forehand rubber').onChange(pickRubber('forehand'));
+    pl.add(rubberSel, 'backhand', rubberNames).name('Backhand rubber').onChange(pickRubber('backhand'));
     pl.add(this.player.swing.params, 'sensitivity', 0.0005, 0.004, 0.0001).name('Mouse sensitivity');
     pl.add(this.player.swing.params, 'swingGain', 0.6, 3, 0.05).name('Swing power');
     pl.add(this.player.assists, 'angle', 0, 1, 0.05).name('Angle assist');

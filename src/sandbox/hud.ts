@@ -105,6 +105,26 @@ export class Hud {
   }
   private playing = false;
   onStartPlay: () => void = () => {};
+  onCareer: () => void = () => {};
+  private toastsEl: HTMLDivElement | null = null;
+
+  /** Small stacked notification (XP, unlocks, achievements). */
+  toast(html: string) {
+    if (!this.toastsEl) {
+      this.toastsEl = el('div', 'hud-toasts');
+      this.panel.parentElement!.append(this.toastsEl);
+    }
+    const t = el('div', 'hud-toast');
+    t.innerHTML = html;
+    this.toastsEl.append(t);
+    setTimeout(() => t.remove(), 3300);
+    while (this.toastsEl.children.length > 4) this.toastsEl.firstChild!.remove();
+  }
+
+  /** Replace the practice stats line (used by drills). */
+  setStatsText(html: string) {
+    this.statsEl.innerHTML = html;
+  }
 
   constructor(container: HTMLElement) {
     this.panel = el('div', 'hud-panel');
@@ -118,6 +138,14 @@ export class Hud {
     this.startEl.innerHTML = touch
       ? `<button type="button">▶ Play vs ball machine</button><div class="hud-start-sub">Drag to move the paddle, <b>swipe</b> to swing (up = topspin, down = backspin). ☰ to leave.</div>`
       : `<button type="button">▶ Play vs ball machine</button><div class="hud-start-sub">Your mouse becomes the paddle. Flick to swing. <kbd>Esc</kbd> to get the cursor back.</div>`;
+    const careerLink = document.createElement('div');
+    careerLink.className = 'hud-career';
+    careerLink.textContent = '📈 Career, training drills & tournaments';
+    careerLink.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.onCareer();
+    });
+    this.startEl.append(careerLink);
     this.startEl.querySelector('button')!.addEventListener('click', (e) => {
       e.stopPropagation();
       this.onStartPlay();

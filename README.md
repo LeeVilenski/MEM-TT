@@ -2,7 +2,39 @@
 
 A 3D browser table tennis game for 1–4 players, built around spin, pace and a full range of shots. See [PLAN.md](PLAN.md) for the full design and milestones.
 
-## Status: Milestone 7 — mobile
+## Status: Milestone 8 — progression (all planned milestones done)
+
+Open **📈 Career, drills & tournaments**, from the start screen or the top of the panel. Progress is saved in your browser; there are no accounts.
+
+**Career and stats**
+- **XP** comes from points, matches (more against Principal AI, and online), practice returns, drills, tournaments and achievements.
+- **Career ladder:** Intern → Junior → Mid-level → Senior → Staff → Principal → CTO.
+- **Lifetime stats:** matches and points won, aces, longest rally, fastest shot, most spin, practice return rate, AI levels beaten and favourite shots.
+
+**Training drills:** 10-ball sessions on the ball machine, each with a goal and 1–3 stars. Each drill unlocks the next.
+
+| Drill | Goal |
+|---|---|
+| Onboarding | Keep it on the table |
+| Push back | Return with backspin |
+| Open up against backspin | Return with topspin |
+| The Firewall | Block power loops |
+| Ship it to the corner | Land in a marked target zone |
+| On-call defence | Chop loops back |
+
+**Tournaments:** knockout ladders; one loss and you're out.
+- **Department Cup:** four rounds (IT Support, Security, Infrastructure, then a best-of-3 final against the Platform Team).
+- **Company Championship:** unlocks after the Cup. Principal opponents, ending in a best-of-5 final against the CTO on the rooftop.
+
+**Unlocks**
+- **Venues:** Server room (Junior), Conference room (Mid-level), Rooftop (win the Cup).
+- **Styles:** Security Analyst (The Firewall drill), Sysadmin (On-call defence), Network Engineer (Senior).
+- **Rubbers:** Hotfix (Junior), Legacy Code (On-call defence), Air Gap (win the Championship).
+- **Unlock everything** (Unlocks tab) switches gating off for free play. Online lobbies aren't gated.
+
+**Achievements:** 11 badges, including Hello World (first win), Zero-day (ace), Marathon Standup (15-hit rally), Low Latency (90 km/h shot), Spin Doctor (7,000 rpm), Skip-level (beat a Principal), Full Stack (win with every style) and IPO (win the Championship).
+
+### Milestone 7 — mobile
 
 The game plays on phones and tablets, in landscape (portrait shows a "turn your phone" hint).
 
@@ -255,6 +287,7 @@ src/render/    Three.js scene, ball, paddle and player views
   quality.ts   Quality levels + automatic quality controller
 src/audio/     Procedural Web Audio sound effects and ambience
 src/input/     Touch controls (swipe swings, buttons) and phone tilt
+src/progress/  Career profile, stats and achievements; drills; tournaments; unlock rules
 src/sandbox/   Sandbox app (ball machine, play mode, HUD, controls)
 tests/         Vitest: physics, paddle contact, swing, assist, rules, an end-to-end
                gameplay test vs every machine preset, full AI-vs-AI matches,

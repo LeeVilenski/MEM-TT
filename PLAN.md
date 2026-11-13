@@ -115,4 +115,4 @@ The host sets it for the room. It adjusts:
 5. ✅ **Depth** (done): rubbers, player styles, AI per style, the realism slider.
 6. ✅ **Look and theme** (done): IT venues and characters, audio, replays.
 7. ✅ **Mobile** (done): touch-swipe swings, optional phone tilt, performance tuning.
-8. **Progression:** stats, training drills, tournaments, unlocks.
+8. ✅ **Progression** (done): stats, training drills, tournaments, unlocks.
