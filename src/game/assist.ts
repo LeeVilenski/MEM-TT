@@ -22,7 +22,7 @@ import {
 const MARGIN = 0.1;
 
 /** Rotate v around a unit axis by an angle (Rodrigues). */
-function rotate(v: Vec3, axis: Vec3, rad: number): Vec3 {
+export function rotate(v: Vec3, axis: Vec3, rad: number): Vec3 {
   const c = Math.cos(rad);
   const s = Math.sin(rad);
   return add(add(scale(v, c), scale(cross(axis, v), s)), scale(axis, dot(axis, v) * (1 - c)));
@@ -107,7 +107,12 @@ export function pitchRotator(normal: Vec3): ((deg: number) => Vec3) | null {
  * The player's choice still decides where within that window the ball goes —
  * deep or short, spinny or flat.
  */
-export function makeAngleAssist(params: PhysicsParams, strength: () => number, mode: () => ShotMode = () => 'rally') {
+export function makeAngleAssist(
+  params: PhysicsParams,
+  strength: () => number,
+  mode: () => ShotMode = () => 'rally',
+  aim: () => { x: number; z: number } | null = () => null,
+) {
   const STEP = 6;
   const RANGE = 60;
   /** Pace the power assist may take off, at full strength. */
@@ -160,7 +165,52 @@ export function makeAngleAssist(params: PhysicsParams, strength: () => number, m
     return found + dir * Math.min(4, (lastIn - found) * dir * 0.5);
   };
 
-  return (ball: BallState, pose: PaddlePose, normal: Vec3, rubber: Rubber): Vec3 | ContactAdjust => {
+  /**
+   * Steer the landing sideways toward the aim point by turning the face (yaw), keeping
+   * only corrections that still land. Strength limits how far the face may be turned.
+   */
+  const steer = (ball: BallState, pose: PaddlePose, adj: ContactAdjust, rubber: Rubber, k: number): ContactAdjust => {
+    const target = aim();
+    if (!target || mode() !== 'rally') return adj;
+    const vel = adj.vel ?? pose.vel;
+    // Turn the whole stroke (face and bat path together) about the vertical.
+    const turned = (deg: number): ContactAdjust => {
+      const rad = (deg * Math.PI) / 180;
+      return { normal: rotate(adj.normal, UP, rad), vel: rotate(vel, UP, rad) };
+    };
+    const landX = (deg: number): number | null => {
+      const t = turned(deg);
+      const r = landingOutcome(ball, { ...pose, vel: t.vel! }, t.normal, rubber, params, 'rally');
+      return r.outcome === 'in' && r.pos ? r.pos.x : null;
+    };
+    const x0 = landX(0);
+    if (x0 === null || Math.abs(x0 - target.x) < 0.06) return adj;
+    const maxYaw = 30 * k;
+    let best = { deg: 0, err: Math.abs(x0 - target.x) };
+    // Secant search on yaw → landing x.
+    let d0 = 0;
+    let e0 = x0 - target.x;
+    let d1 = e0 > 0 ? -6 : 6;
+    for (let it = 0; it < 4; it++) {
+      const x1 = landX(d1);
+      if (x1 === null) {
+        d1 = (d0 + d1) / 2; // that far misses: back off toward the last good angle
+        continue;
+      }
+      const e1 = x1 - target.x;
+      if (Math.abs(e1) < best.err) best = { deg: d1, err: Math.abs(e1) };
+      if (Math.abs(e1) < 0.05 || Math.abs(e1 - e0) < 1e-4) break;
+      const next = d1 - (e1 * (d1 - d0)) / (e1 - e0);
+      d0 = d1;
+      e0 = e1;
+      d1 = Math.max(-maxYaw, Math.min(maxYaw, next));
+      if (d1 === d0) break;
+    }
+    if (best.deg === 0) return adj;
+    return turned(best.deg);
+  };
+
+  const base = (ball: BallState, pose: PaddlePose, normal: Vec3, rubber: Rubber): Vec3 | ContactAdjust => {
     const k = strength();
     if (k <= 0) return normal;
     const at = pitchRotator(normal);
@@ -183,17 +233,26 @@ export function makeAngleAssist(params: PhysicsParams, strength: () => number, m
       if (f < minScale - 1e-9) break;
       const slower = { ...pose, vel: scale(pose.vel, f) };
       const out = outcomeWith(slower);
-      if (out(0) === 'in') return { normal, velScale: f };
+      if (out(0) === 'in') return { normal, vel: scale(pose.vel, f) };
       const t = solve(out, 10);
-      if (t !== null && Math.abs(t) <= reach) return { normal: at(t), velScale: f };
+      if (t !== null && Math.abs(t) <= reach) return { normal: at(t), vel: scale(pose.vel, f) };
       // No clear landing even here: remember the net↔long tipping point as a best guess.
       const e = edge as number | null;
-      if (e !== null && Math.abs(e) <= reach) guess = { normal: at(e), velScale: f };
+      if (e !== null && Math.abs(e) <= reach) guess = { normal: at(e), vel: scale(pose.vel, f) };
     }
     if (guess) return guess;
 
     // Beyond that the face is only nudged, so a wild swing still misses.
     if (target === null) return normal;
     return at(Math.sign(target) * reach);
+  };
+
+  return (ball: BallState, pose: PaddlePose, normal: Vec3, rubber: Rubber): Vec3 | ContactAdjust => {
+    const k = strength();
+    const r = base(ball, pose, normal, rubber);
+    if (k <= 0) return r;
+    const adj = 'normal' in r ? r : { normal: r };
+    const out = steer(ball, pose, adj, rubber, k);
+    return out.vel ? out : out.normal;
   };
 }

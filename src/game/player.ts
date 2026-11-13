@@ -36,8 +36,6 @@ const BACKHAND_OFFSET = 0.3;
 const MAX_LEAN = 0.45;
 /** The magnet ramps up over the last this-many seconds before contact. */
 const MAGNET_WINDOW = 0.3;
-/** Aiming: lateral landing shift (m) per metre the cursor is held beside the ball. */
-const AIM_GAIN = 2.5;
 const AIM_LIMIT = 0.6;
 /** How far the bat can go sideways in the world. */
 const BAT_LIMIT = TABLE.width / 2 + 1.1;
@@ -95,7 +93,7 @@ export class Player {
 
   constructor(id: string, params: PhysicsParams) {
     this.id = id;
-    this.angleAssist = makeAngleAssist(params, () => this.assists.angle, () => this.shotMode);
+    this.angleAssist = makeAngleAssist(params, () => this.assists.angle, () => this.shotMode, () => this.aimTarget);
     this.swing.reset(FOREHAND_OFFSET, TABLE.height + 0.25, this.restZ, this.body.x);
   }
 
@@ -115,11 +113,14 @@ export class Player {
     return this.body.x + this.swing.x;
   }
 
-  /** Landing aim after cursor placement: hold the bat beside the ball to aim that way. */
+  /** Where this player's shot is aimed (view frame); the contact assist steers toward it. */
+  aimTarget: { x: number; z: number } | null = null;
+
+  /** Landing aim from the stroke's direction: swipe up-left → left, up-right → right. */
   aimFor(aim: { x: number; z: number }) {
-    if (!this.intercept || this.shotMode !== 'rally') return aim;
-    const offset = this.batX - this.intercept.x;
-    return { x: clamp(aim.x + offset * AIM_GAIN, -AIM_LIMIT, AIM_LIMIT), z: aim.z };
+    if (this.shotMode !== 'rally') return aim;
+    const x = aim.x + this.swing.strokeAim * AIM_LIMIT;
+    return { x: clamp(x, -AIM_LIMIT, AIM_LIMIT), z: aim.z };
   }
 
   update(dt: number, input: SwingInput, move: MoveInput, aim: { x: number; z: number }) {
@@ -163,6 +164,8 @@ export class Player {
 
     this.swing.serving = this.shotMode === 'serve';
     this.swing.update(dt, input, this.body, this.restZ, this.aimFor(aim));
+    // Read after the swing update, so a flick on the contact frame already counts.
+    this.aimTarget = this.shotMode === 'rally' ? this.aimFor(aim) : null;
     const pose = this.swing.pose;
 
     // Bat magnet: as the ball arrives, a bat held near its path is pulled onto it, so the

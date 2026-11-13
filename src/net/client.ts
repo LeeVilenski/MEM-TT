@@ -282,7 +282,7 @@ export class OnlineClient {
           adjust &&
           ((ball, pose, normal, rubber) => {
             const r = adjust(mapState(side, ball), mapPose(side, pose), mapVec(side, normal), rubber);
-            return 'normal' in r ? { normal: mapVec(side, r.normal), velScale: r.velScale } : mapVec(side, r);
+            return 'normal' in r ? { normal: mapVec(side, r.normal), vel: r.vel && mapVec(side, r.vel) } : mapVec(side, r);
           }),
       },
     ];

@@ -52,10 +52,10 @@ export interface PaddleCollider {
   adjustNormal?: (ball: BallState, pose: PaddlePose, normal: Vec3, rubber: Rubber) => Vec3 | ContactAdjust;
 }
 
-/** An assist's contact correction: a face normal, and optionally a scale on the paddle's speed. */
+/** An assist's contact correction: a face normal, and optionally a replacement paddle velocity. */
 export interface ContactAdjust {
   normal: Vec3;
-  velScale: number;
+  vel?: Vec3;
 }
 
 /** Minimum time between two hits by the same paddle (prevents double contacts). */
@@ -171,8 +171,8 @@ export class BallSim {
       const velIn = clone(s.vel);
       const spinIn = clone(s.spin);
       const adj = p.adjustNormal ? p.adjustNormal(cloneState(s), pose, n, rubber) : n;
-      const { normal, velScale } = 'normal' in adj ? adj : { normal: adj, velScale: 1 };
-      const impact = paddleImpulse(s, { ...pose, normal, vel: velScale === 1 ? pose.vel : scale(pose.vel, velScale) }, rubber);
+      const { normal, vel } = 'normal' in adj ? adj : { normal: adj, vel: undefined };
+      const impact = paddleImpulse(s, { ...pose, normal, vel: vel ?? pose.vel }, rubber);
       if (impact <= 0) continue;
       // Place the ball just off the face.
       const d = sub(s.pos, pose.pos);

@@ -34,7 +34,8 @@ const base = EXTERNAL ?? `ws://localhost:${PORT}`;
 
 function client(code: string, name: string, create?: boolean) {
   const t = new WebSocketTransport(roomUrl(base, code));
-  return new OnlineClient(t, new Player(name, P), P, clock, { name, create: create ? { mode: 'singles', bestOf: 1, aiLevel: 'medium' } : undefined });
+  const params = { ...P }; // the client applies the room's spin curve to its params
+  return new OnlineClient(t, new Player(name, params), params, clock, { name, create: create ? { mode: 'singles', bestOf: 1, aiLevel: 'medium' } : undefined });
 }
 
 async function run(clients: OnlineClient[], until: () => boolean, timeoutMs: number) {

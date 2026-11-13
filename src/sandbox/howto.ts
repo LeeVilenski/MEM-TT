@@ -47,7 +47,7 @@ export class HowToPlay {
             <tr><td>Block</td><td>Keep the paddle <b>still</b> on the ring. Great against fast topspin.</td></tr>
             <tr><td>Sidespin<br><small>hook</small></td><td>${hook} while you swing.</td></tr>
           </table>
-          <b>Placement:</b> hold the bat a little <b>left</b> of the ring to hit the ball left, <b>right</b> of it to hit right.
+          <b>Placement:</b> angle your ${t ? 'swipe' : 'flick'}: up-and-<b>left</b> sends the ball left, up-and-<b>right</b> sends it right (the more angled, the wider). Straight goes to the middle. Works for downward strokes too.
         </div></div>
         <div class="ht-step"><div class="ht-n">3</div><div><b>Timing.</b> A swing counts for about 0.15 s. <b>A little early beats late</b>: if you swing after the ball has reached the ring, you just block it.</div></div>
         <div class="ht-step"><div class="ht-n">4</div><div><b>Missing?</b> Into the net → open the face (${open}). Long → close it (${close}). The face angle is shown at the bottom of the screen.</div></div>

@@ -65,3 +65,28 @@ describe('swipes of any strength (touch default realism)', () => {
     expect(landed).toBeGreaterThanOrEqual(17); // of 20
   });
 });
+
+describe('aiming with the swipe direction', () => {
+  it('a swipe angled left or right lands on that side; a straight one stays central', () => {
+    const presets = ['Long push', 'Push', 'Drive', 'Block'];
+    const sides: Record<number, number[]> = { [-1]: [], 0: [], 1: [] };
+    for (const dir of [-1, 0, 1])
+      for (const preset of presets)
+        for (const px of [40, 80, -40, -100]) {
+          const r = playBall(preset, 0.75, 3 / FPS, px, {
+            setup: (p) => {
+              p.applyRealism(0.85);
+              const update = p.update.bind(p);
+              // Angle the flick ~30° off vertical.
+              p.update = (dt, input, m, a) => update(dt, input.dy === -px ? { ...input, dx: dir * Math.abs(px) * 0.58 } : input, m, a);
+            },
+          });
+          if (r.result === 'IN') sides[dir].push(r.landing!.x);
+        }
+    const count = (xs: number[], f: (x: number) => boolean) => xs.filter(f).length;
+    console.log(JSON.stringify(sides));
+    expect(count(sides[-1], (x) => x < -0.25)).toBeGreaterThanOrEqual(13); // of 16
+    expect(count(sides[1], (x) => x > 0.25)).toBeGreaterThanOrEqual(13);
+    expect(count(sides[0], (x) => Math.abs(x) < 0.15)).toBeGreaterThanOrEqual(11);
+  });
+});

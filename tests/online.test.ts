@@ -27,7 +27,9 @@ function world(latency: number, seed = 1) {
   const server = new LocalServer(clock, { rng: mulberry32(seed) });
   const clients: { c: OnlineClient; bot: ReturnType<typeof makeBot> }[] = [];
   const add = (name: string, create?: { mode: GameMode; bestOf: number }) => {
-    const c = new OnlineClient(server.connect('ROOMA', latency), new Player(name, P), P, clock, { name, create: create && { ...create, aiLevel: 'medium' } });
+    // Each client gets its own params: the client applies the room's spin curve to them.
+    const params = { ...P };
+    const c = new OnlineClient(server.connect('ROOMA', latency), new Player(name, params), params, clock, { name, create: create && { ...create, aiLevel: 'medium' } });
     const entry = { c, bot: makeBot(c) };
     clients.push(entry);
     return c;
@@ -120,7 +122,7 @@ describe('online rooms (local server, simulated latency)', () => {
     };
     let near = 0;
     let far = 0;
-    for (const seed of [21, 22, 23]) {
+    for (const seed of [21, 22, 23, 24, 25, 26]) {
       near += returnsIn('near1', seed);
       far += returnsIn('far1', seed);
     }
@@ -128,7 +130,7 @@ describe('online rooms (local server, simulated latency)', () => {
     expect(far).toBeGreaterThan(0);
     // Same bot, same AI: the two ends should perform alike (allowing for randomness).
     expect(Math.min(near, far) / Math.max(near, far)).toBeGreaterThan(0.6);
-  });
+  }, 30000);
 
   it('fills empty seats with the AI', () => {
     const w = world(0.04, 3);

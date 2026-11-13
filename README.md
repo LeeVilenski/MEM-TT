@@ -196,7 +196,7 @@ Play against the ball machine with a mouse-driven paddle. Click **▶ Play**: th
 |---|---|
 | Mouse | Move the bat: it goes exactly where you put it, and your body follows |
 | **Flick** the mouse | Stroke. Up = topspin (loop), down = backspin (push/chop), still = block. Serves: sideways = sidespin |
-| Bat beside the ring | Placement: left of the ring hits left, right of it hits right |
+| Angle the flick | Placement: up-left = left, up-right = right; the steeper the angle, the wider |
 | Hold left button | Drive: more forward pace, less brush |
 | W / S | Close / open the face while held |
 | Mouse wheel | Base face angle |
@@ -209,12 +209,13 @@ Play against the ball machine with a mouse-driven paddle. Click **▶ Play**: th
 - **Position:** the bat follows the cursor 1:1 and stays put on screen while your body walks under it.
 - **Bat magnet:** in the last 0.3 s before contact, a bat within the magnet radius of the ball's path is pulled onto it. The radius is 10 cm in Simulation and 40 cm in Arcade (a slider under Player).
 - **Stroke:** the stroke is read from your mouse motion over roughly the last 0.15 s. In rallies, sideways mouse speed counts only 30%, so moving across to a wide ball isn't read as a swing.
-- **Placement:** holding the bat beside the ball steers the aim left or right.
+- **Placement:** the flick's direction aims, read from the flick itself (not the slide that got you to the ball). About 40° off vertical is full width, about ±0.6 m.
 - **Contact assist (Assisted/Arcade):**
   - The swipe's speed is softly capped, so a hard swipe is a strong shot, not an unplayable one.
   - At contact the assist first tilts the face to land the ball.
   - If no angle can land a swing that hot, it takes up to 60% of the pace off.
   - It aims for a landing with room to spare: no net cords, and at least 10 cm from the end line.
+  - It then turns the whole stroke (face and bat path) sideways so the ball lands where the flick aimed, if that still lands.
   - Simulation (0%) turns all of this off.
 - **Physics:** the gesture becomes a real paddle velocity and face angle, and the physics below decides the shot.
 
