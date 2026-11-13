@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { PADDLE, UP, cross, dot, normalize, scale, sub, type Vec3 } from '../physics';
 import type { Player } from '../game/player';
+import type { StrokeSide } from '../game/swing';
+import type { PaddlePose } from '../physics';
 
 const RED = 0xc8202a;
 const BLACK = 0x15161a;
@@ -18,7 +20,7 @@ export class PlayerView {
   private markerLine: THREE.Line;
   private shadow: THREE.Mesh;
 
-  constructor(scene: THREE.Scene) {
+  constructor(scene: THREE.Scene, opts: { bodyColor?: number; bodyOpacity?: number; marker?: boolean } = {}) {
     // Blade: two thin discs (one per rubber) around a wooden core, slightly oval.
     const disc = new THREE.CylinderGeometry(PADDLE.radius, PADDLE.radius, 0.002, 40);
     disc.rotateX(Math.PI / 2); // face along ±z
@@ -41,7 +43,7 @@ export class PlayerView {
 
     // Body: a faint torso only (the camera sits just above and behind the head), so it
     // gives a sense of position without ever hiding the ball.
-    const bodyMat = new THREE.MeshStandardMaterial({ color: 0x6b7280, transparent: true, opacity: 0.16, roughness: 0.8, depthWrite: false });
+    const bodyMat = new THREE.MeshStandardMaterial({ color: opts.bodyColor ?? 0x6b7280, transparent: true, opacity: opts.bodyOpacity ?? 0.16, roughness: 0.8, depthWrite: false });
     const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.16, 0.6, 6, 16), bodyMat);
     torso.position.y = 0.9;
     this.body.add(torso);
@@ -85,29 +87,33 @@ export class PlayerView {
   }
 
   update(player: Player) {
-    const pose = player.swing.pose;
+    this.updatePose(player.swing.pose, player.body, player.swing.side, player.swing.forward);
+  }
+
+  /** Generic update (used for AI players too). Pose and body in world coordinates. */
+  updatePose(pose: PaddlePose, bodyPos: { x: number; z: number }, wing: StrokeSide, forward = 0) {
     const n = pose.normal;
     // Blade frame: local +z = face normal, local +y = "up" along the blade toward its tip.
     let up = sub(UP, scale(n, dot(UP, n)));
     up = normalize(up);
     // Tilt the blade so the handle points back toward the player's hand.
-    const towardBody = player.body.x - pose.pos.x;
+    const towardBody = bodyPos.x - pose.pos.x;
     const right = normalize(cross(up, n));
     const tilt = Math.max(-0.9, Math.min(0.9, towardBody * 1.6));
     const tipUp = normalize({ x: up.x - right.x * tilt, y: up.y - right.y * tilt, z: up.z - right.z * tilt });
     const x = normalize(cross(tipUp, n));
     const m = new THREE.Matrix4().makeBasis(new THREE.Vector3(x.x, x.y, x.z), new THREE.Vector3(tipUp.x, tipUp.y, tipUp.z), new THREE.Vector3(n.x, n.y, n.z));
     this.paddle.quaternion.setFromRotationMatrix(m);
-    // Draw the stroke's forward lunge (contact itself happens at the rest plane).
-    this.paddle.position.set(pose.pos.x, pose.pos.y, pose.pos.z - player.swing.forward * 0.6);
+    // Draw the stroke's forward lunge along the face normal (contact itself happens at the rest plane).
+    this.paddle.position.set(pose.pos.x + n.x * forward * 0.6, pose.pos.y, pose.pos.z + n.z * forward * 0.6);
 
     // The hitting face shows the rubber colour for the current wing (red forehand, black backhand).
-    const fh = player.swing.side === 'forehand';
+    const fh = wing === 'forehand';
     (this.faceFront.material as THREE.MeshStandardMaterial).color.set(fh ? RED : BLACK);
     (this.faceBack.material as THREE.MeshStandardMaterial).color.set(fh ? BLACK : RED);
 
-    this.body.position.set(player.body.x, 0, player.body.z);
-    this.shadow.position.set(player.body.x, 0.002, player.body.z);
+    this.body.position.set(bodyPos.x, 0, bodyPos.z);
+    this.shadow.position.set(bodyPos.x, 0.002, bodyPos.z);
   }
 }
 

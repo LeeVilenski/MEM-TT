@@ -1,5 +1,5 @@
 import { RUBBERS, TABLE, lerp, normalize, type PaddleCollider, type PaddlePose, type PhysicsParams, type Rubber, type Vec3 } from '../physics';
-import { makeAngleAssist } from './assist';
+import { makeAngleAssist, type ShotMode } from './assist';
 import { SwingController, type StrokeSide, type SwingInput } from './swing';
 
 export interface AssistSettings {
@@ -47,11 +47,13 @@ export class Player {
   assists: AssistSettings = { ...DEFAULT_ASSISTS };
   /** Where the incoming ball is expected to reach the hitting zone (set by the game each frame). */
   intercept: Vec3 | null = null;
+  /** 'serve' while serving: the angle assist then targets own half → opponent's half. */
+  shotMode: ShotMode = 'rally';
   private angleAssist;
 
   constructor(id: string, params: PhysicsParams) {
     this.id = id;
-    this.angleAssist = makeAngleAssist(params, () => this.assists.angle);
+    this.angleAssist = makeAngleAssist(params, () => this.assists.angle, () => this.shotMode);
     this.swing.reset(FOREHAND_OFFSET, TABLE.height + 0.25, this.restZ, this.body.x);
   }
 
@@ -93,6 +95,7 @@ export class Player {
     const needLean = this.intercept ? clamp(this.body.z - ARM_REACH - this.intercept.z, 0, MAX_LEAN) : 0;
     this.lean += (needLean - this.lean) * (1 - Math.exp(-dt / 0.08));
 
+    this.swing.serving = this.shotMode === 'serve';
     this.swing.update(dt, input, this.body, this.restZ, aim);
 
     // Keep the paddle above the table surface when reaching over it.

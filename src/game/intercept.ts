@@ -10,12 +10,16 @@ export class IncomingPrediction {
   readonly path: PathPoint[];
   /** Time of the first bounce on the near half (Infinity if it never lands there). */
   readonly nearBounceTime: number;
+  /** Time of the next bounce after that (the ball must be played before it). */
+  readonly secondBounceTime: number;
 
   constructor(start: BallState, params: PhysicsParams, startTime = 0) {
     const { path, events } = predict(start, params, { maxTime: 3, sampleEvery: 1, stop: (e) => e.type === 'floor' });
     this.path = path.map((pos, i) => ({ pos, t: startTime + i * TICK_DT }));
-    const nb = events.find((e) => e.type === 'table' && e.side === 'near');
-    this.nearBounceTime = nb ? startTime + nb.time : Infinity;
+    const tables = events.filter((e) => e.type === 'table');
+    const i = tables.findIndex((e) => e.type === 'table' && e.side === 'near');
+    this.nearBounceTime = i >= 0 ? startTime + tables[i].time : Infinity;
+    this.secondBounceTime = i >= 0 && tables[i + 1] ? startTime + tables[i + 1].time : Infinity;
   }
 
   /**
@@ -32,7 +36,7 @@ export class IncomingPrediction {
     let short: PathPoint | null = null;
     for (const p of this.path) {
       if (p.t <= this.nearBounceTime) continue;
-      if (p.pos.y < TABLE.height + 0.022 && p.t > this.nearBounceTime + 0.05) break; // second bounce
+      if (p.t >= this.secondBounceTime - 0.01) break; // must be played before the next bounce
       if (p.pos.z >= planeZ && p.pos.y <= maxHeight) return p.t >= now ? p : null;
       if (p.pos.y >= TABLE.height + 0.06 && p.pos.y <= maxHeight && (!short || p.pos.z > short.pos.z)) short = p;
     }

@@ -2,7 +2,53 @@
 
 A 3D browser table tennis game for 1–4 players, built around spin, pace and a full range of shots. See [PLAN.md](PLAN.md) for the full design and milestones.
 
-## Status: Milestone 2 — swing → contact
+## Status: Milestone 3 — rules, scoring and a match vs AI
+
+Open **Match vs AI** in the panel, choose an opponent and a format, and press **▶ Start match**.
+
+- **Opponents:** Intern (easy), Sysadmin (medium) and Principal Engineer (hard).
+- **Formats:** best of 1, 3, 5 or 7 games.
+
+**Serving**
+- Hold **Space** to toss: longer means higher, and the meter shows it.
+- Release, then swing as the ball drops.
+- Serve legality is checked: toss of at least 16 cm, struck while falling, behind the end line, above the playing surface.
+- The angle assist switches to serve mode while you serve: own half first, then the opponent's.
+- Serves are gentle strokes, so the stroke threshold is lower while serving.
+
+**Rules engine** (`src/game/rules.ts`): pure logic driven by physics events.
+- The serve bounce sequence, and lets (net touch then lands).
+- Double bounce, ball onto your own half, out and into the net.
+- Double hits.
+- Volleys: obstruction if the ball would have landed, otherwise the volleyer wins.
+- Aces.
+- Games to 11, win by 2.
+- Serve changes every 2 points, every point from 10–10; the first server alternates each game.
+- Best of N games.
+
+**AI opponent** (`src/game/ai.ts`)
+- **Same physics as you:** it predicts the ball and chooses a stroke for the incoming spin and height (push, loop, drive, block, smash, flick or chop). It then solves for a face angle that lands in the middle of the landing window, aimed at a target.
+- **Kinematic swing:** the blade really travels through the contact point at the planned moment.
+- **Difficulty only changes execution:** reaction time, footwork speed, and angle, aim and speed errors.
+
+**Call-outs**
+
+| Event | Call-out |
+|---|---|
+| Into the net | PACKET LOSS |
+| Off the table | 404 |
+| Bounced on own side | SEGFAULT |
+| Not returned | TIMEOUT |
+| Illegal serve | SYNTAX ERROR |
+| Ace | ZERO-DAY |
+| Let | RETRY |
+| Deuce | RACE CONDITION |
+| Game won / lost | DEPLOYED / ROLLBACK |
+| Match won / lost | SHIPPED TO PROD / INCIDENT REPORT |
+
+Practice against the ball machine (Milestone 2) is still there: **▶ Play** without starting a match.
+
+### Milestone 2 — swing → contact
 
 Play against the ball machine with a mouse-driven paddle. Click **▶ Play**: the mouse is captured and becomes the paddle.
 
@@ -81,10 +127,16 @@ src/game/      Engine-agnostic game logic (shared with AI and netcode later)
   assist.ts    Angle assist (contact-time landing solver)
   intercept.ts Where/when the incoming ball reaches the player
   shots.ts     Shot naming
+  frame.ts     Near/far end mapping (each player's logic runs as if at the near end)
+  rules.ts     Rally referee, serve legality, scoring and serve rotation
+  ai.ts        AI opponent (planning, stroke solving, difficulty)
+  match.ts     Match orchestration: serving, rallies, scoring (engine-agnostic)
+  messages.ts  IT-themed call-outs
 src/render/    Three.js scene, ball, paddle and player views
 src/sandbox/   Sandbox app (ball machine, play mode, HUD, controls)
-tests/         Vitest: physics, paddle contact, swing, assist, and an end-to-end
-               gameplay test that plays every machine preset through the real per-frame pipeline
+tests/         Vitest: physics, paddle contact, swing, assist, rules, an end-to-end
+               gameplay test vs every machine preset, full AI-vs-AI matches, and
+               scripted human serves/rallies against the AI
 ```
 
 World conventions: metres and seconds, +y up, the net at z = 0, and the player's (near) end at +z.

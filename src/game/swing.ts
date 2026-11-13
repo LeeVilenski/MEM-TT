@@ -41,6 +41,8 @@ export interface SwingParams {
    * just positioning the paddle and must not push it forward.
    */
   swingThreshold: number;
+  /** Stroke threshold while serving: serves are gentle strokes, and nothing can be hit by accident. */
+  serveThreshold: number;
   /** Time constant of velocity smoothing, seconds. */
   velocitySmoothing: number;
   /**
@@ -65,6 +67,7 @@ export const DEFAULT_SWING: SwingParams = {
   maxForwardTravel: 0.15,
   recoverySpeed: 2.5,
   swingThreshold: 1.5,
+  serveThreshold: 0.3,
   velocitySmoothing: 0.025,
   strokeHold: 0.12,
   strokeTravel: 0.3,
@@ -106,12 +109,12 @@ export function faceNormal(pitchDeg: number, yawDeg: number): Vec3 {
  * Paddle velocity for a planar swing velocity (in the hitting plane, m/s).
  * Exported for tests and for the AI later on.
  */
-export function strokeVelocity(mousePlanar: { x: number; y: number }, drive: boolean, hook: -1 | 0 | 1, p: SwingParams): Vec3 {
+export function strokeVelocity(mousePlanar: { x: number; y: number }, drive: boolean, hook: -1 | 0 | 1, p: SwingParams, threshold = p.swingThreshold): Vec3 {
   const planar = { x: mousePlanar.x * p.swingGain, y: mousePlanar.y * p.swingGain };
   const speed = Math.hypot(planar.x, planar.y);
   const brushScale = drive ? p.driveBrushScale : 1;
   // Forward drive ramps in above the stroke threshold (no jump at the threshold).
-  const over = Math.max(0, speed - p.swingThreshold * p.swingGain);
+  const over = Math.max(0, speed - threshold * p.swingGain);
   const forward = (drive ? p.driveForwardGain : p.brushForwardGain) * Math.min(speed, over * 2);
   // Brushing the back of the ball to +x makes it curve left (and vice versa).
   const hookVel = -hook * p.hookGain * speed;
@@ -129,6 +132,8 @@ export class SwingController {
   /** Extra yaw on top of the automatic aim, degrees. */
   yawOffset = 0;
   side: StrokeSide = 'forehand';
+  /** Serving: gentle strokes count (lower stroke threshold). */
+  serving = false;
   /** null = automatic forehand/backhand from paddle position. */
   forcedSide: StrokeSide | null = null;
 
@@ -167,7 +172,8 @@ export class SwingController {
     // paddle partly, so a flick keeps the blade on the ball's line instead of sweeping
     // it past. Lateral position is relative to the body, like an arm.
     const mouseSpeed = Math.hypot(rawVx, rawVy);
-    const posScale = mouseSpeed > p.swingThreshold ? p.swingThreshold / mouseSpeed + (1 - p.swingThreshold / mouseSpeed) * p.strokeTravel : 1;
+    const thr = this.serving ? p.serveThreshold : p.swingThreshold;
+    const posScale = mouseSpeed > thr ? thr / mouseSpeed + (1 - thr / mouseSpeed) * p.strokeTravel : 1;
     this.x = clamp(this.x + mx * posScale, -REACH.lateral, REACH.lateral);
     this.y = clamp(this.y + my * posScale, REACH.minHeight, REACH.maxHeight);
 
@@ -182,7 +188,7 @@ export class SwingController {
     }
 
     const hook = input.hookLeft === input.hookRight ? 0 : input.hookLeft ? -1 : 1;
-    let vel = strokeVelocity(this.planarVel, input.drive, hook, p);
+    let vel = strokeVelocity(this.planarVel, input.drive, hook, p, this.serving ? p.serveThreshold : p.swingThreshold);
 
     // Stroke memory: the strongest recent stroke stays "live" for strokeHold seconds,
     // fading out, so contact doesn't have to land on the exact frame of the flick.

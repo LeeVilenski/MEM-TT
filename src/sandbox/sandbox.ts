@@ -21,13 +21,16 @@ import {
   type Vec3,
 } from '../physics';
 import { Player } from '../game/player';
+import { AI_LEVELS, AiPlayer, type AiLevel } from '../game/ai';
 import { IncomingPrediction } from '../game/intercept';
+import { Match } from '../game/match';
+import { LET_MESSAGE, pointMessage } from '../game/messages';
 import { classifyShot } from '../game/shots';
 import { NO_INPUT, REACH, type SwingInput } from '../game/swing';
 import { BallView, spinColor } from '../render/ballView';
 import { PlayerView } from '../render/playerView';
 import { createScene } from '../render/scene';
-import { Hud, type ShotReport, type ReturnReport, type PracticeStats } from './hud';
+import { Hud, MatchHud, type ShotReport, type ReturnReport, type PracticeStats } from './hud';
 import { PRESETS, type Preset } from './presets';
 
 type CameraView = 'Player' | 'Side' | 'Top' | 'Broadcast' | 'Machine';
@@ -39,6 +42,9 @@ const CAMERA_VIEWS: Record<CameraView, { pos: [number, number, number]; target: 
   Broadcast: { pos: [-2.6, 2.9, 4.4], target: [0, 0.7, 0] },
   Machine: { pos: [0, 1.35, -3.4], target: [0, 0.8, 0.6] },
 };
+
+/** Holding Space this long gives the highest toss, seconds. */
+const TOSS_HOLD_MAX = 0.9;
 
 /** Where the auto-aimed paddle face points on the far half. */
 const AIM_POINT = { x: 0, z: -0.85 };
@@ -105,6 +111,14 @@ export class Sandbox {
   private mixIndex = 0;
   private lastReturn: ReturnReport | null = null;
 
+  // Match vs AI
+  match: Match | null = null;
+  private ai: AiPlayer | null = null;
+  private aiView: PlayerView;
+  private matchHud: MatchHud;
+  matchSettings = { level: 'medium' as AiLevel, bestOf: 3 };
+  private tossHoldStart: number | null = null;
+
   private report: ShotReport | null = null;
   private markers: THREE.Mesh[] = [];
   private predictionLine: THREE.Line;
@@ -131,6 +145,11 @@ export class Sandbox {
     this.player = new Player('p1', this.params);
     this.playerView = new PlayerView(this.scene);
     this.playerView.visible = false;
+    this.aiView = new PlayerView(this.scene, { bodyColor: 0xe8562a, bodyOpacity: 0.45 });
+    this.aiView.visible = false;
+    this.matchHud = new MatchHud(container);
+    this.matchHud.onRematch = () => this.startMatch();
+    this.matchHud.onExit = () => this.endMatch();
 
     this.predictionLine = new THREE.Line(
       new THREE.BufferGeometry(),
@@ -200,14 +219,17 @@ export class Sandbox {
     this.playing = on;
     this.controls.enabled = !on;
     this.playerView.visible = on;
-    this.targetRing.visible = !on;
+    this.targetRing.visible = !on && !this.match;
     this.hud.setPlaying(on);
     if (on) {
       this.input = { ...NO_INPUT };
       this.player.swing.reset(0.4, TABLE.height + 0.25, this.player.restZ, this.player.body.x);
-      this.phase = 'done';
-      this.sinceResolved = 0.5;
+      if (!this.match) {
+        this.phase = 'done';
+        this.sinceResolved = 0.5;
+      }
     } else {
+      this.tossHoldStart = null;
       this.setCamera(this.settings.camera);
     }
   }
@@ -244,6 +266,7 @@ export class Sandbox {
   }
 
   fire() {
+    if (this.match) return;
     if (this.playing && this.machine.mix) {
       const p = PRESETS[this.mixIndex++ % PRESETS.length];
       Object.assign(this.machine, this.settingsFromPreset(p));
@@ -448,14 +471,18 @@ export class Sandbox {
     const realDt = Math.min(0.1, (now - this.lastFrame) / 1000);
     this.lastFrame = now;
 
-    if (this.playing) this.updatePlayer(realDt);
-    if (!this.settings.paused) this.advance(realDt * this.settings.timeScale, realDt);
+    if (this.match) this.matchFrame(realDt);
+    else {
+      if (this.playing) this.updatePlayer(realDt);
+      if (!this.settings.paused) this.advance(realDt * this.settings.timeScale, realDt);
+    }
     if (this.playing) this.updatePlayCamera(realDt);
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
   }
 
-  private updatePlayer(realDt: number) {
+  /** Current human input (mouse deltas accumulated since the last frame, plus held keys). */
+  private gatherInput() {
     const k = this.keys;
     const input: SwingInput = {
       ...this.input,
@@ -468,15 +495,153 @@ export class Sandbox {
       x: (k.has('ArrowRight') ? 1 : 0) - (k.has('ArrowLeft') ? 1 : 0),
       z: (k.has('ArrowDown') ? 1 : 0) - (k.has('ArrowUp') ? 1 : 0),
     };
+    this.input.dx = 0;
+    this.input.dy = 0;
+    return { input, move };
+  }
+
+  private updatePlayer(realDt: number) {
+    const { input, move } = this.gatherInput();
     const now = this.sim?.time ?? 0;
     const intercept = this.computeIntercept(now)?.pos ?? null;
     this.player.intercept = intercept;
     this.player.update(realDt, input, move, AIM_POINT);
-    this.input.dx = 0;
-    this.input.dy = 0;
     this.playerView.update(this.player);
     this.playerView.setMarker(this.settings.showIntercept ? intercept : null);
     this.hud.setPaddle(this.player.swing.pitchDeg, this.player.swing.side, this.player.swing.forcedSide !== null, input.drive);
+  }
+
+  // ---------------------------------------------------------------- match vs AI
+
+  startMatch() {
+    this.endMatch(false);
+    const ai = (this.ai = new AiPlayer('far', AI_LEVELS[this.matchSettings.level], this.params));
+    const match = (this.match = new Match(
+      this.params,
+      { near: { kind: 'human', player: this.player }, far: { kind: 'ai', ai } },
+      { bestOf: this.matchSettings.bestOf, pointsToWin: 11, firstServer: Math.random() < 0.5 ? 'near' : 'far' },
+    ));
+    const names = { near: 'You', far: ai.profile.name };
+    match.on((e) => {
+      switch (e.type) {
+        case 'toss':
+          this.ball.clearTrail();
+          this.clearMarkers();
+          break;
+        case 'hit': {
+          const h = e.event;
+          const info = classifyShot(h.pos, h.velOut, h.spinOut, h.paddleVel, h.velIn, h.spinIn);
+          this.matchHud.addShot({ who: e.side === 'near' ? 'You' : ai.profile.name, name: e.serve ? 'Serve' : info.name, speed: info.speed, rpm: info.rpm, top: info.top });
+          this.ball.clearTrail();
+          break;
+        }
+        case 'ball':
+          if (e.event.type === 'table') this.addMarker(e.event.pos, spinColor(e.event.velIn, e.event.spinIn));
+          break;
+        case 'let':
+          this.hud.flash(LET_MESSAGE.title, LET_MESSAGE.sub);
+          break;
+        case 'point': {
+          const m = pointMessage(e.result, names);
+          if (e.match) this.hud.flash(e.result.winner === 'near' ? 'SHIPPED TO PROD' : 'INCIDENT REPORT', e.result.winner === 'near' ? 'You won the match!' : `${ai.profile.name} won the match`);
+          else if (e.game) this.hud.flash(e.result.winner === 'near' ? 'DEPLOYED' : 'ROLLBACK', `Game to ${names[e.result.winner]} — ${m.title}: ${m.sub}`);
+          else this.hud.flash(m.title, m.sub);
+          break;
+        }
+      }
+    });
+    this.machineMesh.visible = false;
+    this.targetRing.visible = false;
+    this.predictionLine.visible = false;
+    this.sim = null;
+    this.ball.visible = true;
+    this.aiView.visible = true;
+    this.hud.setMatchMode(true);
+    this.matchHud.show(true);
+    this.matchHud.hideOver();
+    this.clearMarkers();
+    this.requestPlay();
+  }
+
+  endMatch(restoreUi = true) {
+    if (!this.match) return;
+    this.match = null;
+    this.ai = null;
+    this.tossHoldStart = null;
+    this.aiView.visible = false;
+    this.matchHud.show(false);
+    if (!restoreUi) return;
+    this.machineMesh.visible = true;
+    this.targetRing.visible = !this.playing;
+    this.ball.visible = false;
+    this.hud.setMatchMode(false);
+    this.phase = 'done';
+    this.sinceResolved = 0;
+  }
+
+  private matchFrame(realDt: number) {
+    const match = this.match!;
+    const ai = this.ai!;
+    const running = this.playing && !this.settings.paused && match.phase !== 'match-over';
+    if (running) {
+      const { input, move } = this.gatherInput();
+      match.frame(realDt * this.settings.timeScale, realDt, { side: 'near', input, move });
+      this.hud.setPaddle(this.player.swing.pitchDeg, this.player.swing.side, this.player.swing.forcedSide !== null, input.drive);
+    }
+
+    // Players and ball.
+    this.playerView.update(this.player);
+    this.playerView.setMarker(this.settings.showIntercept ? match.interceptFor('near') : null);
+    const pose = ai.worldPose;
+    const body = ai.worldBody;
+    this.aiView.updatePose(pose, body, pose.pos.x <= body.x ? 'forehand' : 'backhand');
+    const state = match.sim?.state ?? { pos: match.ballRenderPos(), vel: v3(), spin: v3() };
+    if (running && match.sim) this.ball.rotate(state.spin, realDt * this.settings.timeScale);
+    this.ball.update(match.ballRenderPos(), state);
+    if (!match.sim) this.ball.clearTrail();
+
+    // Scoreboard.
+    const sc = match.score;
+    const gp = sc.gamePoint();
+    const mp = sc.matchPoint();
+    const badge = sc.deuce ? 'DEUCE · RACE CONDITION' : mp ? `MATCH POINT · ${mp === 'near' ? 'You' : ai.profile.name}` : gp ? `GAME POINT · ${gp === 'near' ? 'You' : ai.profile.name}` : null;
+    this.matchHud.setScore({
+      you: 'You',
+      them: `${ai.profile.name} (AI)`,
+      points: [sc.points.near, sc.points.far],
+      games: [sc.games.near, sc.games.far],
+      youServe: (match.phase === 'rally' || match.phase === 'point-over') && match.referee ? match.referee.server === 'near' : sc.server === 'near',
+      badge,
+      bestOf: sc.config.bestOf,
+    });
+
+    // Prompts.
+    if (match.phase === 'match-over') {
+      const won = sc.winner === 'near';
+      const games = sc.history.map((g) => `${g.near}–${g.far}`).join('  ·  ');
+      this.matchHud.setPrompt(null);
+      this.matchHud.setMeter(null);
+      this.matchHud.showOver(won ? 'SHIPPED TO PROD' : 'INCIDENT REPORT', won ? `You beat ${ai.profile.name} ${sc.games.near}–${sc.games.far}` : `${ai.profile.name} won ${sc.games.far}–${sc.games.near}`, games);
+      if (document.pointerLockElement) document.exitPointerLock();
+      return;
+    }
+    if (!this.playing) {
+      this.matchHud.setPrompt('Match paused — click <b>▶ Resume match</b> to continue');
+      this.matchHud.setMeter(null);
+    } else if (match.humanToServe) {
+      this.matchHud.setPrompt('Your serve: hold <kbd>Space</kbd> to toss (longer = higher), release, then swing as it drops');
+      this.matchHud.setMeter(this.tossHoldStart !== null ? (performance.now() - this.tossHoldStart) / 1000 / TOSS_HOLD_MAX : null);
+    } else {
+      this.matchHud.setPrompt(null);
+      this.matchHud.setMeter(null);
+    }
+  }
+
+  private releaseToss() {
+    if (this.tossHoldStart === null || !this.match) return;
+    const held = Math.min(TOSS_HOLD_MAX, (performance.now() - this.tossHoldStart) / 1000);
+    this.tossHoldStart = null;
+    this.match.toss(0.2 + (held / TOSS_HOLD_MAX) * 0.9);
   }
 
   private updatePlayCamera(dt: number) {
@@ -549,6 +714,12 @@ export class Sandbox {
     if (down) this.keys.add(e.code);
     else this.keys.delete(e.code);
     if (this.playing && e.code.startsWith('Arrow')) e.preventDefault();
+    if (e.code === 'Space' && this.match) {
+      e.preventDefault();
+      if (down && !e.repeat && this.playing && this.match.humanToServe) this.tossHoldStart = performance.now();
+      if (!down) this.releaseToss();
+      return;
+    }
     if (!down) return;
 
     if (e.code === 'Space') {
@@ -615,6 +786,13 @@ export class Sandbox {
     const onMachine = () => this.updateMachineVisuals();
 
     gui.add({ play: () => this.requestPlay() }, 'play').name('▶ Play  (Esc to leave)');
+
+    const mt = gui.addFolder('Match vs AI');
+    const levelNames = Object.fromEntries(Object.entries(AI_LEVELS).map(([k, v]) => [`${v.name} (${k})`, k]));
+    mt.add(this.matchSettings, 'level', levelNames).name('Opponent');
+    mt.add(this.matchSettings, 'bestOf', { 'Best of 1': 1, 'Best of 3': 3, 'Best of 5': 5, 'Best of 7': 7 }).name('Format');
+    mt.add({ start: () => this.startMatch() }, 'start').name('▶ Start match');
+    mt.add({ end: () => this.endMatch() }, 'end').name('End match (back to practice)');
 
     const pl = gui.addFolder('Player');
     const rubberNames = Object.fromEntries(Object.values(RUBBERS).map((r) => [`${r.name} (${r.kind})`, r.id]));

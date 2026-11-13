@@ -25,21 +25,61 @@ function rotate(v: Vec3, axis: Vec3, rad: number): Vec3 {
 }
 
 export type LandingOutcome = 'in' | 'short' | 'long' | 'wide';
+/** A rally shot must land on the far half; a serve must bounce on the near half, then the far half. */
+export type ShotMode = 'rally' | 'serve';
 
-/** Where a hit with this face normal would land: on the far half, into the net/own side, or long. */
-export function landingOutcome(ball: BallState, pose: PaddlePose, normal: Vec3, rubber: Rubber, params: PhysicsParams): { outcome: LandingOutcome; z?: number } {
+/**
+ * Where a hit with this face normal would land, in the hitter's frame (hitter at +z).
+ * 'short' = into the net / own side; 'long' = past the far end.
+ */
+export function landingOutcome(
+  ball: BallState,
+  pose: PaddlePose,
+  normal: Vec3,
+  rubber: Rubber,
+  params: PhysicsParams,
+  mode: ShotMode = 'rally',
+): { outcome: LandingOutcome; pos?: Vec3 } {
   const s = cloneState(ball);
   if (paddleImpulse(s, { ...pose, normal }, rubber) <= 0) return { outcome: 'short' };
-  const { events } = predict(s, params, { maxTime: 2, dt: 1 / 120, sampleEvery: 1000, maxTravel: 0.018, stop: (e) => e.type === 'table' || e.type === 'floor' });
-  const land = events.find((e) => e.type === 'table' || e.type === 'floor');
+  let tables = 0;
+  const { events } = predict(s, params, {
+    maxTime: 2.5,
+    dt: 1 / 120,
+    sampleEvery: 1000,
+    maxTravel: 0.018,
+    stop: (e) => e.type === 'floor' || (e.type === 'table' && ++tables >= (mode === 'serve' ? 2 : 1)),
+  });
+  const bounces = events.filter((e) => e.type === 'table');
+  const netTouched = events.some((e) => e.type === 'net');
+  const floor = events.find((e) => e.type === 'floor');
+  const crossedFar = events.some((e) => e.type === 'netCross' && e.direction === 'far');
+
+  if (mode === 'serve') {
+    const [first, second] = bounces;
+    if (!first) return { outcome: crossedFar ? 'long' : 'short' };
+    if (first.pos.z < 0) return { outcome: 'long' }; // didn't bounce on own half first
+    if (!second) return { outcome: crossedFar ? 'long' : 'short' };
+    if (second.pos.z > 0 || netTouched) return { outcome: 'short' };
+    return { outcome: 'in', pos: second.pos };
+  }
+
+  const land = bounces[0] ?? floor;
   if (!land) return { outcome: 'long' };
   if (land.type === 'table') {
     if (land.pos.z > 0) return { outcome: 'short' };
-    return { outcome: 'in', z: land.pos.z };
+    return { outcome: 'in', pos: land.pos };
   }
-  const crossed = events.some((e) => e.type === 'netCross' && e.direction === 'far');
-  if (!crossed) return { outcome: 'short' };
+  if (!crossedFar) return { outcome: 'short' };
   return { outcome: Math.abs(land.pos.x) > TABLE.halfWidth && land.pos.z > -TABLE.halfLength ? 'wide' : 'long' };
+}
+
+/** Rotate a face normal about its horizontal pitch axis by `deg` (positive or negative). */
+export function pitchRotator(normal: Vec3): ((deg: number) => Vec3) | null {
+  let axis = cross(normal, UP);
+  if (length(axis) < 1e-6) return null;
+  axis = normalize(axis);
+  return (deg: number) => rotate(normal, axis, (deg * Math.PI) / 180);
 }
 
 /**
@@ -50,19 +90,16 @@ export function landingOutcome(ball: BallState, pose: PaddlePose, normal: Vec3, 
  * The player's choice still decides where within that window the ball goes —
  * deep or short, spinny or flat.
  */
-export function makeAngleAssist(params: PhysicsParams, strength: () => number) {
+export function makeAngleAssist(params: PhysicsParams, strength: () => number, mode: () => ShotMode = () => 'rally') {
   const STEP = 6;
   const RANGE = 60;
   return (ball: BallState, pose: PaddlePose, normal: Vec3, rubber: Rubber): Vec3 => {
     const k = strength();
     if (k <= 0) return normal;
-    // Pitch axis: horizontal, perpendicular to the face normal.
-    let axis = cross(normal, UP);
-    if (length(axis) < 1e-6) return normal;
-    axis = normalize(axis);
-    const at = (deg: number) => rotate(normal, axis, (deg * Math.PI) / 180);
-
-    const outcomeAt = (deg: number) => landingOutcome(ball, pose, at(deg), rubber, params).outcome;
+    const at = pitchRotator(normal);
+    if (!at) return normal;
+    const m = mode();
+    const outcomeAt = (deg: number) => landingOutcome(ball, pose, at(deg), rubber, params, m).outcome;
     if (outcomeAt(0) === 'in') return normal;
 
     // Coarse scan of the whole pitch range; pick the landing angle nearest the player's.

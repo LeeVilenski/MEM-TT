@@ -57,6 +57,8 @@ const INSPECT_HELP = [
   'drag: orbit · wheel: zoom',
 ];
 
+const MATCH_HELP = '<kbd>Space</kbd> hold/release: toss (when serving)';
+
 const PLAY_HELP = [
   'mouse: move paddle · <b>flick</b> to swing (up = topspin, down = backspin)',
   '<kbd>LMB</kbd> hold: drive',
@@ -102,12 +104,24 @@ export class Hud {
     this.setStats({ attempts: 0, made: 0, streak: 0, best: 0 });
   }
 
+  private matchMode = false;
+
   setPlaying(on: boolean) {
     this.playing = on;
-    this.help.innerHTML = (on ? PLAY_HELP : INSPECT_HELP).join('<span class="sep">·</span>');
+    const help = on ? (this.matchMode ? [MATCH_HELP, ...PLAY_HELP] : PLAY_HELP) : INSPECT_HELP;
+    this.help.innerHTML = help.join('<span class="sep">·</span>');
     this.startEl.style.display = on ? 'none' : 'flex';
     this.paddleEl.style.display = on ? 'block' : 'none';
-    this.statsEl.style.display = on ? 'block' : 'none';
+    this.statsEl.style.display = on && !this.matchMode ? 'block' : 'none';
+  }
+
+  /** In a match the practice readout and stats give way to the match HUD. */
+  setMatchMode(on: boolean) {
+    this.matchMode = on;
+    this.panel.style.display = on ? 'none' : 'block';
+    this.startEl.querySelector('button')!.textContent = on ? '▶ Resume match' : '▶ Play vs ball machine';
+    this.setAimWarning(null);
+    this.setPlaying(this.playing);
   }
 
   setAimWarning(msg: string | null) {
@@ -186,4 +200,108 @@ function el(tag: string, cls: string) {
   const e = document.createElement(tag) as HTMLDivElement;
   e.className = cls;
   return e;
+}
+
+// ---------------------------------------------------------------- match HUD
+
+export interface ScoreView {
+  you: string;
+  them: string;
+  points: [number, number];
+  games: [number, number];
+  /** True if you serve next / are serving. */
+  youServe: boolean;
+  badge: string | null;
+  bestOf: number;
+}
+
+export interface ShotLine {
+  who: string;
+  name: string;
+  speed: number;
+  rpm: number;
+  top: number;
+}
+
+/** Scoreboard, serve prompt, toss meter, compact shot log and match-over screen. */
+export class MatchHud {
+  private board: HTMLDivElement;
+  private prompt: HTMLDivElement;
+  private meter: HTMLDivElement;
+  private meterFill: HTMLDivElement;
+  private shots: HTMLDivElement;
+  private over: HTMLDivElement;
+  private shotLog: ShotLine[] = [];
+  onRematch: () => void = () => {};
+  onExit: () => void = () => {};
+
+  constructor(container: HTMLElement) {
+    this.board = el('div', 'mhud-board');
+    this.prompt = el('div', 'mhud-prompt');
+    this.meter = el('div', 'mhud-meter');
+    this.meterFill = el('div', 'mhud-meter-fill');
+    this.meter.append(this.meterFill);
+    this.shots = el('div', 'mhud-shots');
+    this.over = el('div', 'mhud-over');
+    container.append(this.board, this.prompt, this.meter, this.shots, this.over);
+    this.show(false);
+  }
+
+  show(on: boolean) {
+    for (const e of [this.board, this.shots]) e.style.display = on ? 'block' : 'none';
+    if (!on) {
+      this.prompt.style.display = 'none';
+      this.meter.style.display = 'none';
+      this.over.style.display = 'none';
+      this.shotLog = [];
+      this.shots.innerHTML = '';
+    }
+  }
+
+  setScore(s: ScoreView) {
+    const serve = (mine: boolean) => (mine ? '<span class="serve-dot" title="Serving"></span>' : '<span class="serve-dot off"></span>');
+    this.board.innerHTML = `
+      <div class="mrow">${serve(s.youServe)}<span class="mname">${s.you}</span><span class="mgames">${s.games[0]}</span><span class="mpts">${s.points[0]}</span></div>
+      <div class="mrow">${serve(!s.youServe)}<span class="mname">${s.them}</span><span class="mgames">${s.games[1]}</span><span class="mpts">${s.points[1]}</span></div>
+      <div class="mfoot">Best of ${s.bestOf}${s.badge ? ` · <b>${s.badge}</b>` : ''}</div>`;
+  }
+
+  setPrompt(html: string | null) {
+    this.prompt.innerHTML = html ?? '';
+    this.prompt.style.display = html ? 'block' : 'none';
+  }
+
+  /** Toss meter while holding Space: 0–1, null hides it. */
+  setMeter(v: number | null) {
+    this.meter.style.display = v === null ? 'none' : 'block';
+    if (v !== null) this.meterFill.style.width = `${Math.round(Math.min(1, v) * 100)}%`;
+  }
+
+  addShot(line: ShotLine) {
+    this.shotLog.unshift(line);
+    this.shotLog = this.shotLog.slice(0, 4);
+    this.shots.innerHTML = this.shotLog
+      .map(
+        (l, i) =>
+          `<div class="mshot${i === 0 ? ' latest' : ''}"><span class="who">${l.who}</span> <b>${l.name}</b> <span class="num">${l.speed.toFixed(1)} m/s · ${Math.round(l.rpm).toLocaleString()} rpm ${l.top >= 0 ? 'top' : 'back'}</span></div>`,
+      )
+      .join('');
+  }
+
+  clearShots() {
+    this.shotLog = [];
+    this.shots.innerHTML = '';
+  }
+
+  showOver(title: string, sub: string, games: string) {
+    this.over.innerHTML = `<div class="mover-card"><div class="mover-title">${title}</div><div class="mover-sub">${sub}</div><div class="mover-games">${games}</div>
+      <div class="mover-buttons"><button type="button" data-a="rematch">Rematch</button><button type="button" data-a="exit" class="secondary">Back to practice</button></div></div>`;
+    this.over.style.display = 'flex';
+    this.over.querySelector('[data-a=rematch]')!.addEventListener('click', () => this.onRematch());
+    this.over.querySelector('[data-a=exit]')!.addEventListener('click', () => this.onExit());
+  }
+
+  hideOver() {
+    this.over.style.display = 'none';
+  }
 }
