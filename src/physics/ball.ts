@@ -1,5 +1,6 @@
 import { BALL, GRAVITY, AIR_DENSITY, MAX_SUBSTEP_TRAVEL, NET, TABLE, type PhysicsParams } from './constants';
 import { add, addScaled, clone, cross, dot, length, scale, sub, v3, type Vec3 } from './vec3';
+import { PADDLE, paddleContact, paddleImpulse, type PaddlePose, type Rubber } from './paddle';
 
 export interface BallState {
   pos: Vec3;
@@ -16,7 +17,43 @@ export type BallEvent =
   | { type: 'net'; time: number; pos: Vec3; part: 'tape' | 'mesh' }
   /** Ball centre passed the plane of the net. clearance = gap between ball bottom and net top (negative = would have hit). */
   | { type: 'netCross'; time: number; pos: Vec3; clearance: number; direction: Side }
-  | { type: 'floor'; time: number; pos: Vec3 };
+  | { type: 'floor'; time: number; pos: Vec3 }
+  | {
+      type: 'paddle';
+      time: number;
+      pos: Vec3;
+      paddleId: string;
+      face: 'front' | 'back';
+      impactSpeed: number;
+      paddleVel: Vec3;
+      velIn: Vec3;
+      velOut: Vec3;
+      spinIn: Vec3;
+      spinOut: Vec3;
+    };
+
+/**
+ * A moving paddle the ball can collide with during a step. poseAt(f) gives the
+ * paddle pose at fraction f ∈ [0, 1] of the current step, so fast swings are
+ * swept correctly rather than teleporting between frames.
+ */
+export interface PaddleCollider {
+  id: string;
+  poseAt(f: number): PaddlePose;
+  /** Rubber on the front face (normal side) and back face. */
+  front: Rubber;
+  back: Rubber;
+  /** Widen the hittable area (assist). */
+  extraRadius?: number;
+  /**
+   * Optional hook to adjust the face normal at the moment of contact (the angle
+   * assist). Receives a copy of the ball state just before impact.
+   */
+  adjustNormal?: (ball: BallState, pose: PaddlePose, normal: Vec3, rubber: Rubber) => Vec3;
+}
+
+/** Minimum time between two hits by the same paddle (prevents double contacts). */
+const PADDLE_COOLDOWN = 0.12;
 
 const AREA = Math.PI * BALL.radius * BALL.radius;
 /** Moment of inertia of a thin hollow sphere: (2/3) m r². */
@@ -92,19 +129,63 @@ export class BallSim {
   constructor(
     state: BallState,
     public params: PhysicsParams,
+    /** Max ball travel per sub-step. Coarser values are fine for quick what-if predictions. */
+    public maxTravel = MAX_SUBSTEP_TRAVEL,
   ) {
     this.state = cloneState(state);
   }
 
-  step(dt: number, events?: BallEvent[]): void {
+  private lastPaddleHit = new Map<string, number>();
+
+  step(dt: number, events?: BallEvent[], paddles?: readonly PaddleCollider[]): void {
     if (this.atRest) {
       this.time += dt;
       return;
     }
-    const speed = length(this.state.vel);
-    const n = Math.min(64, Math.max(1, Math.ceil((speed * dt) / MAX_SUBSTEP_TRAVEL)));
+    let speed = length(this.state.vel);
+    if (paddles) for (const p of paddles) speed += length(p.poseAt(0.5).vel);
+    const n = Math.min(96, Math.max(1, Math.ceil((speed * dt) / this.maxTravel)));
     const h = dt / n;
-    for (let i = 0; i < n; i++) this.substep(h, events);
+    for (let i = 0; i < n; i++) {
+      this.substep(h, events);
+      if (paddles) this.collidePaddles(paddles, (i + 1) / n, events);
+    }
+  }
+
+  private collidePaddles(paddles: readonly PaddleCollider[], f: number, events?: BallEvent[]) {
+    const s = this.state;
+    for (const p of paddles) {
+      const last = this.lastPaddleHit.get(p.id);
+      if (last !== undefined && this.time - last < PADDLE_COOLDOWN) continue;
+      const pose = p.poseAt(f);
+      const n = paddleContact(s.pos, pose, p.extraRadius ?? 0);
+      if (!n) continue;
+      const face = n === pose.normal ? 'front' : 'back';
+      const rubber = face === 'front' ? p.front : p.back;
+      const velIn = clone(s.vel);
+      const spinIn = clone(s.spin);
+      const normal = p.adjustNormal ? p.adjustNormal(cloneState(s), pose, n, rubber) : n;
+      const impact = paddleImpulse(s, { ...pose, normal }, rubber);
+      if (impact <= 0) continue;
+      // Place the ball just off the face.
+      const d = sub(s.pos, pose.pos);
+      const inPlane = sub(d, scale(n, dot(d, n)));
+      s.pos = add(add(pose.pos, inPlane), scale(n, BALL.radius + PADDLE.thickness / 2 + 1e-4));
+      this.lastPaddleHit.set(p.id, this.time);
+      events?.push({
+        type: 'paddle',
+        time: this.time,
+        pos: clone(s.pos),
+        paddleId: p.id,
+        face,
+        impactSpeed: impact,
+        paddleVel: clone(pose.vel),
+        velIn,
+        velOut: clone(s.vel),
+        spinIn,
+        spinOut: clone(s.spin),
+      });
+    }
   }
 
   private substep(h: number, events?: BallEvent[]): void {
@@ -200,10 +281,10 @@ export interface PredictResult {
 export function predict(
   start: BallState,
   params: PhysicsParams,
-  opts: { maxTime?: number; dt?: number; sampleEvery?: number; stop?: (e: BallEvent) => boolean } = {},
+  opts: { maxTime?: number; dt?: number; sampleEvery?: number; maxTravel?: number; stop?: (e: BallEvent) => boolean } = {},
 ): PredictResult {
-  const { maxTime = 3, dt = 1 / 240, sampleEvery = 2, stop } = opts;
-  const sim = new BallSim(start, params);
+  const { maxTime = 3, dt = 1 / 240, sampleEvery = 2, maxTravel, stop } = opts;
+  const sim = new BallSim(start, params, maxTravel);
   const path: Vec3[] = [clone(sim.state.pos)];
   const events: BallEvent[] = [];
   let tick = 0;

@@ -1,4 +1,6 @@
 import type { Side, SpinComponents } from '../physics';
+import type { ShotInfo } from '../game/shots';
+import type { StrokeSide } from '../game/swing';
 
 export interface BounceReport {
   side: Side;
@@ -26,38 +28,91 @@ export interface ShotReport {
   result?: 'IN' | 'OUT' | 'FAULT';
 }
 
+export interface ReturnReport extends ShotInfo {
+  paddleSpeed: number;
+  wing: StrokeSide | null;
+  rubber: string;
+  netClearance?: number;
+  result?: 'IN' | 'OUT' | 'OWN SIDE' | 'MISSED';
+}
+
+export interface PracticeStats {
+  attempts: number;
+  made: number;
+  streak: number;
+  best: number;
+}
+
 const fmt = (n: number, d = 1) => n.toFixed(d);
 const kmh = (ms: number) => Math.round(ms * 3.6);
 const rps = (c: SpinComponents) => `top ${fmt(c.top, 0)} · side ${fmt(c.side, 0)} · cork ${fmt(c.cork, 0)} rps`;
 
-/** DOM overlay: the shot readout panel, flash messages and help text. */
+const INSPECT_HELP = [
+  '<kbd>Space</kbd> fire',
+  '<kbd>P</kbd> pause',
+  '<kbd>.</kbd> step',
+  '<kbd>1</kbd>–<kbd>5</kbd> cameras',
+  '<kbd>C</kbd> clear marks',
+  '<kbd>Shift</kbd>+click table: set target',
+  'drag: orbit · wheel: zoom',
+];
+
+const PLAY_HELP = [
+  'mouse: move paddle · <b>flick</b> to swing (up = topspin, down = backspin)',
+  '<kbd>LMB</kbd> hold: drive',
+  '<kbd>W</kbd>/<kbd>S</kbd> close/open face',
+  'wheel: base angle',
+  '<kbd>A</kbd>/<kbd>D</kbd> hook left/right',
+  '<kbd>Shift</kbd> FH/BH lock',
+  '<kbd>←→↑↓</kbd> footwork',
+  '<kbd>Esc</kbd> exit',
+];
+
+/** DOM overlay: shot readouts, practice stats, paddle indicator, flash messages and help. */
 export class Hud {
   private panel: HTMLDivElement;
   private flashEl: HTMLDivElement;
   private warnEl: HTMLDivElement;
+  private help: HTMLDivElement;
+  private startEl: HTMLDivElement;
+  private paddleEl: HTMLDivElement;
+  private statsEl: HTMLDivElement;
   private flashTimer = 0;
+  private playing = false;
+  onStartPlay: () => void = () => {};
 
   constructor(container: HTMLElement) {
     this.panel = el('div', 'hud-panel');
-    this.panel.innerHTML = `<div class="hud-title">Shot readout</div><div class="hud-muted">Press <kbd>Space</kbd> to fire the ball machine.</div>`;
+    this.panel.innerHTML = `<div class="hud-title">Shot readout</div><div class="hud-muted">Press <kbd>Space</kbd> to fire the ball machine, or <b>Play</b> to hit back.</div>`;
     this.flashEl = el('div', 'hud-flash');
     this.warnEl = el('div', 'hud-warn');
-    const help = el('div', 'hud-help');
-    help.innerHTML = [
-      '<kbd>Space</kbd> fire',
-      '<kbd>P</kbd> pause',
-      '<kbd>.</kbd> step',
-      '<kbd>1</kbd>–<kbd>5</kbd> cameras',
-      '<kbd>C</kbd> clear marks',
-      '<kbd>Shift</kbd>+click table: set target',
-      'drag: orbit · wheel: zoom',
-    ].join('<span class="sep">·</span>');
-    container.append(this.panel, this.flashEl, this.warnEl, help);
+    this.help = el('div', 'hud-help');
+
+    this.startEl = el('div', 'hud-start');
+    this.startEl.innerHTML = `<button type="button">▶ Play vs ball machine</button><div class="hud-start-sub">Your mouse becomes the paddle. Flick to swing. <kbd>Esc</kbd> to get the cursor back.</div>`;
+    this.startEl.querySelector('button')!.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.onStartPlay();
+    });
+
+    this.paddleEl = el('div', 'hud-paddle');
+    this.statsEl = el('div', 'hud-stats');
+    container.append(this.panel, this.flashEl, this.warnEl, this.help, this.startEl, this.paddleEl, this.statsEl);
+    this.setPlaying(false);
+    this.setStats({ attempts: 0, made: 0, streak: 0, best: 0 });
+  }
+
+  setPlaying(on: boolean) {
+    this.playing = on;
+    this.help.innerHTML = (on ? PLAY_HELP : INSPECT_HELP).join('<span class="sep">·</span>');
+    this.startEl.style.display = on ? 'none' : 'flex';
+    this.paddleEl.style.display = on ? 'block' : 'none';
+    this.statsEl.style.display = on ? 'block' : 'none';
   }
 
   setAimWarning(msg: string | null) {
     this.warnEl.textContent = msg ?? '';
-    this.warnEl.style.display = msg ? 'block' : 'none';
+    this.warnEl.style.display = msg && !this.playing ? 'block' : 'none';
   }
 
   flash(title: string, sub: string) {
@@ -69,25 +124,61 @@ export class Hud {
     this.flashTimer = window.setTimeout(() => this.flashEl.classList.remove('show'), 1400);
   }
 
-  showShot(r: ShotReport) {
+  setPaddle(pitch: number, wing: StrokeSide, locked: boolean, drive: boolean) {
+    const p = Math.round(pitch);
+    const face = p === 0 ? 'square' : p > 0 ? `${p}° open` : `${-p}° closed`;
+    this.paddleEl.innerHTML = `<span class="wing ${wing}">${wing === 'forehand' ? 'FH' : 'BH'}${locked ? ' 🔒' : ''}</span> Face <b>${face}</b>${drive ? ' <span class="drive">DRIVE</span>' : ''}`;
+  }
+
+  setStats(s: PracticeStats) {
+    const pct = s.attempts ? Math.round((100 * s.made) / s.attempts) : 0;
+    this.statsEl.innerHTML = `<b>${s.made}</b>/${s.attempts} returns in (${pct}%) · streak <b>${s.streak}</b> · best <b>${s.best}</b>`;
+  }
+
+  /**
+   * @param ret undefined: no return section (inspect mode); null: waiting for the player's return.
+   */
+  showShot(r: ShotReport, ret?: ReturnReport | null) {
     const rows: string[] = [];
     const row = (k: string, v: string) => rows.push(`<div class="hud-row"><span>${k}</span><b>${v}</b></div>`);
+    rows.push(`<div class="hud-title">${ret === undefined ? '' : 'Incoming: '}${r.name}${r.aimOk ? '' : ' <span class="hud-bad">(target unreachable)</span>'}</div>`);
     row('Launch', `${fmt(r.speed)} m/s (${kmh(r.speed)} km/h) @ ${fmt(r.elevation)}°`);
     row('Spin', `${Math.round(r.rpm).toLocaleString()} rpm`);
     rows.push(`<div class="hud-sub">${r.spinLabel} — ${rps(r.spin)}</div>`);
     if (r.netClearance !== undefined) row('Net clearance', `${fmt(r.netClearance * 100)} cm`);
     if (r.netTouches) row('Net', `touched ×${r.netTouches}`);
-    r.bounces.slice(0, 3).forEach((b, i) => {
+
+    // In play mode keep the incoming section short; the return matters more.
+    const bounces = ret === undefined ? r.bounces.slice(0, 3) : r.bounces.slice(0, 1);
+    bounces.forEach((b, i) => {
       rows.push(`<div class="hud-section">Bounce ${i + 1} · ${b.side} side · ${fmt(b.time, 2)} s</div>`);
       row('Speed in → out', `${fmt(b.speedIn)} → ${fmt(b.speedOut)} m/s`);
       row('Kick angle', `${fmt(b.angleOut, 0)}° up`);
       row('Spin after', `${Math.round(b.rpmOut).toLocaleString()} rpm`);
       rows.push(`<div class="hud-sub">${rps(b.spinOut)}</div>`);
     });
-    const result = r.result
-      ? `<div class="hud-result ${r.result.toLowerCase()}">${r.result === 'IN' ? 'IN' : r.result === 'OUT' ? 'OUT · 404' : 'FAULT'}</div>`
-      : '';
-    this.panel.innerHTML = `<div class="hud-title">${r.name}${r.aimOk ? '' : ' <span class="hud-bad">(target unreachable)</span>'}</div>${rows.join('')}${result}`;
+
+    if (ret === undefined) {
+      if (r.result) rows.push(`<div class="hud-result ${r.result.toLowerCase()}">${r.result === 'IN' ? 'IN' : r.result === 'OUT' ? 'OUT · 404' : 'FAULT'}</div>`);
+    } else if (ret === null) {
+      rows.push(`<div class="hud-section">Your return</div><div class="hud-muted">Waiting… move the paddle to the ring and flick.</div>`);
+    } else {
+      rows.push(`<div class="hud-section ret">Your return: <span class="shot-name">${ret.name}</span></div>`);
+      if (ret.result !== 'MISSED') {
+        row('Ball speed', `${fmt(ret.speed)} m/s (${kmh(ret.speed)} km/h)`);
+        row('Spin', `${Math.round(ret.rpm).toLocaleString()} rpm`);
+        rows.push(`<div class="hud-sub">${rps({ top: ret.top, side: ret.side, cork: ret.cork })}</div>`);
+        row('Paddle speed', `${fmt(ret.paddleSpeed)} m/s`);
+        row('Launch angle', `${fmt(ret.elevation, 0)}°`);
+        if (ret.netClearance !== undefined) row('Net clearance', `${fmt(ret.netClearance * 100)} cm`);
+        row('Wing / rubber', `${ret.wing === 'forehand' ? 'FH' : 'BH'} · ${ret.rubber}`);
+      }
+      if (ret.result) {
+        const cls = ret.result === 'IN' ? 'in' : 'out';
+        rows.push(`<div class="hud-result ${cls}">${ret.result === 'IN' ? 'IN ✓' : ret.result}</div>`);
+      }
+    }
+    this.panel.innerHTML = rows.join('');
   }
 }
 

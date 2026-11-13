@@ -4,13 +4,13 @@ import GUI from 'lil-gui';
 import {
   BallSim,
   DEFAULT_PARAMS,
+  RUBBERS,
   TABLE,
   TICK_DT,
   describeSpin,
   launchDirection,
   launchState,
   lerp,
-  predict,
   radToRpm,
   solveAim,
   spinComponents,
@@ -20,9 +20,14 @@ import {
   type PhysicsParams,
   type Vec3,
 } from '../physics';
+import { Player } from '../game/player';
+import { IncomingPrediction } from '../game/intercept';
+import { classifyShot } from '../game/shots';
+import { NO_INPUT, REACH, type SwingInput } from '../game/swing';
 import { BallView, spinColor } from '../render/ballView';
+import { PlayerView } from '../render/playerView';
 import { createScene } from '../render/scene';
-import { Hud, type ShotReport } from './hud';
+import { Hud, type ShotReport, type ReturnReport, type PracticeStats } from './hud';
 import { PRESETS, type Preset } from './presets';
 
 type CameraView = 'Player' | 'Side' | 'Top' | 'Broadcast' | 'Machine';
@@ -35,7 +40,9 @@ const CAMERA_VIEWS: Record<CameraView, { pos: [number, number, number]; target: 
   Machine: { pos: [0, 1.35, -3.4], target: [0, 0.8, 0.6] },
 };
 
-/** Ball-machine settings edited through the UI. */
+/** Where the auto-aimed paddle face points on the far half. */
+const AIM_POINT = { x: 0, z: -0.85 };
+
 interface MachineSettings {
   preset: string;
   speed: number;
@@ -50,9 +57,13 @@ interface MachineSettings {
   highArc: boolean;
   autoFire: boolean;
   interval: number;
-  /** Random scatter of the landing target, metres. */
   scatter: number;
+  /** Cycle through a list of presets when auto-firing in play mode. */
+  mix: boolean;
 }
+
+/** Rally state for practice: the machine's ball, then (maybe) the player's return. */
+type Phase = 'idle' | 'incoming' | 'returned' | 'done';
 
 export class Sandbox {
   private renderer: THREE.WebGLRenderer;
@@ -73,12 +84,26 @@ export class Sandbox {
   settings = {
     timeScale: 1,
     paused: false,
-    showPrediction: true,
+    showPrediction: false,
     showTrail: true,
     showSpinAxis: true,
+    showIntercept: true,
     camera: 'Player' as CameraView,
   };
   machine: MachineSettings;
+
+  // Play mode
+  player: Player;
+  private playerView: PlayerView;
+  private playing = false;
+  private input: SwingInput = { ...NO_INPUT };
+  private keys = new Set<string>();
+  private phase: Phase = 'idle';
+  private sinceResolved = 0;
+  private incoming: IncomingPrediction | null = null;
+  private stats: PracticeStats = { attempts: 0, made: 0, streak: 0, best: 0 };
+  private mixIndex = 0;
+  private lastReturn: ReturnReport | null = null;
 
   private report: ShotReport | null = null;
   private markers: THREE.Mesh[] = [];
@@ -103,6 +128,10 @@ export class Sandbox {
     this.ball.visible = false;
     this.hud = new Hud(container);
 
+    this.player = new Player('p1', this.params);
+    this.playerView = new PlayerView(this.scene);
+    this.playerView.visible = false;
+
     this.predictionLine = new THREE.Line(
       new THREE.BufferGeometry(),
       new THREE.LineDashedMaterial({ color: 0x9aa4b8, dashSize: 0.03, gapSize: 0.03, transparent: true, opacity: 0.55 }),
@@ -120,15 +149,67 @@ export class Sandbox {
     this.targetRing.rotation.x = -Math.PI / 2;
     this.scene.add(this.targetRing);
 
-    this.machine = this.settingsFromPreset(PRESETS.find((p) => p.name === 'Power loop')!);
+    this.machine = this.settingsFromPreset(PRESETS.find((p) => p.name === 'Long push')!);
     this.buildGui();
     this.updateMachineVisuals();
 
     window.addEventListener('resize', () => this.resize());
-    window.addEventListener('keydown', (e) => this.onKey(e));
-    this.renderer.domElement.addEventListener('pointerdown', (e) => this.onPointerDown(e));
+    window.addEventListener('keydown', (e) => this.onKey(e, true));
+    window.addEventListener('keyup', (e) => this.onKey(e, false));
+    window.addEventListener('blur', () => this.keys.clear());
+    const canvas = this.renderer.domElement;
+    canvas.addEventListener('pointerdown', (e) => this.onPointerDown(e));
+    window.addEventListener('pointerup', (e) => {
+      if (e.button === 0) this.input.drive = false;
+    });
+    window.addEventListener('mousemove', (e) => {
+      if (!this.playing) return;
+      this.input.dx += e.movementX;
+      this.input.dy += e.movementY;
+    });
+    canvas.addEventListener(
+      'wheel',
+      (e) => {
+        if (!this.playing) return;
+        e.preventDefault();
+        const s = this.player.swing;
+        s.basePitch = THREE.MathUtils.clamp(s.basePitch + (e.deltaY < 0 ? 4 : -4), -60, 60);
+      },
+      { passive: false },
+    );
+    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    document.addEventListener('pointerlockchange', () => this.setPlaying(document.pointerLockElement === canvas));
+    this.hud.onStartPlay = () => this.requestPlay();
+
     this.resize();
     this.renderer.setAnimationLoop(() => this.frame());
+  }
+
+  // ---------------------------------------------------------------- play mode
+
+  requestPlay() {
+    const canvas = this.renderer.domElement;
+    // Pointer lock may be unavailable (e.g. in automated tests); fall back to play without it.
+    const req = canvas.requestPointerLock?.() as unknown as Promise<void> | undefined;
+    if (req && typeof req.catch === 'function') req.catch(() => this.setPlaying(true));
+    else if (!canvas.requestPointerLock) this.setPlaying(true);
+  }
+
+  setPlaying(on: boolean) {
+    if (this.playing === on) return;
+    this.playing = on;
+    this.controls.enabled = !on;
+    this.playerView.visible = on;
+    this.targetRing.visible = !on;
+    this.hud.setPlaying(on);
+    if (on) {
+      this.input = { ...NO_INPUT };
+      this.player.swing.reset(0.4, TABLE.height + 0.25, this.player.restZ, this.player.body.x);
+      this.phase = 'done';
+      this.sinceResolved = 0.5;
+    } else {
+      this.setCamera(this.settings.camera);
+    }
   }
 
   // ---------------------------------------------------------------- machine
@@ -148,7 +229,8 @@ export class Sandbox {
       highArc: !!p.highArc,
       autoFire: this.machine?.autoFire ?? false,
       interval: this.machine?.interval ?? 2.5,
-      scatter: this.machine?.scatter ?? 0,
+      scatter: this.machine?.scatter ?? 0.15,
+      mix: this.machine?.mix ?? false,
     };
   }
 
@@ -162,11 +244,17 @@ export class Sandbox {
   }
 
   fire() {
+    if (this.playing && this.machine.mix) {
+      const p = PRESETS[this.mixIndex++ % PRESETS.length];
+      Object.assign(this.machine, this.settingsFromPreset(p));
+      this.gui.controllersRecursive().forEach((c) => c.updateDisplay());
+      this.updateMachineVisuals();
+    }
     const m = this.machine;
     const jitter = () => (Math.random() * 2 - 1) * m.scatter;
     const target = {
-      x: THREE.MathUtils.clamp(m.targetX + jitter(), -TABLE.halfWidth + 0.03, TABLE.halfWidth - 0.03),
-      z: THREE.MathUtils.clamp(m.targetZ + jitter(), 0.05, TABLE.halfLength - 0.03),
+      x: THREE.MathUtils.clamp(m.targetX + jitter(), -TABLE.halfWidth + 0.05, TABLE.halfWidth - 0.05),
+      z: THREE.MathUtils.clamp(m.targetZ + jitter(), 0.1, TABLE.halfLength - 0.05),
     };
     const origin = this.origin();
     const aim = solveAim(origin, target, m.speed, this.spin(), this.params, m.highArc);
@@ -181,6 +269,8 @@ export class Sandbox {
     this.ball.visible = true;
     this.ball.mesh.quaternion.identity();
     this.aimMachine(shot.elevation, shot.azimuth);
+    this.phase = 'incoming';
+    this.lastReturn = null;
 
     const comps = spinComponents(start.vel, start.spin);
     this.report = {
@@ -193,17 +283,14 @@ export class Sandbox {
       aimOk: aim.ok,
       bounces: [],
     };
-    this.hud.showShot(this.report);
+    this.hud.showShot(this.report, this.playing ? null : undefined);
 
-    if (this.settings.showPrediction) {
-      const { path } = predict(start, this.params, { maxTime: 3, stop: (e) => e.type === 'floor' });
-      this.predictionLine.geometry.dispose();
-      this.predictionLine.geometry = new THREE.BufferGeometry().setFromPoints(path.map((p) => new THREE.Vector3(p.x, p.y, p.z)));
-      this.predictionLine.computeLineDistances();
-      this.predictionLine.visible = true;
-    } else {
-      this.predictionLine.visible = false;
-    }
+    // Full predicted flight, used for the dashed preview and the intercept marker.
+    this.incoming = new IncomingPrediction(start, this.params);
+    this.predictionLine.geometry.dispose();
+    this.predictionLine.geometry = new THREE.BufferGeometry().setFromPoints(this.incoming.path.map(({ pos: p }) => new THREE.Vector3(p.x, p.y, p.z)));
+    this.predictionLine.computeLineDistances();
+    this.predictionLine.visible = this.settings.showPrediction;
   }
 
   private aimMachine(elevation: number, azimuth: number) {
@@ -216,28 +303,43 @@ export class Sandbox {
     const o = this.origin();
     this.machineMesh.position.set(o.x, o.y, o.z);
     this.targetRing.position.set(this.machine.targetX, TABLE.height + 0.002, this.machine.targetZ);
-    // Preview the aim without firing.
     const aim = solveAim(o, { x: this.machine.targetX, z: this.machine.targetZ }, this.machine.speed, this.spin(), this.params, this.machine.highArc);
     this.aimMachine(aim.elevation, aim.azimuth);
     (this.targetRing.material as THREE.MeshBasicMaterial).color.set(aim.ok ? 0xffd34d : 0xff4d4d);
     this.hud.setAimWarning(aim.ok ? null : 'Target not reachable with this speed/spin — the shot will miss.');
   }
 
+  // ---------------------------------------------------------------- intercept
+
+  /** Where (and when) the incoming ball reaches the player's hitting plane. */
+  computeIntercept(now: number) {
+    if (this.phase !== 'incoming' || !this.incoming) return null;
+    return this.incoming.interceptAt(this.player.restZ, now, REACH.maxHeight - 0.05);
+  }
+
   // ---------------------------------------------------------------- events
 
   private handleEvent(e: BallEvent) {
+    if (e.type === 'paddle') return this.onPaddleHit(e);
     if (!this.report) return;
     const r = this.report;
+    const returned = this.phase === 'returned';
+
     switch (e.type) {
       case 'netCross':
-        if (e.direction === 'near' && r.netClearance === undefined) r.netClearance = e.clearance;
+        if (!returned && e.direction === 'near' && r.netClearance === undefined) r.netClearance = e.clearance;
+        if (returned && this.lastReturn && e.direction === 'far') this.lastReturn.netClearance = e.clearance;
         break;
       case 'net':
-        r.netTouches = (r.netTouches ?? 0) + 1;
+        if (!returned) r.netTouches = (r.netTouches ?? 0) + 1;
         this.hud.flash(e.part === 'tape' ? 'NET CORD' : 'PACKET LOSS', e.part === 'tape' ? 'Clipped the tape' : 'Into the net');
         break;
       case 'table': {
-        const outSpin = spinComponents(e.velOut, e.spinOut);
+        this.addMarker(e.pos, spinColor(e.velIn, e.spinIn));
+        if (returned) {
+          if (this.lastReturn && !this.lastReturn.result) this.resolveReturn(e.side === 'far' ? 'IN' : 'OWN SIDE');
+          break;
+        }
         r.bounces.push({
           side: e.side,
           x: e.pos.x,
@@ -246,24 +348,75 @@ export class Sandbox {
           speedIn: length(e.velIn),
           speedOut: length(e.velOut),
           angleOut: (Math.atan2(e.velOut.y, Math.hypot(e.velOut.x, e.velOut.z)) * 180) / Math.PI,
-          spinOut: outSpin,
+          spinOut: spinComponents(e.velOut, e.spinOut),
           rpmOut: radToRpm(length(e.spinOut)),
         });
-        this.addMarker(e.pos, spinColor(e.velIn, e.spinIn));
         if (r.result === undefined) {
           if (e.side === 'near') r.result = 'IN';
           else if (r.bounces.length === 1 && e.pos.z < 0) r.result = 'FAULT';
         }
+        // A second bounce on the near half before the player hit it: missed.
+        if (this.playing && this.phase === 'incoming' && e.side === 'near' && r.bounces.filter((b) => b.side === 'near').length >= 2) this.resolveMiss();
         break;
       }
       case 'floor':
-        if (r.result === undefined) {
-          r.result = 'OUT';
-          this.hud.flash('404', 'Ball not found (on the table)');
+        if (returned) {
+          if (this.lastReturn && !this.lastReturn.result) this.resolveReturn('OUT');
+        } else {
+          if (r.result === undefined) {
+            r.result = 'OUT';
+            this.hud.flash('404', 'Ball not found (on the table)');
+          }
+          if (this.playing && this.phase === 'incoming') {
+            if (r.result === 'IN') this.resolveMiss();
+            else this.resolve();
+          }
         }
         break;
     }
-    this.hud.showShot(r);
+    this.hud.showShot(r, this.playing ? this.lastReturn : undefined);
+  }
+
+  private onPaddleHit(e: Extract<BallEvent, { type: 'paddle' }>) {
+    if (this.phase !== 'incoming') return;
+    this.phase = 'returned';
+    const info = classifyShot(e.pos, e.velOut, e.spinOut, e.paddleVel, e.velIn, e.spinIn);
+    this.lastReturn = { ...info, paddleSpeed: length(e.paddleVel), wing: this.player.swing.side, rubber: this.player.rubbers[this.player.swing.side].name };
+    this.ball.clearTrail();
+    this.player.intercept = null;
+    this.hud.showShot(this.report!, this.lastReturn);
+  }
+
+  private resolveReturn(result: ReturnReport['result']) {
+    if (!this.lastReturn) return;
+    this.lastReturn.result = result;
+    this.stats.attempts++;
+    if (result === 'IN') {
+      this.stats.made++;
+      this.stats.streak++;
+      this.stats.best = Math.max(this.stats.best, this.stats.streak);
+    } else {
+      this.stats.streak = 0;
+      if (result === 'OUT') this.hud.flash('404', 'Ball not found (on the table)');
+      if (result === 'OWN SIDE') this.hud.flash('SEGFAULT', 'Bounced on your own side');
+    }
+    this.hud.setStats(this.stats);
+    this.resolve();
+  }
+
+  private resolveMiss() {
+    this.lastReturn = { name: 'Missed', speed: 0, top: 0, side: 0, cork: 0, rpm: 0, elevation: 0, paddleSpeed: 0, wing: null, rubber: '', result: 'MISSED' };
+    this.stats.attempts++;
+    this.stats.streak = 0;
+    this.hud.flash('TIMEOUT', 'Request not handled');
+    this.hud.setStats(this.stats);
+    this.resolve();
+  }
+
+  private resolve() {
+    this.phase = 'done';
+    this.sinceResolved = 0;
+    this.player.intercept = null;
   }
 
   private addMarker(pos: Vec3, color: THREE.Color) {
@@ -295,22 +448,66 @@ export class Sandbox {
     const realDt = Math.min(0.1, (now - this.lastFrame) / 1000);
     this.lastFrame = now;
 
-    if (!this.settings.paused) this.advance(realDt * this.settings.timeScale);
+    if (this.playing) this.updatePlayer(realDt);
+    if (!this.settings.paused) this.advance(realDt * this.settings.timeScale, realDt);
+    if (this.playing) this.updatePlayCamera(realDt);
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
   }
 
+  private updatePlayer(realDt: number) {
+    const k = this.keys;
+    const input: SwingInput = {
+      ...this.input,
+      close: k.has('KeyW'),
+      open: k.has('KeyS'),
+      hookLeft: k.has('KeyA'),
+      hookRight: k.has('KeyD'),
+    };
+    const move = {
+      x: (k.has('ArrowRight') ? 1 : 0) - (k.has('ArrowLeft') ? 1 : 0),
+      z: (k.has('ArrowDown') ? 1 : 0) - (k.has('ArrowUp') ? 1 : 0),
+    };
+    const now = this.sim?.time ?? 0;
+    const intercept = this.computeIntercept(now)?.pos ?? null;
+    this.player.intercept = intercept;
+    this.player.update(realDt, input, move, AIM_POINT);
+    this.input.dx = 0;
+    this.input.dy = 0;
+    this.playerView.update(this.player);
+    this.playerView.setMarker(this.settings.showIntercept ? intercept : null);
+    this.hud.setPaddle(this.player.swing.pitchDeg, this.player.swing.side, this.player.swing.forcedSide !== null, input.drive);
+  }
+
+  private updatePlayCamera(dt: number) {
+    const b = this.player.body;
+    const target = new THREE.Vector3(b.x * 0.5, 1.95, b.z + 1.2);
+    const look = new THREE.Vector3(b.x * 0.2, 0.78, -0.8);
+    const k = 1 - Math.exp(-dt / 0.12);
+    this.camera.position.lerp(target, k);
+    this.controls.target.lerp(look, k);
+    this.camera.lookAt(this.controls.target);
+  }
+
   /** Advance the simulation by gameDt seconds of game time using fixed ticks. */
-  private advance(gameDt: number) {
+  private advance(gameDt: number, realDt: number) {
     this.sinceFire += gameDt;
-    if (this.machine.autoFire && this.sinceFire >= this.machine.interval) this.fire();
+    if (this.playing) {
+      if (this.phase === 'done' || this.phase === 'idle') {
+        this.sinceResolved += realDt;
+        if (this.sinceResolved > 0.9) this.fire();
+      } else if (this.sinceFire > 6) {
+        this.resolve();
+      }
+    } else if (this.machine.autoFire && this.sinceFire >= this.machine.interval) {
+      this.fire();
+    }
     if (!this.sim) return;
 
     this.accumulator += gameDt;
-    while (this.accumulator >= TICK_DT) {
-      this.tick();
-      this.accumulator -= TICK_DT;
-    }
+    const ticks = Math.floor(this.accumulator / TICK_DT);
+    for (let i = 0; i < ticks; i++) this.tick(i, ticks);
+    this.accumulator -= ticks * TICK_DT;
     // Interpolate between the last two ticks for smooth rendering at any frame rate.
     const alpha = this.accumulator / TICK_DT;
     const pos = lerp(this.prevPos, this.sim.state.pos, alpha);
@@ -318,11 +515,12 @@ export class Sandbox {
     this.ball.update(pos, this.sim.state);
   }
 
-  private tick() {
+  private tick(index = 0, count = 1) {
     if (!this.sim) return;
     this.prevPos = { ...this.sim.state.pos };
     const events: BallEvent[] = [];
-    this.sim.step(TICK_DT, events);
+    const paddles = this.playing && this.phase === 'incoming' ? [this.player.collider(index, count)] : undefined;
+    this.sim.step(TICK_DT, events, paddles);
     for (const e of events) this.handleEvent(e);
   }
 
@@ -345,8 +543,14 @@ export class Sandbox {
     this.controls.update();
   }
 
-  private onKey(e: KeyboardEvent) {
-    if ((e.target as HTMLElement).tagName === 'INPUT' || (e.target as HTMLElement).tagName === 'SELECT') return;
+  private onKey(e: KeyboardEvent, down: boolean) {
+    const tag = (e.target as HTMLElement).tagName;
+    if (tag === 'INPUT' || tag === 'SELECT') return;
+    if (down) this.keys.add(e.code);
+    else this.keys.delete(e.code);
+    if (this.playing && e.code.startsWith('Arrow')) e.preventDefault();
+    if (!down) return;
+
     if (e.code === 'Space') {
       e.preventDefault();
       this.fire();
@@ -357,7 +561,13 @@ export class Sandbox {
       this.step();
     } else if (e.code === 'KeyC') {
       this.clearMarkers();
-    } else if (e.code >= 'Digit1' && e.code <= 'Digit5') {
+    } else if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
+      if (this.playing && !e.repeat) {
+        const s = this.player.swing;
+        // Cycle: auto → locked to the other wing → auto.
+        s.forcedSide = s.forcedSide === null ? (s.side === 'forehand' ? 'backhand' : 'forehand') : null;
+      }
+    } else if (!this.playing && e.code >= 'Digit1' && e.code <= 'Digit5') {
       const view = Object.keys(CAMERA_VIEWS)[Number(e.code.slice(5)) - 1] as CameraView;
       this.settings.camera = view;
       this.setCamera(view);
@@ -365,9 +575,13 @@ export class Sandbox {
     }
   }
 
-  /** Shift+click on the near half of the table moves the machine's landing target. */
   private onPointerDown(e: PointerEvent) {
+    if (this.playing) {
+      if (e.button === 0) this.input.drive = true;
+      return;
+    }
     if (!e.shiftKey) return;
+    // Shift+click on the near half of the table moves the machine's landing target.
     const rect = this.renderer.domElement.getBoundingClientRect();
     const ndc = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
     this.raycaster.setFromCamera(ndc, this.camera);
@@ -381,6 +595,13 @@ export class Sandbox {
     this.updateMachineVisuals();
   }
 
+  /** Programmatic input, used by automated tests and handy from the console. */
+  injectSwing(dx: number, dy: number, opts: Partial<SwingInput> = {}) {
+    this.input.dx += dx;
+    this.input.dy += dy;
+    Object.assign(this.input, opts);
+  }
+
   private resize() {
     const w = this.container.clientWidth;
     const h = this.container.clientHeight;
@@ -390,8 +611,22 @@ export class Sandbox {
   }
 
   private buildGui() {
-    const gui = (this.gui = new GUI({ title: 'MEM Table Tennis · Physics Sandbox' }));
+    const gui = (this.gui = new GUI({ title: 'MEM Table Tennis · Sandbox' }));
     const onMachine = () => this.updateMachineVisuals();
+
+    gui.add({ play: () => this.requestPlay() }, 'play').name('▶ Play  (Esc to leave)');
+
+    const pl = gui.addFolder('Player');
+    const rubberNames = Object.fromEntries(Object.values(RUBBERS).map((r) => [`${r.name} (${r.kind})`, r.id]));
+    const rubberSel = { forehand: 'inverted', backhand: 'inverted' };
+    pl.add(rubberSel, 'forehand', rubberNames).name('Forehand rubber').onChange((id: string) => (this.player.rubbers.forehand = RUBBERS[id]));
+    pl.add(rubberSel, 'backhand', rubberNames).name('Backhand rubber').onChange((id: string) => (this.player.rubbers.backhand = RUBBERS[id]));
+    pl.add(this.player.swing.params, 'sensitivity', 0.0005, 0.004, 0.0001).name('Mouse sensitivity');
+    pl.add(this.player.swing.params, 'swingGain', 0.6, 3, 0.05).name('Swing power');
+    pl.add(this.player.assists, 'angle', 0, 1, 0.05).name('Angle assist');
+    pl.add(this.player.assists, 'hitArea', 0, 0.1, 0.005).name('Hit area + (m)');
+    pl.add(this.player.assists, 'footwork', 0, 1, 0.05).name('Footwork assist');
+    pl.add(this.settings, 'showIntercept').name('Intercept marker');
 
     const mf = gui.addFolder('Ball machine');
     mf.add(this.machine, 'preset', PRESETS.map((p) => p.name))
@@ -400,10 +635,11 @@ export class Sandbox {
         Object.assign(this.machine, this.settingsFromPreset(PRESETS.find((p) => p.name === name)!));
         gui.controllersRecursive().forEach((c) => c.updateDisplay());
         onMachine();
-        this.fire();
+        if (!this.playing) this.fire();
       });
+    mf.add(this.machine, 'mix').name('Mix presets (play)');
     mf.add({ fire: () => this.fire() }, 'fire').name('Fire  [Space]');
-    mf.add(this.machine, 'autoFire').name('Auto-fire');
+    mf.add(this.machine, 'autoFire').name('Auto-fire (inspect)');
     mf.add(this.machine, 'interval', 0.8, 6, 0.1).name('Interval (s)');
     mf.add(this.machine, 'scatter', 0, 0.4, 0.01).name('Target scatter (m)');
 
@@ -413,6 +649,7 @@ export class Sandbox {
     sf.add(this.machine, 'sidespin', -100, 100, 1).name('Sidespin rps').onChange(onMachine);
     sf.add(this.machine, 'corkscrew', -100, 100, 1).name('Corkscrew rps').onChange(onMachine);
     sf.add(this.machine, 'highArc').name('High arc (lob)').onChange(onMachine);
+    sf.close();
 
     const pf = mf.addFolder('Position & target');
     pf.add(this.machine, 'distanceBack', -0.6, 4, 0.05).name('Contact: back (m)').onChange(onMachine);
@@ -431,6 +668,7 @@ export class Sandbox {
     vf.add(this.settings, 'showTrail').name('Spin trail').onChange((v: boolean) => (this.ball.trailVisible = v));
     vf.add(this.settings, 'showSpinAxis').name('Spin axis').onChange((v: boolean) => (this.ball.showAxis = v));
     vf.add({ clear: () => this.clearMarkers() }, 'clear').name('Clear bounce marks  [C]');
+    vf.close();
 
     const tf = gui.addFolder('Physics tuning');
     const p = this.params;
@@ -457,12 +695,12 @@ export class Sandbox {
     tf.add(
       {
         copy: () => {
-          void navigator.clipboard?.writeText(JSON.stringify(p, null, 2));
-          this.hud.flash('COPIED', 'Physics params copied to clipboard');
+          void navigator.clipboard?.writeText(JSON.stringify({ physics: p, swing: this.player.swing.params, assists: this.player.assists }, null, 2));
+          this.hud.flash('COPIED', 'Tuning copied to clipboard');
         },
       },
       'copy',
-    ).name('Copy params as JSON');
+    ).name('Copy tuning as JSON');
     tf.onChange(onMachine);
     tf.close();
   }

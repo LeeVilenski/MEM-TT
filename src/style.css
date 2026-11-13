@@ -224,3 +224,102 @@ kbd {
     display: none;
   }
 }
+
+/* ---------------------------------------------------------------- play mode */
+
+.hud-start {
+  position: absolute;
+  bottom: 56px;
+  left: 50%;
+  transform: translateX(-50%);
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+}
+
+.hud-start button {
+  font: inherit;
+  font-weight: 700;
+  font-size: 16px;
+  padding: 10px 22px;
+  border-radius: 10px;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 6px 24px rgba(232, 86, 42, 0.35);
+}
+
+.hud-start button:hover {
+  filter: brightness(1.1);
+}
+
+.hud-start-sub {
+  color: var(--muted);
+  font-size: 12px;
+  background: var(--panel);
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+
+.hud-paddle,
+.hud-stats {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 5px 12px;
+  border-radius: 8px;
+  background: var(--panel);
+  font-size: 13px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.hud-stats {
+  top: 12px;
+}
+
+.hud-paddle {
+  bottom: 48px;
+}
+
+.hud-paddle .wing {
+  font-family: var(--mono);
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+  margin-right: 6px;
+}
+
+.wing.forehand {
+  background: #c8202a;
+  color: #fff;
+}
+
+.wing.backhand {
+  background: #15161a;
+  color: #fff;
+  border: 1px solid #444b5a;
+}
+
+.hud-paddle .drive {
+  margin-left: 6px;
+  font-family: var(--mono);
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.hud-section.ret {
+  color: #fff;
+  font-size: 13px;
+}
+
+.shot-name {
+  color: var(--accent);
+}
+
+.hud-row b.hud-muted,
+.hud-muted b {
+  color: var(--text);
+}
