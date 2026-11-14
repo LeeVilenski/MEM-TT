@@ -229,7 +229,7 @@ export class RoomCore {
     this.broadcastRoom();
   }
 
-  private configure(c: { mode?: GameMode; bestOf?: number; aiLevel?: AiLevel; aiStyle?: StyleId | 'random'; realism?: number }) {
+  private configure(c: { mode?: GameMode; bestOf?: number; aiLevel?: AiLevel; aiStyle?: StyleId | 'random'; realism?: number; aiStyles?: Partial<Record<Seat, StyleId>> }) {
     if (c.mode && c.mode !== this.info.mode) {
       this.info.mode = c.mode;
       // Drop seats that don't exist in the new mode, then re-seat everyone in order.
@@ -240,6 +240,10 @@ export class RoomCore {
     if (c.bestOf && [1, 3, 5, 7].includes(c.bestOf)) this.info.bestOf = c.bestOf;
     if (c.aiLevel && c.aiLevel in AI_LEVELS) this.info.aiLevel = c.aiLevel;
     if (c.aiStyle && (c.aiStyle === 'random' || c.aiStyle in STYLES)) this.info.aiStyle = c.aiStyle;
+    if (c.aiStyles) {
+      const valid = seatsFor(this.info.mode);
+      this.info.aiStyles = Object.fromEntries(Object.entries(c.aiStyles).filter(([seat, st]) => valid.includes(seat as Seat) && st && st in STYLES));
+    }
     if (typeof c.realism === 'number' && c.realism >= 0 && c.realism <= 1) this.info.realism = c.realism;
     this.refreshSpectators();
   }
@@ -263,7 +267,7 @@ export class RoomCore {
   private pickAiStyle(): StyleId {
     if (this.info.aiStyle !== 'random') return this.info.aiStyle;
     // Random, but not a character already at the table (two Ryans is confusing).
-    const taken = new Set(Object.values(this.info.seats).map((s) => s?.style));
+    const taken = new Set<StyleId | undefined>([...Object.values(this.info.seats).map((s) => s?.style), ...Object.values(this.info.aiStyles ?? {})]);
     const free = STYLE_IDS.filter((id) => !taken.has(id));
     const pool = free.length ? free : STYLE_IDS;
     return pool[Math.floor(this.rng() * pool.length)];
@@ -276,7 +280,7 @@ export class RoomCore {
       // Seats left by AI from a previous match are refilled fresh.
       if (this.info.seats[s]?.ai) delete this.info.seats[s];
       if (!this.info.seats[s] && fillAI) {
-        const style = this.pickAiStyle();
+        const style = this.info.aiStyles?.[s] ?? this.pickAiStyle();
         this.info.seats[s] = { name: `${STYLES[style].character} · ${AI_LEVELS[this.info.aiLevel].name} (AI)`, ai: this.info.aiLevel, style };
       }
     }

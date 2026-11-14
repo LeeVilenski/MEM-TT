@@ -63,6 +63,8 @@ export interface RoomInfo {
   aiLevel: AiLevel;
   /** Style for AI seats ('random' picks one per seat). */
   aiStyle: StyleId | 'random';
+  /** Characters chosen for particular AI seats (single-player doubles); others follow aiStyle. */
+  aiStyles?: Partial<Record<Seat, StyleId>>;
   /** Realism slider: 0 = simulation, 1 = arcade. Sets game speed, spin curve and assists. */
   realism: number;
   host: string;
@@ -86,7 +88,7 @@ export interface ScoreSnap {
 // ---------------------------------------------------------------- client → server
 
 export type ClientMsg =
-  | { t: 'hello'; v: number; name: string; style?: StyleId; create?: { mode: GameMode; bestOf: number; aiLevel: AiLevel; realism?: number } }
+  | { t: 'hello'; v: number; name: string; style?: StyleId; create?: { mode: GameMode; bestOf: number; aiLevel: AiLevel; realism?: number; aiStyles?: Partial<Record<Seat, StyleId>> } }
   | { t: 'style'; style: StyleId }
   | { t: 'ping'; c: number }
   | { t: 'sit'; seat: Seat | null }

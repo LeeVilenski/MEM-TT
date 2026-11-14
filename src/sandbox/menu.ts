@@ -19,7 +19,8 @@ export interface PauseContext {
 /** Everything the menus read and change; the Sandbox implements it. */
 export interface MenuHost {
   readonly isTouch: boolean;
-  matchSettings: { level: AiLevel; bestOf: number; aiStyle: StyleId | 'random'; doubles: boolean };
+  matchSettings: { level: AiLevel; bestOf: number; aiStyle: StyleId | 'random'; doubles: boolean; partner: StyleId | 'random'; opp1: StyleId | 'random'; opp2: StyleId | 'random' };
+  saveDoublesPicks(): void;
   onlineSettings: { name: string; code: string; mode: 'singles' | 'doubles'; bestOf: number };
   realism: { percent: number; style: StyleId };
   look: { venue: VenueId; volume: number; muted: boolean; ambience: boolean; autoReplay: boolean; arcadeFx: boolean; bloom: boolean; fullSpeedOut: boolean; callouts: boolean };
@@ -243,9 +244,31 @@ export class Menu {
       ${this.header('Match vs AI')}
       ${this.group('Mode', `<div class="menu-choices">${this.choice('doubles', '0', 'Singles', !m.doubles, '1 v 1')}${this.choice('doubles', '1', 'Doubles', m.doubles, 'You + AI partner v 2 AI')}</div>`)}
       ${this.group('Opponent level', `<div class="menu-choices">${levels}</div>`)}
-      ${m.doubles ? '' : this.group('Opponent', `<div class="menu-choices wrap">${styles}</div>`)}
+      ${m.doubles ? this.doublesLineupHtml() : this.group('Opponent', `<div class="menu-choices wrap">${styles}</div>`)}
       ${this.group('Format', `<div class="menu-choices">${formats}</div>`)}
       <div class="menu-actions"><button data-a="start" class="primary big">▶ Start match</button></div>`;
+  }
+
+  /**
+   * Doubles line-up: you (your chosen character), your partner and the two opponents.
+   * A character can only play once: those already in the line-up are greyed out.
+   */
+  private doublesLineupHtml() {
+    const h = this.host;
+    const m = h.matchSettings;
+    const me = STYLES[h.realism.style];
+    const slots = ['partner', 'opp1', 'opp2'] as const;
+    const picker = (slot: (typeof slots)[number]) => {
+      const others = new Set<StyleId>([h.realism.style, ...slots.filter((x) => x !== slot).map((x) => m[x]).filter((v): v is StyleId => v !== 'random')]);
+      return [this.choice(slot, 'random', 'Random', m[slot] === 'random')]
+        .concat(STYLE_IDS.map((id) => this.choice(slot, id, STYLES[id].character, m[slot] === id, others.has(id) ? (id === h.realism.style ? 'You' : 'In the game') : STYLES[id].role, null, others.has(id))))
+        .join('');
+    };
+    return `
+      ${this.group('You', `<button data-a="go-characters" class="menu-player compact"><span class="mp-avatar" aria-hidden="true">${esc(me.character[0])}</span><span class="mp-text"><b>${esc(me.character)}</b><small>${esc(styleNote(me.id))}</small></span><span class="mp-change">Change ›</span></button>`)}
+      ${this.group('Your partner', `<div class="menu-choices six">${picker('partner')}</div>`)}
+      ${this.group('Opponent 1', `<div class="menu-choices six">${picker('opp1')}</div>`)}
+      ${this.group('Opponent 2', `<div class="menu-choices six">${picker('opp2')}</div>`)}`;
   }
 
   private onlineHtml() {
@@ -362,8 +385,9 @@ export class Menu {
   }
 
   /** A selectable option button: data-k is the setting, data-v its value. */
-  private choice(k: string, v: string, label: string, selected: boolean, note?: string, locked?: string | null) {
-    return `<button class="menu-choice${selected ? ' on' : ''}${locked ? ' locked' : ''}" data-k="${k}" data-v="${esc(v)}" aria-pressed="${selected}"${locked ? ` aria-disabled="true" title="${esc(locked)}"` : ''}>${locked ? '🔒 ' : ''}${esc(label)}${note || locked ? `<small>${esc(locked ? locked : note!)}</small>` : ''}</button>`;
+  private choice(k: string, v: string, label: string, selected: boolean, note?: string, locked?: string | null, taken = false) {
+    const off = !!locked || taken;
+    return `<button class="menu-choice${selected ? ' on' : ''}${off ? ' locked' : ''}" data-k="${k}" data-v="${esc(v)}" aria-pressed="${selected}"${off ? ` aria-disabled="true" title="${esc(locked ?? note ?? '')}"` : ''}>${locked ? '🔒 ' : ''}${esc(label)}${note || locked ? `<small>${esc(locked ? locked : note!)}</small>` : ''}</button>`;
   }
 
   private realismName(p: number) {
@@ -436,6 +460,12 @@ export class Menu {
         break;
       case 'doubles':
         h.matchSettings.doubles = v === '1';
+        break;
+      case 'partner':
+      case 'opp1':
+      case 'opp2':
+        h.matchSettings[k] = v as StyleId | 'random';
+        h.saveDoublesPicks();
         break;
       case 'aiStyle':
         h.matchSettings.aiStyle = v as StyleId | 'random';
