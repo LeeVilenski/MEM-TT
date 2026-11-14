@@ -121,7 +121,7 @@ describe('AI per style', () => {
     // Will: the most smashes, and heavier topspin.
     expect(share(will, 'smash')).toBeGreaterThan(Math.max(share(lee, 'smash'), share(ryan, 'smash'), share(ed, 'smash')));
     expect(will.loopVy).toBeGreaterThan(lee.loopVy * 1.25);
-  }, 60000);
+  }, 120000); // several whole AI matches: ~50 s alone, longer under the full suite
 
   it('Ed blocks slams well and topspins pushes from below the table', () => {
     /** Share of smashes and power loops each style returns onto the table. */

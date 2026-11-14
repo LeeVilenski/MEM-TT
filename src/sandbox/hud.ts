@@ -361,6 +361,18 @@ export class MatchHud {
   }
 
   private serveBar: HTMLDivElement;
+  private turnEl: HTMLDivElement | null = null;
+
+  /** Doubles: whose shot it is ("Your shot" / "Ed's shot"); null hides it. */
+  setTurn(text: string | null, mine = false) {
+    if (!this.turnEl) {
+      this.turnEl = el('div', 'mhud-turn');
+      this.board.parentElement!.append(this.turnEl);
+    }
+    this.turnEl.style.display = text ? 'block' : 'none';
+    if (text && this.turnEl.textContent !== text) this.turnEl.textContent = text;
+    this.turnEl.classList.toggle('mine', mine);
+  }
   private serveKey = '';
   onServeType: (id: string) => void = () => {};
 
