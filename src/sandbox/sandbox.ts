@@ -842,6 +842,7 @@ export class Sandbox implements MenuHost {
     this.matchHud.show(true);
     this.matchHud.hideOver();
     this.clearMarkers();
+    this.updateVenueScreen();
     this.requestPlay();
   }
 

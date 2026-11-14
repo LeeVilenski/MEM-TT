@@ -70,6 +70,8 @@ The game plays on phones and tablets, in landscape (portrait shows a "turn your 
 
 Everything is generated in code: geometry, textures and sound. There are no asset files.
 
+**Lighting:** neutral tone mapping (highlights roll off rather than clip), a soft environment light so the table, paddles and metal pick up reflections, PCF-filtered soft shadows and a satin table top. Each venue sets its own environment strength (the server room stays dark).
+
 **Venues** (panel → **Look & sound → Venue**; your choice is remembered):
 - **Open-plan office:** a window wall, desks with code on the monitors, and a "SPRINT 42" whiteboard.
 - **Server room:** rows of racks with blinking status LEDs, cable trays and cold-aisle lighting.

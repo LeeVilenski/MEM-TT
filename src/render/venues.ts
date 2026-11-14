@@ -187,7 +187,7 @@ function office(): Venue {
     },
     [24, 24],
   );
-  return makeVenue('office', g, { background: 0xe8eef5, fog: [0xe8eef5, 14, 34], hemi: [0xffffff, 0x8a8f99, 1.5], key: [0xffffff, 2.0], floor: carpet });
+  return makeVenue('office', g, { background: 0xe8eef5, fog: [0xe8eef5, 14, 34], hemi: [0xffffff, 0x8a8f99, 1.1], key: [0xffffff, 2.0], env: 0.4, floor: carpet });
 }
 
 function serverRoom(): Venue {
@@ -252,8 +252,9 @@ function serverRoom(): Venue {
   return makeVenue('server', g, {
     background: 0x070a10,
     fog: [0x070a10, 8, 24],
-    hemi: [0x9cc3ff, 0x0b0f17, 0.75],
+    hemi: [0x9cc3ff, 0x0b0f17, 0.6],
     key: [0xdbeafe, 2.1],
+    env: 0.18,
     floor: tiles,
     update: (dt) => {
       acc += dt;
@@ -335,8 +336,9 @@ function conference(): Venue {
   return makeVenue('conference', g, {
     background: 0xd9d3c8,
     fog: [0xd9d3c8, 12, 26],
-    hemi: [0xfff6e8, 0x6b5a48, 1.35],
+    hemi: [0xfff6e8, 0x6b5a48, 0.95],
     key: [0xfff3df, 2.0],
+    env: 0.3,
     floor: wood,
     setScore: (lines) => {
       screenLines = lines;
@@ -443,8 +445,9 @@ function rooftop(): Venue {
   return makeVenue('rooftop', g, {
     background: 0x2b2d42,
     fog: [0x6b4e6b, 30, 70],
-    hemi: [0xffc49a, 0x3b2f4a, 1.15],
+    hemi: [0xffc49a, 0x3b2f4a, 0.9],
     key: [0xffe0c0, 2.1],
+    env: 0.3,
     floor: deck,
     update: (dt) => {
       tw += dt;
@@ -460,6 +463,8 @@ interface Look {
   fog: [number, number, number];
   hemi: [number, number, number];
   key: [number, number];
+  /** Strength of the image-based (environment) light. */
+  env?: number;
   floor?: THREE.Texture;
   update?: (dt: number, time: number) => void;
   setScore?: (lines: string[]) => void;
@@ -491,7 +496,7 @@ function makeVenue(id: VenueId, group: THREE.Group, look: Look): Venue {
 
 const BUILDERS: Record<Exclude<VenueId, 'sandbox'>, () => Venue> = { office, server: serverRoom, conference, rooftop };
 
-const SANDBOX_LOOK: Look = { background: 0x14161c, fog: [0x14161c, 12, 30], hemi: [0xdfe8ff, 0x22252c, 1.1], key: [0xffffff, 2.2] };
+const SANDBOX_LOOK: Look = { background: 0x14161c, fog: [0x14161c, 12, 30], hemi: [0xdfe8ff, 0x22252c, 0.85], key: [0xffffff, 2.2], env: 0.35 };
 
 /** Swap the scene to a venue, disposing the previous one. */
 export function setVenue(scene: THREE.Scene, id: VenueId, previous: Venue | null): Venue | null {
@@ -510,6 +515,7 @@ export function setVenue(scene: THREE.Scene, id: VenueId, previous: Venue | null
   const key = scene.getObjectByName('key') as THREE.DirectionalLight;
   key.color.set(look.key[0]);
   key.intensity = look.key[1];
+  scene.environmentIntensity = look.env ?? 0.35;
   const floor = scene.getObjectByName('floor') as THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>;
   floor.material.map = look.floor ?? null;
   floor.material.color.set(look.floor ? 0xffffff : 0x23262e);
