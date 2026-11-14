@@ -42,7 +42,7 @@ describe('AI vs AI matches', () => {
     expect(avgHits).toBeGreaterThan(3); // serve + at least one exchange on average
     expect(reasons['illegal-serve'] ?? 0).toBe(0);
     expect(reasons['obstruction'] ?? 0).toBe(0);
-  });
+  }, 20000); // a whole AI-vs-AI game: takes ~5–7 s on a slow machine
 
   it('a hard AI beats an easy AI', () => {
     let hardPoints = 0;

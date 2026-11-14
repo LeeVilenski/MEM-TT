@@ -228,6 +228,21 @@ export class Hud {
     this.perfectEl.classList.add('show');
   }
 
+  private speedEl: HTMLDivElement | null = null;
+
+  /** A speed call-out for a fast shot ("92 km/h"). */
+  speedPop(kmh: number, mine: boolean) {
+    if (!this.speedEl) {
+      this.speedEl = el('div', 'hud-speed');
+      this.perfectEl.parentElement!.append(this.speedEl);
+    }
+    this.speedEl.textContent = `${Math.round(kmh)} km/h`;
+    this.speedEl.classList.toggle('theirs', !mine);
+    this.speedEl.classList.remove('show');
+    void this.speedEl.offsetWidth;
+    this.speedEl.classList.add('show');
+  }
+
   setPaddle(pitch: number, wing: StrokeSide, locked: boolean, drive: boolean) {
     const p = Math.round(pitch);
     const face = p === 0 ? 'square' : p > 0 ? `${p}° open` : `${-p}° closed`;
@@ -333,8 +348,37 @@ export class MatchHud {
     this.meter.append(this.meterFill);
     this.shots = el('div', 'mhud-shots');
     this.over = el('div', 'mhud-over');
-    container.append(this.board, this.prompt, this.meter, this.shots, this.over);
+    this.serveBar = el('div', 'mhud-serves');
+    this.serveBar.setAttribute('role', 'radiogroup');
+    this.serveBar.setAttribute('aria-label', 'Serve type');
+    this.serveBar.style.display = 'none';
+    this.serveBar.addEventListener('click', (e) => {
+      const id = (e.target as HTMLElement).closest('button')?.dataset.serve;
+      if (id) this.onServeType(id);
+    });
+    container.append(this.board, this.prompt, this.meter, this.shots, this.over, this.serveBar);
     this.show(false);
+  }
+
+  private serveBar: HTMLDivElement;
+  private serveKey = '';
+  onServeType: (id: string) => void = () => {};
+
+  /** The serve-type chooser, shown while it's your serve (null hides it). */
+  setServeBar(types: { id: string; name: string }[] | null, selected = '', keys = true) {
+    if (!types) {
+      this.serveBar.style.display = 'none';
+      this.serveKey = '';
+      return;
+    }
+    const key = selected + keys;
+    if (key !== this.serveKey) {
+      this.serveKey = key;
+      this.serveBar.innerHTML = types
+        .map((t, i) => `<button type="button" role="radio" aria-checked="${t.id === selected}" class="${t.id === selected ? 'on' : ''}" data-serve="${t.id}">${keys ? `<kbd>${i + 1}</kbd>` : ''}${t.name}</button>`)
+        .join('');
+    }
+    this.serveBar.style.display = 'flex';
   }
 
   /** Show the per-shot list during matches (off by default). */
@@ -344,6 +388,7 @@ export class MatchHud {
     this.board.style.display = on ? 'block' : 'none';
     this.shots.style.display = on && this.showDetails ? 'block' : 'none';
     if (!on) {
+      this.serveBar.style.display = 'none';
       this.prompt.style.display = 'none';
       this.meter.style.display = 'none';
       this.over.style.display = 'none';

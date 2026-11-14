@@ -53,6 +53,7 @@ import { CareerScreen } from './career';
 import { HowToPlay } from './howto';
 import { Coach } from './coach';
 import { Tutorial, tutorialHint } from '../progress/tutorial';
+import { SERVE_TYPES, type ServeType } from '../game/serves';
 import { Menu, type MenuHost, type PauseContext } from './menu';
 import { VENUES, setVenue, type Venue, type VenueId } from '../render/venues';
 import { OnlineClient } from '../net/client';
@@ -62,6 +63,7 @@ import { mapVec, mapState, type SideId } from '../game/frame';
 import { PRESETS, type Preset } from './presets';
 
 type CameraView = 'Player' | 'Side' | 'Top' | 'Broadcast' | 'Machine';
+export type CamMode = 'classic' | 'close' | 'dynamic';
 
 const CAMERA_VIEWS: Record<CameraView, { pos: [number, number, number]; target: [number, number, number] }> = {
   Player: { pos: [0, 1.45, 2.7], target: [0, 0.8, -0.4] },
@@ -151,6 +153,21 @@ export class Sandbox implements MenuHost {
   realism = { percent: Math.round(DEFAULT_REALISM * 100), style: 'allround' as StyleId };
   /** Game speed from the realism slider (offline). */
   private gameSpeed = realismSettings(DEFAULT_REALISM).gameSpeed;
+  /**
+   * Playback rate actually used (offline): the realism slider's slower speed while the
+   * ball is coming at you (time to react), real speed while it's going away (your shots
+   * fly at their true pace). Eased, so the change is never a jolt.
+   */
+  private playRate = realismSettings(DEFAULT_REALISM).gameSpeed;
+
+  private updatePlayRate(realDt: number, ballVelZ: number | null) {
+    const outgoing = this.look.fullSpeedOut && ballVelZ !== null && ballVelZ < -0.5;
+    const target = outgoing ? 1 : this.gameSpeed;
+    // Speed up quickly as your shot leaves; slow down a little more gently as theirs comes.
+    const rate = target > this.playRate ? 14 : 8;
+    this.playRate += (target - this.playRate) * (1 - Math.exp(-rate * realDt));
+    return this.playRate;
+  }
 
   /** Apply the local realism slider: assists, spin curve and game speed. */
   applyRealism() {
@@ -162,6 +179,19 @@ export class Sandbox implements MenuHost {
     this.gui?.controllersRecursive().forEach((c) => c.updateDisplay());
   }
   private tossHoldStart: number | null = null;
+  /** The serve type the player has chosen (remembered). */
+  serveType: ServeType = SERVE_TYPES.some((t) => t.id === loadPref('mem.serveType', 'auto')) ? (loadPref('mem.serveType', 'auto') as ServeType) : 'auto';
+
+  setServeType(id: ServeType) {
+    this.serveType = id;
+    this.player.serveType = id;
+    savePref('mem.serveType', id);
+  }
+
+  /** The serve chooser: shown while it's your serve, before the toss. */
+  private updateServeBar(show: boolean) {
+    this.matchHud.setServeBar(show && this.tossHoldStart === null ? SERVE_TYPES : null, this.serveType, !this.isTouch);
+  }
 
   // Look, sound and replays
   sfx = new Sfx();
@@ -175,6 +205,7 @@ export class Sandbox implements MenuHost {
     arcadeFx: loadPref('mem.arcadeFx', '1') === '1',
     shotDetails: loadPref('mem.shotDetails', '0') === '1',
     bloom: loadPref('mem.bloom', '1') === '1',
+    fullSpeedOut: loadPref('mem.fullSpeedOut', '1') === '1',
   };
   /** Arcade effects: hit-stop, shake, comet tail, sparks (see render/juice). */
   private juice!: Juice;
@@ -269,6 +300,8 @@ export class Sandbox implements MenuHost {
     this.matchHud = new MatchHud(container);
     this.hud.showDetails = this.look.shotDetails;
     this.matchHud.showDetails = this.look.shotDetails;
+    this.player.serveType = this.serveType;
+    this.matchHud.onServeType = (id) => this.setServeType(id as ServeType);
     this.matchHud.onRematch = () => (this.online ? this.onlineRematch() : this.startMatch());
     this.matchHud.onExit = () => (this.online ? this.backToLobby() : this.quitToTitle());
     this.lobby = new Lobby(container);
@@ -642,6 +675,7 @@ export class Sandbox implements MenuHost {
     this.fxHit(e.pos, e.velOut, e.spinOut, true, false);
     this.keyContact('me', this.playerView, e.pos, e.velIn, e.velOut, e.spinOut);
     this.playerView.strike(e.paddleVel);
+    this.camOnHit(length(e.velOut));
     this.career.recordShot(info.name, info.speed, info.rpm);
     this.recorder.caption(this.clock(), `You: ${info.name} · ${info.speed.toFixed(1)} m/s · ${Math.round(info.rpm).toLocaleString()} rpm`);
     this.ball.clearTrail();
@@ -734,13 +768,16 @@ export class Sandbox implements MenuHost {
       else if (this.match) this.matchFrame(realDt, fxScale);
       else {
         if (this.playing) this.updatePlayer(realDt);
-        if (!this.settings.paused) this.advance(realDt * this.settings.timeScale * this.gameSpeed * fxScale, realDt);
+        const rate = this.updatePlayRate(realDt, this.sim && this.playing ? this.sim.state.vel.z : null);
+        if (!this.settings.paused) this.advance(realDt * this.settings.timeScale * rate * fxScale, realDt);
       }
       this.recordFrame();
       this.maybeAutoReplay();
       if (this.playing) this.updatePlayCamera(realDt);
     }
     this.syncMenu();
+    this.ball.streakEnabled = this.look.arcadeFx;
+    this.ball.playRate = this.replay ? this.replay.speed : this.online ? this.gameSpeed : this.playRate;
     this.venue?.update(realDt, now / 1000);
     // Your own character: just the racket arm in first person, the full character otherwise.
     this.playerView.setFirstPerson(this.playing && !this.replay);
@@ -757,7 +794,7 @@ export class Sandbox implements MenuHost {
     const shake = this.playing && !this.replay ? this.juice.cameraOffset : null;
     if (shake) {
       this.camera.position.add(shake);
-      this.setFov(this.playCam.fov + this.juice.fovOffset);
+      this.setFov(this.playFov + this.juice.fovOffset);
     }
     this.post.render();
     if (shake) this.camera.position.sub(shake);
@@ -838,6 +875,7 @@ export class Sandbox implements MenuHost {
           if (e.side === 'near') {
             this.keyContact('me', this.playerView, h.pos, h.velIn, h.velOut, h.spinOut);
             this.playerView.strike(h.paddleVel);
+            this.camOnHit(length(h.velOut));
           } else this.keyContact('ai', this.aiView, h.pos, h.velIn, h.velOut, h.spinOut);
           this.recorder.caption(this.clock(), `${who}: ${name} · ${info.speed.toFixed(1)} m/s · ${Math.round(info.rpm).toLocaleString()} rpm`);
           if (e.side === 'near' && !e.serve) this.career.recordShot(info.name, info.speed, info.rpm);
@@ -907,7 +945,8 @@ export class Sandbox implements MenuHost {
     const running = this.playing && !this.settings.paused && match.phase !== 'match-over';
     if (running) {
       const { input, move } = this.gatherInput();
-      match.frame(realDt * this.settings.timeScale * this.gameSpeed * fxScale, realDt, { side: 'near', input, move });
+      const rate = this.updatePlayRate(realDt, match.sim && match.referee && match.referee.hits > 0 ? match.sim.state.vel.z : null);
+      match.frame(realDt * this.settings.timeScale * rate * fxScale, realDt, { side: 'near', input, move });
       this.hud.setPaddle(this.player.swing.pitchDeg, this.player.swing.side, this.player.swing.forcedSide !== null, input.drive);
     }
 
@@ -953,6 +992,7 @@ export class Sandbox implements MenuHost {
       if (document.pointerLockElement) document.exitPointerLock();
       return;
     }
+    this.updateServeBar(this.playing && match.humanToServe);
     if (!this.playing) {
       this.matchHud.setPrompt(null);
       this.matchHud.setMeter(null);
@@ -975,9 +1015,12 @@ export class Sandbox implements MenuHost {
   }
 
   private servePrompt() {
-    return this.isTouch
-      ? 'Your serve: hold <b>Serve</b> to toss (longer = higher), release, then swipe as it drops'
-      : 'Your serve: hold <kbd>Space</kbd> to toss (longer = higher), release, then swing as it drops';
+    const t = SERVE_TYPES.find((x) => x.id === this.serveType)!;
+    const how = this.isTouch
+      ? 'Hold <b>Serve</b> to toss, release, then swipe as it drops'
+      : 'Hold <kbd>Space</kbd> to toss, release, then swing as it drops';
+    const pick = this.isTouch ? 'tap a serve below to change' : '<kbd>1</kbd>–<kbd>6</kbd> or <kbd>Q</kbd>/<kbd>E</kbd> to change';
+    return `<b>${t.name} serve</b> · ${this.isTouch ? t.touch : t.mouse}<br><small>${how} · ${pick}</small>`;
   }
 
   // ---------------------------------------------------------------- career, drills, tournaments
@@ -1360,6 +1403,11 @@ export class Sandbox implements MenuHost {
     this.juice?.setGlow(this.post.enabled);
   }
 
+  setFullSpeedOut(on: boolean) {
+    this.look.fullSpeedOut = on;
+    savePref('mem.fullSpeedOut', on ? '1' : '0');
+  }
+
   setBloom(on: boolean) {
     this.look.bloom = on;
     savePref('mem.bloom', on ? '1' : '0');
@@ -1416,6 +1464,9 @@ export class Sandbox implements MenuHost {
     this.lastHitPower = serve ? 0 : hitPower(length(velOut));
     const perfect = mine && !serve && this.player.lastContactPerfect;
     this.juice.hit(pos, velOut, spinOut, { perfect, serve });
+    // Speed call-out on a fast shot (its real speed).
+    const kmh = length(velOut) * 3.6;
+    if (this.look.arcadeFx && !serve && kmh >= 65) this.hud.speedPop(kmh, mine);
     if (perfect && this.look.arcadeFx) {
       this.sfx.perfect();
       this.hud.perfect();
@@ -1443,6 +1494,11 @@ export class Sandbox implements MenuHost {
   /** Table / net / floor sounds (world event, shown from `side`'s view). */
   private ballSound(e: BallEvent, side: SideId = 'near') {
     const x = mapVec(side, e.pos).x;
+    if (e.type === 'netCross' && this.look.arcadeFx && this.ball.last) {
+      // A fast ball whooshes over the net (as fast as it looks, after any slow motion).
+      const rate = this.online ? this.gameSpeed : this.playRate;
+      this.sfx.whoosh(length(this.ball.last.state.vel) * rate, x, e.direction === side);
+    }
     if (e.type === 'table') {
       this.sfx.table(e.impactSpeed, x);
       this.juice.bounce(mapVec(side, e.pos), e.impactSpeed);
@@ -1691,7 +1747,10 @@ export class Sandbox implements MenuHost {
           const mine = e.by === c.seat;
           const view = mine ? this.playerView : this.remoteViews.get(e.by);
           if (view) this.keyContact(mine ? 'me' : e.by, view, mapVec(c.side, e.pos), mapVec(c.side, e.velIn), mapVec(c.side, e.velOut), mapVec(c.side, e.spinOut));
-          if (mine) this.playerView.strike(mapVec(c.side, e.paddleVel));
+          if (mine) {
+            this.playerView.strike(mapVec(c.side, e.paddleVel));
+            this.camOnHit(length(e.velOut));
+          }
         }
         this.recorder.caption(this.clock(), `${who}: ${name} · ${info.speed.toFixed(1)} m/s · ${Math.round(info.rpm).toLocaleString()} rpm`);
         this.rallyHits++;
@@ -1811,6 +1870,7 @@ export class Sandbox implements MenuHost {
       this.matchHud.setPrompt(null);
       return;
     }
+    this.updateServeBar(inMatch && this.playing && !!c.myServe);
     if (!inMatch) {
       this.matchHud.setPrompt(null);
       this.matchHud.setMeter(null);
@@ -1837,21 +1897,70 @@ export class Sandbox implements MenuHost {
     fov: Number(loadPref('mem.camFov', '38')),
   };
 
+  /** Play camera: 'classic' (high, far, telephoto), 'close' (behind you, wider) or 'dynamic'. */
+  camMode: CamMode = (['classic', 'close', 'dynamic'] as const).includes(loadPref('mem.camMode', 'dynamic') as CamMode) ? (loadPref('mem.camMode', 'dynamic') as CamMode) : 'dynamic';
+  /** Dynamic camera: eased extras (push-in as a ball arrives, a lift after your shot). */
+  private camPush = 0;
+  private camKick = 0;
+
+  setCamMode(mode: CamMode) {
+    this.camMode = mode;
+    savePref('mem.camMode', mode);
+  }
+
+  /** Called when the local player strikes the ball (dynamic camera reacts). */
+  private camOnHit(speed: number) {
+    this.camKick = Math.min(1, speed / 25);
+  }
+
   private updatePlayCamera(dt: number) {
     const b = this.player.body;
-    const { height, distance } = this.playCam;
-    // Follow the body only a little, and slowly: the bat goes where the cursor is, so a
-    // steady view keeps it under your hand on screen.
-    const target = new THREE.Vector3(b.x * 0.25, height, b.z + distance);
+    let { height, distance, fov } = this.playCam;
+    let follow = 0.25;
+    let lookX = b.x * 0.1;
+    let lookZ = -0.9;
+    if (this.camMode !== 'classic') {
+      const close = this.camMode === 'close';
+      // Nearer and lower, with a wider lens: more depth, so a ball visibly rushes at you.
+      height = close ? 1.48 : 1.55;
+      distance = close ? 1.15 : 1.45;
+      fov = close ? 54 : 48;
+      follow = close ? 0.6 : 0.5;
+      lookX = b.x * 0.3;
+      // Aim nearer (tilted down a little), so your end of the table sits higher in the
+      // frame, clear of the HUD at the bottom.
+      lookZ = close ? -0.35 : -0.5;
+      if (!close) {
+        // Dynamic: the aim drifts gently toward the ball, eases in as a ball arrives
+        // and lifts briefly after your shot. All small and smooth: the bat goes where
+        // the cursor is in the world, so big camera moves would make it swim on screen.
+        const ball = this.ball.isVisible ? this.ball.last : null;
+        if (ball) lookX += (ball.pos.x - lookX) * 0.2;
+        const eta = this.player.interceptEta;
+        const pushTarget = Number.isFinite(eta) && eta > 0 && eta < 0.6 ? 1 - eta / 0.6 : 0;
+        this.camPush += (pushTarget - this.camPush) * (1 - Math.exp(-dt * 6));
+        this.camKick *= Math.exp(-dt * 3);
+        distance -= 0.18 * this.camPush;
+        fov += -3 * this.camPush + 5 * this.camKick;
+        height += 0.06 * this.camKick;
+        lookZ -= 0.25 * this.camKick;
+      }
+    }
+    // Follow the body, smoothly: a steady view keeps the bat under your hand on screen.
+    const target = new THREE.Vector3(b.x * follow, height, b.z + distance);
     // Look a little above the table so the ball's height over the net reads clearly;
     // the lower the camera, the higher (flatter) the look point.
-    const look = new THREE.Vector3(b.x * 0.1, 0.78 + Math.max(0, 1.95 - height) * 0.25, -0.9);
+    const look = new THREE.Vector3(lookX, 0.78 + Math.max(0, 1.95 - height) * 0.25, lookZ);
     const k = 1 - Math.exp(-dt / 0.12);
     this.camera.position.lerp(target, k);
     this.controls.target.lerp(look, k);
     this.camera.lookAt(this.controls.target);
-    this.setFov(this.playCam.fov);
+    this.playFov = fov;
+    this.setFov(fov);
   }
+
+  /** The play camera's field of view this frame (the zoom kick adds to it). */
+  private playFov = 38;
 
   private setFov(fov: number) {
     if (this.camera.fov === fov) return;
@@ -1940,6 +2049,13 @@ export class Sandbox implements MenuHost {
       if (down && !e.repeat && this.playing && this.online.myServe) this.tossHoldStart = performance.now();
       if (!down) this.releaseToss();
       return;
+    }
+    // Choosing a serve: 1–6, or Q / E to cycle (only while it's your serve).
+    if (down && this.playing && (this.match?.humanToServe || this.online?.myServe) && this.tossHoldStart === null) {
+      const i = SERVE_TYPES.findIndex((t) => t.id === this.serveType);
+      if (e.code >= 'Digit1' && e.code <= `Digit${SERVE_TYPES.length}`) return this.setServeType(SERVE_TYPES[Number(e.code.slice(5)) - 1].id);
+      if (e.code === 'KeyQ') return this.setServeType(SERVE_TYPES[(i + SERVE_TYPES.length - 1) % SERVE_TYPES.length].id);
+      if (e.code === 'KeyE') return this.setServeType(SERVE_TYPES[(i + 1) % SERVE_TYPES.length].id);
     }
     if (e.code === 'Space' && this.match) {
       e.preventDefault();
