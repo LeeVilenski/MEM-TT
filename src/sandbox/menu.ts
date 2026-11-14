@@ -205,12 +205,12 @@ export class Menu {
         <button data-a="go-online">Online <small>Play friends: singles or doubles</small></button>
         <div class="menu-row three">
           <button data-a="tutorial" class="secondary">Tutorial</button>
-          <button data-a="howto" class="secondary">How to play</button>
+          <button data-a="howto" class="secondary">Controls</button>
           <button data-a="go-settings" class="secondary">Settings</button>
         </div>
       </div>
       ${h.devTools ? '<button data-a="inspect" class="link menu-dev">Developer: free camera</button>' : ''}
-      <p class="menu-foot">Difficulty: <b>${esc(this.realismName(h.realism.percent))}</b> · <button data-a="go-settings" class="link">change</button></p>`;
+      <p class="menu-foot">Difficulty: ${esc(this.realismName(h.realism.percent))}</p>`;
   }
 
   private pauseHtml() {

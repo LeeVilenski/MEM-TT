@@ -564,6 +564,7 @@ export class Sandbox implements MenuHost {
         this.howTo.onClose = () => {};
         this.requestPlay();
       };
+      this.menu.hide();
       this.howTo.show();
       return;
     }
@@ -1430,7 +1431,10 @@ export class Sandbox implements MenuHost {
     this.controls.autoRotateSpeed = 0.35;
     if (title) {
       this.setCamera('Broadcast');
-      this.machineMesh.visible = true;
+      // The title shows a clean venue: no ball machine or aiming ring (developer view only).
+      this.machineMesh.visible = this.devTools;
+      this.targetRing.visible = false;
+      this.predictionLine.visible = false;
     } else if (screen === null && !this.playing) this.setCamera(this.settings.camera);
   }
 
@@ -2222,6 +2226,8 @@ export class Sandbox implements MenuHost {
     if (e.code === 'Space') {
       e.preventDefault();
       this.fire();
+    } else if (e.code === 'KeyH') {
+      this.hud.toggleHelp();
     } else if (e.code === 'KeyP') {
       this.settings.paused = !this.settings.paused;
       this.gui.controllersRecursive().forEach((c) => c.updateDisplay());
