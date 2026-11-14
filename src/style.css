@@ -2502,3 +2502,72 @@ body.menu-open .mhud-turn {
   grid-auto-flow: row;
   grid-template-columns: repeat(3, 1fr);
 }
+
+/* ---------------------------------------------------------------- polish pass */
+
+/* Controls help during play: one quiet line; H (or hover) expands the full list. */
+.hud-help.compact {
+  padding: 4px 10px;
+  font-size: 11px;
+  background: rgba(18, 20, 27, 0.55);
+  pointer-events: auto;
+}
+.hud-help.compact .help-full {
+  display: none;
+}
+.hud-help.compact.expanded .help-full,
+.hud-help.compact:hover .help-full {
+  display: block;
+  margin-top: 4px;
+  max-width: 640px;
+}
+.hud-help.compact.expanded .help-short,
+.hud-help.compact:hover .help-short {
+  display: none;
+}
+
+/* Serve picker: one compact row under the table, never wrapping over it. */
+.mhud-serves {
+  flex-wrap: nowrap !important;
+  gap: 4px !important;
+  bottom: 74px !important;
+}
+.mhud-serves button {
+  padding: 5px 10px !important;
+  font-size: 13px !important;
+  white-space: nowrap;
+}
+
+/* Serve prompt sits up top, clear of the opponent. */
+.mhud-prompt {
+  top: 12px !important;
+  bottom: auto !important;
+  font-size: 13px;
+}
+
+/* Title: secondary buttons centred on one line; quieter footer. */
+.menu-row.three {
+  grid-template-columns: repeat(3, 1fr);
+}
+.menu-row.three button {
+  font-size: 15px;
+  white-space: nowrap;
+  justify-content: center;
+}
+.menu[data-screen='title'] .menu-foot {
+  font-size: 12px;
+  color: var(--muted);
+}
+.menu-buttons button:hover,
+.menu-actions button:hover,
+.menu-split button:hover {
+  transform: translateX(2px);
+}
+
+/* Face/wing readout tucked into the bottom-left corner. */
+.hud-paddle {
+  left: 12px !important;
+  right: auto !important;
+  bottom: 12px !important;
+  transform: none !important;
+}

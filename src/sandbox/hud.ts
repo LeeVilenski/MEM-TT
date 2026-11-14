@@ -190,14 +190,23 @@ export class Hud {
     this.playing = on;
     this.panel.style.display = this.matchMode || (on && !this.showDetails) ? 'none' : 'block';
     this.help.style.display = this.hiddenByOverlay ? 'none' : '';
+    // In play, a single quiet line; the full list is in How to play (and expands on hover/H).
     const help = on ? (this.matchMode ? [MATCH_HELP, ...PLAY_HELP] : PLAY_HELP) : INSPECT_HELP;
-    this.help.innerHTML = help.join('<span class="sep">·</span>');
+    this.help.innerHTML = on
+      ? `<span class="help-short"><kbd>H</kbd> controls<span class="sep">·</span><kbd>Esc</kbd> pause</span><span class="help-full">${help.join('<span class="sep">·</span>')}</span>`
+      : help.join('<span class="sep">·</span>');
+    this.help.classList.toggle('compact', on);
     this.startEl.style.display = on || this.hiddenByOverlay ? 'none' : 'flex';
     this.paddleEl.style.display = on ? 'block' : 'none';
     this.statsEl.style.display = on && !this.matchMode ? 'block' : 'none';
   }
 
   /** In a match the practice readout and stats give way to the match HUD. */
+  /** Show or hide the full controls list during play (H). */
+  toggleHelp() {
+    this.help.classList.toggle('expanded');
+  }
+
   setMatchMode(on: boolean) {
     this.matchMode = on;
     this.startEl.querySelector('button')!.textContent = on ? '▶ Resume match' : '▶ Play vs ball machine';
