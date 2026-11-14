@@ -187,6 +187,11 @@ export class SwingController {
   private flickAge = Infinity;
 
   /** Seconds since the last flick movement (Infinity if no flick is live). */
+  /** The live flick's mouse-plane velocity (m/s, before gain; +y up), for telling strokes from drags. */
+  get flickVelocity(): { x: number; y: number } {
+    return { ...this.heldGesture };
+  }
+
   get strokePeakAge(): number {
     if (this.heldGesture.x === 0 && this.heldGesture.y === 0) return Infinity;
     return this.flickAge;
@@ -273,7 +278,11 @@ export class SwingController {
     // fading out, so contact doesn't have to land on the exact frame of the flick.
     this.heldAge += dt;
     const fade = Math.max(0, 1 - this.heldAge / p.strokeHold);
-    if (length(vel) >= length(this.held) * fade) {
+    // A fresh stroke the other way up/down (a flick up after a quick downward drag to put
+    // the bat by the ball) replaces the held one even if it's slower: the latest
+    // deliberate stroke wins, not the biggest recent movement.
+    const reversed = length(vel) > 1 && Math.abs(this.held.y) > 0.3 && Math.sign(vel.y) !== Math.sign(this.held.y) && Math.abs(vel.y) > 0.3;
+    if (length(vel) >= length(this.held) * fade || reversed) {
       this.held = vel;
       this.heldAge = 0;
     } else {
