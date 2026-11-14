@@ -2,7 +2,11 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import GUI from 'lil-gui';
 import {
+  BALL,
   BallSim,
+  dot,
+  scale,
+  sub,
   DEFAULT_PARAMS,
   RUBBERS,
   TABLE,
@@ -587,6 +591,7 @@ export class Sandbox implements MenuHost {
         this.hud.flash(e.part === 'tape' ? 'NET CORD' : 'PACKET LOSS', e.part === 'tape' ? 'Clipped the tape' : 'Into the net');
         break;
       case 'table': {
+        this.recorder.keyframe(this.clock(), { pos: e.pos, vel: e.velOut, spin: e.spinOut });
         this.addMarker(e.pos, spinColor(e.velIn, e.spinIn));
         if (returned) {
           if (this.lastReturn && !this.lastReturn.result) this.resolveReturn(e.side === 'far' ? 'IN' : 'OWN SIDE', e.pos);
@@ -636,6 +641,8 @@ export class Sandbox implements MenuHost {
     this.lastReturn = { ...info, paddleSpeed: length(e.paddleVel), wing: this.player.swing.side, rubber: this.player.rubbers[this.player.swing.side].name };
     this.hitSound(e.impactSpeed + length(e.paddleVel), this.player.rubbers[this.player.swing.side].kind, e.pos.x);
     this.fxHit(e.pos, e.velOut, e.spinOut, true, false);
+    this.keyContact('me', this.playerView, e.pos, e.velIn, e.velOut, e.spinOut);
+    this.playerView.strike(e.paddleVel);
     this.career.recordShot(info.name, info.speed, info.rpm);
     this.recorder.caption(this.clock(), `You: ${info.name} · ${info.speed.toFixed(1)} m/s · ${Math.round(info.rpm).toLocaleString()} rpm`);
     this.ball.clearTrail();
@@ -829,6 +836,10 @@ export class Sandbox implements MenuHost {
           this.matchHud.addShot({ who, name, speed: info.speed, rpm: info.rpm, top: info.top });
           this.hitSound(h.impactSpeed + length(h.paddleVel), e.side === 'near' ? this.player.rubbers[this.player.swing.side].kind : ai.rubber.kind, h.pos.x);
           this.fxHit(h.pos, h.velOut, h.spinOut, e.side === 'near', e.serve);
+          if (e.side === 'near') {
+            this.keyContact('me', this.playerView, h.pos, h.velIn, h.velOut, h.spinOut);
+            this.playerView.strike(h.paddleVel);
+          } else this.keyContact('ai', this.aiView, h.pos, h.velIn, h.velOut, h.spinOut);
           this.recorder.caption(this.clock(), `${who}: ${name} · ${info.speed.toFixed(1)} m/s · ${Math.round(info.rpm).toLocaleString()} rpm`);
           if (e.side === 'near' && !e.serve) this.career.recordShot(info.name, info.speed, info.rpm);
           this.ball.clearTrail();
@@ -836,7 +847,10 @@ export class Sandbox implements MenuHost {
         }
         case 'ball':
           if (e.event.type !== 'paddle') this.ballSound(e.event);
-          if (e.event.type === 'table') this.addMarker(e.event.pos, spinColor(e.event.velIn, e.event.spinIn));
+          if (e.event.type === 'table') {
+            this.recorder.keyframe(this.clock(), { pos: e.event.pos, vel: e.event.velOut, spin: e.event.spinOut });
+            this.addMarker(e.event.pos, spinColor(e.event.velIn, e.event.spinIn));
+          }
           break;
         case 'let':
           this.hud.flash(LET_MESSAGE.title, LET_MESSAGE.sub);
@@ -1445,6 +1459,20 @@ export class Sandbox implements MenuHost {
   }
 
   /** Views that can appear in a replay, by id. */
+  /**
+   * Pin the replay to an exact contact: the ball where it was struck and the hitter's bat
+   * face against it (the hitting face is on the side the ball came from).
+   */
+  private keyContact(viewId: string, view: PlayerView, ballPos: Vec3, velIn: Vec3, velOut: Vec3, spin: Vec3) {
+    const n0 = view.last?.pose.normal;
+    const bats: { id: string; pos: Vec3 }[] = [];
+    if (n0) {
+      const n = dot(velIn, n0) < 0 ? n0 : scale(n0, -1);
+      bats.push({ id: viewId, pos: sub(ballPos, scale(n, BALL.radius + 0.005)) });
+    }
+    this.recorder.keyframe(this.clock(), { pos: ballPos, vel: velOut, spin }, bats);
+  }
+
   private replayViews(): [string, PlayerView][] {
     return [['me', this.playerView], ['ai', this.aiView], ...[...this.remoteViews.entries()].map(([seat, v]) => [seat, v] as [string, PlayerView])];
   }
@@ -1660,6 +1688,12 @@ export class Sandbox implements MenuHost {
         const rubber = e.by === c.seat ? this.player.rubbers[this.player.swing.side].kind : 'Inverted';
         this.hitSound(length(e.velOut) + length(e.paddleVel), rubber, mapVec(c.side, e.pos).x);
         this.fxHit(mapVec(c.side, e.pos), mapVec(c.side, e.velOut), mapVec(c.side, e.spinOut), e.by === c.seat, e.serve);
+        {
+          const mine = e.by === c.seat;
+          const view = mine ? this.playerView : this.remoteViews.get(e.by);
+          if (view) this.keyContact(mine ? 'me' : e.by, view, mapVec(c.side, e.pos), mapVec(c.side, e.velIn), mapVec(c.side, e.velOut), mapVec(c.side, e.spinOut));
+          if (mine) this.playerView.strike(mapVec(c.side, e.paddleVel));
+        }
         this.recorder.caption(this.clock(), `${who}: ${name} · ${info.speed.toFixed(1)} m/s · ${Math.round(info.rpm).toLocaleString()} rpm`);
         this.rallyHits++;
         if (e.by === c.seat && !e.serve) this.career.recordShot(info.name, info.speed, info.rpm);
@@ -1669,7 +1703,10 @@ export class Sandbox implements MenuHost {
       }
       case 'ball':
         if (e.event.type !== 'paddle') this.ballSound(e.event, c.side);
-        if (e.event.type === 'table') this.addMarker(mapVec(c.side, e.event.pos), spinColor(e.event.velIn, e.event.spinIn));
+        if (e.event.type === 'table') {
+          this.recorder.keyframe(this.clock(), { pos: mapVec(c.side, e.event.pos), vel: mapVec(c.side, e.event.velOut), spin: mapVec(c.side, e.event.spinOut) });
+          this.addMarker(mapVec(c.side, e.event.pos), spinColor(e.event.velIn, e.event.spinIn));
+        }
         break;
       case 'let':
         this.hud.flash(LET_MESSAGE.title, LET_MESSAGE.sub);

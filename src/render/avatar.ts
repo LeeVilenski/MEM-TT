@@ -147,6 +147,10 @@ export const AVATAR_STYLES = Object.keys(LOOKS) as StyleId[];
 const HIP = 0.83;
 /** Reactions to a point, played for this long (s). */
 const REACT_TIME = 1.5;
+/** Longest the racket arm is drawn (shoulder to handle, m). */
+const ARM_MAX = 0.84;
+/** Shoulder to hand within this, the body doesn't need to reach. */
+const COMFORT = 0.6;
 
 export type Reaction = 'celebrate' | 'dismay';
 
@@ -270,7 +274,8 @@ export class Avatar {
     // Shoulder on the paddle side (it moves with the upper body), in the group's frame.
     const shoulder = this.group.worldToLocal(this.upperAbs.localToWorld(new THREE.Vector3(local.x >= 0 ? this.shoulderX : -this.shoulderX, 1.36, 0)));
     const d = local.clone().sub(shoulder);
-    const len = Math.min(0.75, d.length());
+    // Arm plus wrist: the body leans to bring the shoulder close; this only covers the rest.
+    const len = Math.min(ARM_MAX, d.length());
     this.arm.position.copy(shoulder);
     this.arm.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize());
     this.arm.scale.set(1, len, 1);
@@ -293,6 +298,8 @@ export class Avatar {
   private stride = 0;
   private twist = 0;
   private lean = 0;
+  private sideLean = 0;
+  private reachLean = 0;
   private swingVel = 0;
   private reaction: { kind: Reaction; t: number } | null = null;
 
@@ -330,6 +337,15 @@ export class Avatar {
     const reachForward = clamp((-hand.z - 0.3) * 0.25, 0, 0.15);
     this.lean = approach(this.lean, 0.1 + reachDown + reachForward, 8, dt);
 
+    // Reaching for a ball beyond the arm: bend sideways toward it and lean in, which
+    // carries the shoulder (and the arm) out toward the bat.
+    const sx = hand.x >= 0 ? this.shoulderX : -this.shoulderX;
+    const far = Math.max(0, Math.hypot(hand.x - sx, hand.y - 1.36, hand.z) - COMFORT);
+    const sideways = Math.min(1, Math.abs(hand.x - sx) / Math.max(0.01, Math.hypot(hand.x - sx, hand.z)));
+    // Faster than the other blends: by the time of a wide stroke the body is already there.
+    this.sideLean = approach(this.sideLean, -Math.sign(hand.x - sx || 1) * clamp(far * 1.5 * sideways, 0, 0.5), 18, dt);
+    this.reachLean = approach(this.reachLean, clamp(far * 1.1 * (1 - sideways * 0.6), 0, 0.35), 18, dt);
+
     // Ready stance: knees bent, a light bounce on the toes.
     let y = -0.025 + Math.sin(time * Math.PI * 2 * 1.4) * 0.006 * (1 - this.stride * 2);
     let lean = this.lean;
@@ -361,7 +377,7 @@ export class Avatar {
     }
 
     this.upper.position.y = HIP + y + jump;
-    this.upper.rotation.set(-lean, twist, 0, 'YXZ');
+    this.upper.rotation.set(-(lean + this.reachLean), twist, this.sideLean, 'YXZ');
     for (const leg of this.legs) leg.position.y = HIP + jump;
     this.freeArm.rotation.set(freeX, 0, freeZ);
   }
