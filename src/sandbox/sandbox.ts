@@ -163,6 +163,7 @@ export class Sandbox {
     ambience: loadPref('mem.ambience', '1') === '1',
     autoReplay: loadPref('mem.autoReplay', '1') === '1',
     arcadeFx: loadPref('mem.arcadeFx', '1') === '1',
+    shotDetails: loadPref('mem.shotDetails', '0') === '1',
   };
   /** Arcade effects: hit-stop, shake, comet tail, sparks (see render/juice). */
   private juice!: Juice;
@@ -240,6 +241,8 @@ export class Sandbox {
     this.aiView = new PlayerView(this.scene, { bodyColor: 0xe8562a, bodyOpacity: 0.45 });
     this.aiView.visible = false;
     this.matchHud = new MatchHud(container);
+    this.hud.showDetails = this.look.shotDetails;
+    this.matchHud.showDetails = this.look.shotDetails;
     this.matchHud.onRematch = () => (this.online ? this.onlineRematch() : this.startMatch());
     this.matchHud.onExit = () => (this.online ? this.backToLobby() : this.endMatch());
     this.lobby = new Lobby(container);
@@ -1081,6 +1084,14 @@ export class Sandbox {
     }
   }
 
+  /** The shot readout / match shot list: hidden while playing unless asked for. */
+  private applyShotDetails() {
+    this.hud.showDetails = this.look.shotDetails;
+    this.hud.setPlaying(this.playing);
+    this.matchHud.showDetails = this.look.shotDetails;
+    if (this.match || this.online?.score) this.matchHud.show(true);
+  }
+
   /** Timing-ring input: seconds until the ball arrives (only with arcade effects). */
   private markerEta(): number | undefined {
     return this.look.arcadeFx ? this.player.interceptEta : undefined;
@@ -1703,6 +1714,12 @@ export class Sandbox {
     lf.add(this.look, 'autoReplay')
       .name('Auto-replay long rallies')
       .onChange((a: boolean) => savePref('mem.autoReplay', a ? '1' : '0'));
+    lf.add(this.look, 'shotDetails')
+      .name('Shot details while playing')
+      .onChange((d: boolean) => {
+        savePref('mem.shotDetails', d ? '1' : '0');
+        this.applyShotDetails();
+      });
     lf.add(this.look, 'arcadeFx')
       .name('Arcade effects (hit-stop, sparks, crowd)')
       .onChange((a: boolean) => {

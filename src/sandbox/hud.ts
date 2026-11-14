@@ -183,8 +183,12 @@ export class Hud {
     this.setPlaying(this.playing);
   }
 
+  /** Show the shot readout while playing (off by default: it's distracting mid-rally). */
+  showDetails = false;
+
   setPlaying(on: boolean) {
     this.playing = on;
+    this.panel.style.display = this.matchMode || (on && !this.showDetails) ? 'none' : 'block';
     this.help.style.display = this.hiddenByOverlay ? 'none' : '';
     const help = on ? (this.matchMode ? [MATCH_HELP, ...PLAY_HELP] : PLAY_HELP) : INSPECT_HELP;
     this.help.innerHTML = help.join('<span class="sep">·</span>');
@@ -196,7 +200,6 @@ export class Hud {
   /** In a match the practice readout and stats give way to the match HUD. */
   setMatchMode(on: boolean) {
     this.matchMode = on;
-    this.panel.style.display = on ? 'none' : 'block';
     this.startEl.querySelector('button')!.textContent = on ? '▶ Resume match' : '▶ Play vs ball machine';
     this.setAimWarning(null);
     this.setPlaying(this.playing);
@@ -334,8 +337,12 @@ export class MatchHud {
     this.show(false);
   }
 
+  /** Show the per-shot list during matches (off by default). */
+  showDetails = false;
+
   show(on: boolean) {
-    for (const e of [this.board, this.shots]) e.style.display = on ? 'block' : 'none';
+    this.board.style.display = on ? 'block' : 'none';
+    this.shots.style.display = on && this.showDetails ? 'block' : 'none';
     if (!on) {
       this.prompt.style.display = 'none';
       this.meter.style.display = 'none';
