@@ -139,9 +139,11 @@ describe('online rooms (local server, simulated latency)', () => {
     a.start(true);
     let aiHits = 0;
     a.on((e) => e.type === 'hit' && e.by === 'far1' && aiHits++);
-    for (let i = 0; i < FPS * 60 && (a.score?.points.near ?? 0) + (a.score?.points.far ?? 0) < 6; i++) w.step();
+    // 8 points, so the AI serves a few times whoever wins the toss (it doesn't yet return
+    // this bot's serves online; see the AI seats' serve return).
+    for (let i = 0; i < FPS * 80 && (a.score?.points.near ?? 0) + (a.score?.points.far ?? 0) < 8; i++) w.step();
     expect(a.room?.seats.far1?.ai).toBe('medium');
-    expect((a.score?.points.near ?? 0) + (a.score?.points.far ?? 0)).toBeGreaterThanOrEqual(6);
+    expect((a.score?.points.near ?? 0) + (a.score?.points.far ?? 0)).toBeGreaterThanOrEqual(8);
     expect(aiHits).toBeGreaterThan(2);
   });
 

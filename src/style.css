@@ -2342,3 +2342,66 @@ body.tutorial .hud-stats {
     top: 62%;
   }
 }
+
+/* ---------------------------------------------------------------- serve chooser */
+
+.mhud-serves {
+  position: absolute;
+  left: 50%;
+  bottom: 118px;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 6px;
+  max-width: calc(100vw - 24px);
+  flex-wrap: wrap;
+  justify-content: center;
+  z-index: 3;
+}
+
+.mhud-serves button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 6px 12px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  color: #e6e9ef;
+  background: var(--panel);
+  border: 2px solid #2c3140;
+  border-radius: 999px;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+}
+
+.mhud-serves button.on {
+  border-color: var(--accent);
+  background: rgba(232, 86, 42, 0.3);
+  color: #fff;
+}
+
+.mhud-serves kbd {
+  font-size: 11px;
+}
+
+body.menu-open .mhud-serves {
+  display: none !important;
+}
+
+@media (max-height: 500px) {
+  .mhud-serves {
+    bottom: auto;
+    top: 30%;
+    left: auto;
+    right: 12px;
+    transform: none;
+    flex-direction: column;
+    flex-wrap: nowrap;
+  }
+  .mhud-serves button {
+    min-height: 36px;
+    padding: 4px 12px;
+    font-size: 13px;
+  }
+}

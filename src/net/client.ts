@@ -229,6 +229,7 @@ export class OnlineClient {
     if (!this.serving) p.shotMode = 'rally';
     // Doubles serves go to the receiver's right half-court (−x from the server's view).
     const aim = this.serving && this.mode === 'doubles' ? { x: -0.35, z: -0.8 } : { x: 0, z: -0.85 };
+    p.serveBall = this.serving && this.flight ? mapState(this.side, this.flight.sim.state) : null;
     p.update(realDt, input, move, aim);
 
     // Ball flight up to the (estimated) server time.

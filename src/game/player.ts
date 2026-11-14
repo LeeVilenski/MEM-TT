@@ -1,10 +1,11 @@
-import { RUBBERS, TABLE, lerp, normalize, scale, type BallState, type ContactAdjust, type PaddleCollider, type PaddlePose, type PhysicsParams, type Rubber, type Vec3 } from '../physics';
+import { RUBBERS, TABLE, length, lerp, normalize, scale, type BallState, type ContactAdjust, type PaddleCollider, type PaddlePose, type PhysicsParams, type Rubber, type Vec3 } from '../physics';
 import { makeAngleAssist, type ShotMode } from './assist';
 import { realismSettings } from './realism';
 import { STYLES, type PlayStyle, type StyleId } from './styles';
 import { DEFAULT_SWING } from './swing';
 import { REACH, SwingController, type StrokeSide, type SwingInput } from './swing';
 import type { IncomingPrediction, PathPoint } from './intercept';
+import { serveContact, type ServeType } from './serves';
 
 export interface AssistSettings {
   /** 0–1: pull the face angle toward one that lands on the table. */
@@ -44,6 +45,10 @@ const AIM_LIMIT = 0.6;
  */
 export const SERVE_TOSS_AHEAD = 0.012;
 
+/** Serving: without a swing the bat is held this far back from the falling ball (m). */
+const SERVE_HOLD_BACK = 0.12;
+/** Serving: a live swing meets the ball within this (plus the magnet radius) of the bat (m). */
+const SERVE_REACH = 0.15;
 /** Contact points are kept at least this high: the ball is played at table level, not off the floor. */
 const CONTACT_MIN_Y = TABLE.height + 0.04;
 /** The bat can reach this far in front of / behind its usual plane to meet the ball (m). */
@@ -84,6 +89,31 @@ export class Player {
   }
   /** 'serve' while serving: the angle assist then targets own half → opponent's half. */
   shotMode: ShotMode = 'rally';
+  /** The serve to play when serving ('auto': the swing decides). */
+  serveType: ServeType = 'auto';
+  /** The tossed ball while serving (view frame), until it is struck; set by the game each frame. */
+  serveBall: BallState | null = null;
+
+  /**
+   * Serve magnet. The bat follows the mouse 1:1, so a hard flick used to carry it past
+   * the falling ball (a missed or fumbled serve) unless it went exactly through it. Now,
+   * while a swing is live and the ball is dropping above the table within reach, the bat
+   * meets it; without a swing the bat holds back, so the ball doesn't just drop onto it.
+   */
+  private serveMagnet() {
+    const b = this.serveBall;
+    if (!b) return;
+    const pose = this.swing.pose;
+    if (length(pose.vel) < 1) {
+      pose.pos.z += SERVE_HOLD_BACK;
+      return;
+    }
+    if (b.vel.y >= -0.05 || b.pos.y < TABLE.height + 0.03) return;
+    if (Math.hypot(b.pos.x - pose.pos.x, b.pos.y - pose.pos.y) > SERVE_REACH + this.assists.magnet) return;
+    pose.pos.x = b.pos.x;
+    pose.pos.y = b.pos.y;
+    this.swing.visualPos = { ...pose.pos };
+  }
   private angleAssist;
 
   /** Playing style (character): handling, stance and default rubbers. */
@@ -111,7 +141,10 @@ export class Player {
     this.swing.params.autoFace = r.autoFace;
   }
 
-  constructor(id: string, params: PhysicsParams) {
+  constructor(
+    id: string,
+    private params: PhysicsParams,
+  ) {
     this.id = id;
     this.angleAssist = makeAngleAssist(params, () => this.assists.angle, () => this.shotMode, () => this.aimTarget);
     this.swing.reset(FOREHAND_OFFSET, TABLE.height + 0.25, this.restZ, this.body.x);
@@ -263,6 +296,7 @@ export class Player {
     this.swing.serving = this.shotMode === 'serve';
     this.swing.update(dt, input, this.body, this.contactZ(), this.aimFor(aim));
     this.tryEarly();
+    if (this.shotMode === 'serve') this.serveMagnet();
     // Taken early: the bat goes to the ball's depth now.
     if (this.early) this.swing.pose.pos.z = this.contactZ();
     // Read after the swing update, so a flick on the contact frame already counts.
@@ -301,6 +335,10 @@ export class Player {
   private contact(ball: BallState, pose: PaddlePose, normal: Vec3, rubber: Rubber): Vec3 | ContactAdjust {
     const perfect = this.shotMode === 'rally' && this.swing.strokePeakAge <= PERFECT_WINDOW;
     this.lastContactPerfect = perfect;
+    if (this.shotMode === 'serve' && this.serveType !== 'auto') {
+      const adj = serveContact(this.serveType, ball, pose, rubber, this.params, this.assists.angle);
+      if (adj) return adj;
+    }
     if (!perfect || this.perfectBonus <= 0) return this.angleAssist(ball, pose, normal, rubber);
     const faster = { ...pose, vel: scale(pose.vel, 1 + this.perfectBonus) };
     return withVel(this.angleAssist(ball, faster, normal, rubber), faster.vel);

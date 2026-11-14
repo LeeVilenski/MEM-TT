@@ -53,6 +53,7 @@ import { CareerScreen } from './career';
 import { HowToPlay } from './howto';
 import { Coach } from './coach';
 import { Tutorial, tutorialHint } from '../progress/tutorial';
+import { SERVE_TYPES, type ServeType } from '../game/serves';
 import { Menu, type MenuHost, type PauseContext } from './menu';
 import { VENUES, setVenue, type Venue, type VenueId } from '../render/venues';
 import { OnlineClient } from '../net/client';
@@ -162,6 +163,19 @@ export class Sandbox implements MenuHost {
     this.gui?.controllersRecursive().forEach((c) => c.updateDisplay());
   }
   private tossHoldStart: number | null = null;
+  /** The serve type the player has chosen (remembered). */
+  serveType: ServeType = SERVE_TYPES.some((t) => t.id === loadPref('mem.serveType', 'auto')) ? (loadPref('mem.serveType', 'auto') as ServeType) : 'auto';
+
+  setServeType(id: ServeType) {
+    this.serveType = id;
+    this.player.serveType = id;
+    savePref('mem.serveType', id);
+  }
+
+  /** The serve chooser: shown while it's your serve, before the toss. */
+  private updateServeBar(show: boolean) {
+    this.matchHud.setServeBar(show && this.tossHoldStart === null ? SERVE_TYPES : null, this.serveType, !this.isTouch);
+  }
 
   // Look, sound and replays
   sfx = new Sfx();
@@ -269,6 +283,8 @@ export class Sandbox implements MenuHost {
     this.matchHud = new MatchHud(container);
     this.hud.showDetails = this.look.shotDetails;
     this.matchHud.showDetails = this.look.shotDetails;
+    this.player.serveType = this.serveType;
+    this.matchHud.onServeType = (id) => this.setServeType(id as ServeType);
     this.matchHud.onRematch = () => (this.online ? this.onlineRematch() : this.startMatch());
     this.matchHud.onExit = () => (this.online ? this.backToLobby() : this.quitToTitle());
     this.lobby = new Lobby(container);
@@ -953,6 +969,7 @@ export class Sandbox implements MenuHost {
       if (document.pointerLockElement) document.exitPointerLock();
       return;
     }
+    this.updateServeBar(this.playing && match.humanToServe);
     if (!this.playing) {
       this.matchHud.setPrompt(null);
       this.matchHud.setMeter(null);
@@ -975,9 +992,12 @@ export class Sandbox implements MenuHost {
   }
 
   private servePrompt() {
-    return this.isTouch
-      ? 'Your serve: hold <b>Serve</b> to toss (longer = higher), release, then swipe as it drops'
-      : 'Your serve: hold <kbd>Space</kbd> to toss (longer = higher), release, then swing as it drops';
+    const t = SERVE_TYPES.find((x) => x.id === this.serveType)!;
+    const how = this.isTouch
+      ? 'Hold <b>Serve</b> to toss, release, then swipe as it drops'
+      : 'Hold <kbd>Space</kbd> to toss, release, then swing as it drops';
+    const pick = this.isTouch ? 'tap a serve below to change' : '<kbd>1</kbd>–<kbd>6</kbd> or <kbd>Q</kbd>/<kbd>E</kbd> to change';
+    return `<b>${t.name} serve</b> · ${this.isTouch ? t.touch : t.mouse}<br><small>${how} · ${pick}</small>`;
   }
 
   // ---------------------------------------------------------------- career, drills, tournaments
@@ -1811,6 +1831,7 @@ export class Sandbox implements MenuHost {
       this.matchHud.setPrompt(null);
       return;
     }
+    this.updateServeBar(inMatch && this.playing && !!c.myServe);
     if (!inMatch) {
       this.matchHud.setPrompt(null);
       this.matchHud.setMeter(null);
@@ -1940,6 +1961,13 @@ export class Sandbox implements MenuHost {
       if (down && !e.repeat && this.playing && this.online.myServe) this.tossHoldStart = performance.now();
       if (!down) this.releaseToss();
       return;
+    }
+    // Choosing a serve: 1–6, or Q / E to cycle (only while it's your serve).
+    if (down && this.playing && (this.match?.humanToServe || this.online?.myServe) && this.tossHoldStart === null) {
+      const i = SERVE_TYPES.findIndex((t) => t.id === this.serveType);
+      if (e.code >= 'Digit1' && e.code <= `Digit${SERVE_TYPES.length}`) return this.setServeType(SERVE_TYPES[Number(e.code.slice(5)) - 1].id);
+      if (e.code === 'KeyQ') return this.setServeType(SERVE_TYPES[(i + SERVE_TYPES.length - 1) % SERVE_TYPES.length].id);
+      if (e.code === 'KeyE') return this.setServeType(SERVE_TYPES[(i + 1) % SERVE_TYPES.length].id);
     }
     if (e.code === 'Space' && this.match) {
       e.preventDefault();

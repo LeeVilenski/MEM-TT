@@ -164,6 +164,8 @@ export class Match {
       if (c.kind === 'ai') c.ai.update(gameDt, this.ballTime + gameDt);
       else {
         c.player.setIntercept(this.interceptPointFor(s), this.ballTime);
+        // Serving: the tossed ball, until it is struck (for the serve magnet).
+        c.player.serveBall = s === this.server && this.phase === 'rally' && this.sim && this.referee?.hits === 0 ? this.sim.state : null;
         const h = human && human.side === s ? human : { input: { dx: 0, dy: 0, drive: false, close: false, open: false, hookLeft: false, hookRight: false }, move: { x: 0, z: 0 } };
         c.player.update(realDt, h.input, h.move, { x: 0, z: -0.85 });
       }

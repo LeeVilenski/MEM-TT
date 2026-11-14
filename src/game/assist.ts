@@ -43,6 +43,8 @@ export function landingOutcome(
   rubber: Rubber,
   params: PhysicsParams,
   mode: ShotMode = 'rally',
+  /** Coarser steps for a quick screening pass (confirm the winner with the default). */
+  dt = 1 / 240,
 ): { outcome: LandingOutcome; pos?: Vec3; first?: Vec3; net?: boolean } {
   const s = cloneState(ball);
   if (paddleImpulse(s, { ...pose, normal }, rubber) <= 0) return { outcome: 'short' };
@@ -51,7 +53,7 @@ export function landingOutcome(
   const { events, path } = predict(s, params, {
     maxTime: 2.5,
     // Same stepping as the live ball, so net-skimmers and edge balls are judged the same way.
-    dt: 1 / 240,
+    dt,
     sampleEvery: 1000,
     stop: (e) => e.type === 'floor' || (e.type === 'table' && ++tables >= (mode === 'serve' ? 2 : 1)),
     // Rally: once the ball has risen above the table top and dropped back below it, or is
@@ -63,7 +65,8 @@ export function landingOutcome(
             if (b.pos.y > TABLE.height + 0.01) wasAbove = true;
             return (wasAbove && b.pos.y < TABLE.height - 0.01) || b.vel.z > 0.5;
           }
-        : undefined,
+        : // Serve: once it has dropped below the table top it can't bounce on the table again.
+          (b) => b.pos.y < TABLE.height - 0.02,
   });
   const bounces = events.filter((e) => e.type === 'table');
   const netTouched = events.some((e) => e.type === 'net');
@@ -246,15 +249,22 @@ export function makeAngleAssist(
     const tooWeak = r0.outcome === 'short' && !r0.net;
     const scales = (tooWeak ? [1.3, 1.6, 2.0, 2.4, 0.7, 0.4] : [0.7, 0.4, 1.3, 1.6]).filter((f) => f >= minScale - 1e-9 && f <= maxScale + 1e-9);
     let guess: ContactAdjust | null = null;
-    for (const f of scales) {
-      const slower = { ...pose, vel: scale(pose.vel, f) };
+    // Serves: change only the pace into the face, not the brush across it, so a spinny
+    // serve stays spinny (scaling the whole swing took most of the spin out).
+    const into = dot(pose.vel, normal);
+    const paced = (f: number, keepBrush: boolean): Vec3 => (keepBrush ? add(pose.vel, scale(normal, into * (f - 1))) : scale(pose.vel, f));
+    // (If no brush-keeping version lands, fall back to scaling the whole swing.)
+    const tries = m === 'serve' ? [...scales.map((f) => [f, 1] as const), ...scales.map((f) => [f, 0] as const)] : scales.map((f) => [f, 0] as const);
+    for (const [f, keep] of tries) {
+      const vel = paced(f, keep === 1);
+      const slower = { ...pose, vel };
       const out = outcomeWith(slower);
-      if (out(0) === 'in') return { normal, vel: scale(pose.vel, f) };
+      if (out(0) === 'in') return { normal, vel };
       const t = solve(out, 10);
-      if (t !== null && Math.abs(t) <= reach) return { normal: at(t), vel: scale(pose.vel, f) };
+      if (t !== null && Math.abs(t) <= reach) return { normal: at(t), vel };
       // No clear landing even here: remember the net↔long tipping point as a best guess.
       const e = edge as number | null;
-      if (e !== null && Math.abs(e) <= reach) guess = { normal: at(e), vel: scale(pose.vel, f) };
+      if (e !== null && Math.abs(e) <= reach) guess = { normal: at(e), vel };
     }
     if (guess) return guess;
 

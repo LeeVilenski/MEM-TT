@@ -238,6 +238,12 @@ Play against the ball machine with a mouse-driven paddle. Click **▶ Play**: th
   - Simulation (0%) turns all of this off.
 - **Physics:** the gesture becomes a real paddle velocity and face angle, and the physics below decides the shot.
 
+**Serving:**
+- Choose a serve before you toss: **Free** (your swing decides), **Backspin**, **Sidespin**, **Topspin**, **Fast long** or **No-spin**. Keys **1–6** or **Q/E**; on touch, tap one of the serve buttons.
+- The type sets the face angle and the brush; the swipe's speed sets the spin (a hard backspin serve is nearly 5,000 rpm), and for sidespin its direction sets the curve. The assist finds a version that lands without taking the spin out.
+- While you swing, the bat meets the falling ball (a serve magnet); without a swing it holds back, so the ball doesn't just drop onto a still bat.
+- Free serves keep their spin too: the assist only trims the pace into the face, not the brush across it.
+
 **Where you meet the ball:**
 - The ring shows the normal contact point: where the ball reaches your usual distance from the table. It's never below table level: if a ball would drop that low first (a short ball, or a long low one), you take it at the top of its bounce and the footwork assist steps you in.
 - **Take it early:** a flick while the ball is still rising off the bounce, with the bat within reach of it, meets it there and then. The bat reaches in (or back) up to about 35 cm to meet the ball where it is.
