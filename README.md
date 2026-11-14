@@ -239,7 +239,10 @@ Play against the ball machine with a mouse-driven paddle. Click **▶ Play**: th
   - Simulation (0%) turns all of this off.
 - **Physics:** the gesture becomes a real paddle velocity and face angle, and the physics below decides the shot.
 
-**Doubles vs AI** (Match vs AI → Mode → Doubles): you and an AI partner against two AI, with the real doubles rules (partners alternate shots, diagonal serves, serving order). It runs in a private in-browser room, so it pauses properly. Your partner is drawn see-through (and fades out near the camera) so they never block your view, and players waiting for their turn stand off to one side.
+**Doubles vs AI** (Match vs AI → Mode → Doubles): you and an AI partner against two AI, with the real doubles rules (partners alternate shots, diagonal serves, serving order). It runs in a private in-browser room, so it pauses properly. Your partner is drawn see-through (and fades out near the camera) so they never block your view.
+- **Serving:** doubles serves go diagonally (your right half, then the receiver's right half). Your toss is from your right half and the serve assists aim for the diagonal; the two service boxes light up on the table during the serve, and the prompt says who serves to whom.
+- **Rallies:** partners alternate shots; a "Your shot" / "Ed's shot" label shows whose ball it is.
+- **AI partners and opponents:** the receiver waits ready in their right half-court, the player who hits next (and the one after) stays ready, and only the player not involved steps aside. AI characters at the table are all different.
 
 **Camera** (Settings → Camera):
 - **Dynamic** (default): nearer and lower than before with a wider lens, following your footwork; its aim drifts toward the ball, it eases in as a ball arrives and lifts briefly after your shot.

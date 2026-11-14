@@ -261,7 +261,12 @@ export class RoomCore {
   }
 
   private pickAiStyle(): StyleId {
-    return this.info.aiStyle === 'random' ? STYLE_IDS[Math.floor(this.rng() * STYLE_IDS.length)] : this.info.aiStyle;
+    if (this.info.aiStyle !== 'random') return this.info.aiStyle;
+    // Random, but not a character already at the table (two Ryans is confusing).
+    const taken = new Set(Object.values(this.info.seats).map((s) => s?.style));
+    const free = STYLE_IDS.filter((id) => !taken.has(id));
+    const pool = free.length ? free : STYLE_IDS;
+    return pool[Math.floor(this.rng() * pool.length)];
   }
 
   /** Start a match (or a rematch). Optionally fill empty seats with the AI. */
@@ -436,6 +441,7 @@ export class RoomCore {
     const now = this.now();
     const dt = Math.min(0.1, Math.max(0, now - this.lastTick));
     this.lastTick = now;
+    this.assignAiRoles();
     for (const ai of Object.values(this.ais)) ai?.update(dt, now);
 
     if (now - this.lastPose >= POSE_INTERVAL) {
@@ -476,6 +482,24 @@ export class RoomCore {
   }
 
   /** Real-time flight with the AI's paddle, to find the AI's contact as it happens. */
+  /**
+   * Doubles positioning: the receiver waits for the serve in their right half-court, the
+   * player who hits next stays ready, and the others step aside, out of the way.
+   */
+  private assignAiRoles() {
+    if (this.info.mode !== 'doubles' || !this.order.length) return;
+    const serving = this.phase === 'serve-wait' || (this.phase === 'rally' && this.hitIndex <= 1);
+    const receiver = serving ? this.order[(this.serverIndex + 1) % this.order.length] : null;
+    // On deck: the player who hits after the next shot (your partner, once you've hit)
+    // gets back into position now rather than when the ball is already coming.
+    const onDeck = this.phase === 'rally' ? this.order[(this.serverIndex + this.hitIndex + 1) % this.order.length] : null;
+    for (const [seat, ai] of Object.entries(this.ais)) {
+      if (!ai) continue;
+      ai.receiving = seat === receiver;
+      ai.waiting = seat !== this.next && seat !== receiver && seat !== onDeck;
+    }
+  }
+
   private stepAiLive(now: number) {
     const live = this.aiLive;
     const seat = this.next;

@@ -1,5 +1,5 @@
 import { TABLE, cloneState, length, normalize, paddleImpulse, radToRpm, spinComponents, v3, type BallState, type ContactAdjust, type PaddlePose, type PhysicsParams, type Rubber, type Vec3 } from '../physics';
-import { landingOutcome } from './assist';
+import { isDiagonal, landingOutcome } from './assist';
 import { faceNormal } from './swing';
 
 /**
@@ -63,7 +63,7 @@ const SHORT_Z = -TABLE.halfLength + 0.55;
  * (0 = take the recipe as it is, even if it faults; 1 = search freely for one that lands).
  * Returns null for 'auto' (the normal assist handles it).
  */
-export function serveContact(type: ServeType, ball: BallState, pose: PaddlePose, rubber: Rubber, params: PhysicsParams, strength: number, flipped = false): ContactAdjust | null {
+export function serveContact(type: ServeType, ball: BallState, pose: PaddlePose, rubber: Rubber, params: PhysicsParams, strength: number, flipped = false, diagonal = false): ContactAdjust | null {
   if (type === 'auto') return null;
   const r = RECIPES[type];
   const sp = length(pose.vel);
@@ -140,6 +140,7 @@ export function serveContact(type: ServeType, ball: BallState, pose: PaddlePose,
       if (quick.outcome !== 'in') continue;
       const out = landingOutcome(ball, { ...pose, vel: c.adj.vel! }, c.adj.normal, rubber, params, 'serve');
       if (out.outcome !== 'in' || !out.pos) continue;
+      if (diagonal && !isDiagonal(out.first, out.pos)) continue; // doubles: your right half, then theirs
       const isShort = out.pos.z > SHORT_Z;
       const score = c.bound * ((r.length === 'short') === isShort ? 1 : 0.6);
       if (!best || score > best.score) best = { adj: c.adj, score };
@@ -152,7 +153,7 @@ export function serveContact(type: ServeType, ball: BallState, pose: PaddlePose,
   // Nothing lands. A sidespin brushed toward the near edge (from a toss out wide) is
   // turned around to brush toward the middle: a sidespin that curves the other way
   // beats a fault.
-  if (type === 'sidespin' && !flipped && side !== 0) return serveContact(type, ball, { ...pose, vel: v3(-pose.vel.x, pose.vel.y, pose.vel.z) }, rubber, params, strength, true);
+  if (type === 'sidespin' && !flipped && side !== 0) return serveContact(type, ball, { ...pose, vel: v3(-pose.vel.x, pose.vel.y, pose.vel.z) }, rubber, params, strength, true, diagonal);
   // Otherwise leave it to the normal landing assist, with the player's own swing.
   return null;
 }

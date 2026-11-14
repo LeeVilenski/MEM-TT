@@ -187,6 +187,37 @@ export class Sandbox implements MenuHost {
     this.requestPlay(); // from the click, so the mouse can be captured
   }
 
+  /** Doubles: the lit-up service boxes during a serve, and whose shot it is in a rally. */
+  private serveBoxes: THREE.Group | null = null;
+  /** Doubles: the serve is still in play (no rally shot yet). */
+  private doublesServing = false;
+
+  private updateDoublesHelp(c: OnlineClient, inMatch: boolean) {
+    const doubles = c.mode === 'doubles' && inMatch;
+    if (c.phase === 'serve-wait') this.doublesServing = true;
+    if (c.phase === 'point-over') this.doublesServing = false;
+    if (!this.serveBoxes) {
+      // In the view frame the diagonal is always your right half (+x, near) and the far
+      // left half (−x): whoever serves, the boxes are the same two.
+      const g = new THREE.Group();
+      const box = (color: number, x: number, z: number) => {
+        const m = new THREE.Mesh(new THREE.PlaneGeometry(TABLE.halfWidth - 0.03, TABLE.halfLength - 0.05), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.22, depthWrite: false, toneMapped: false }));
+        m.rotation.x = -Math.PI / 2;
+        m.position.set(x, TABLE.height + 0.003, z);
+        g.add(m);
+      };
+      box(0xe8562a, TABLE.halfWidth / 2, TABLE.halfLength / 2);
+      box(0x5eead4, -TABLE.halfWidth / 2, -TABLE.halfLength / 2);
+      this.scene.add(g);
+      this.serveBoxes = g;
+    }
+    this.serveBoxes.visible = doubles && this.doublesServing && !this.replay;
+    // Whose shot (partners alternate): shown while the ball is ours to play.
+    let turn: string | null = null;
+    if (doubles && c.phase === 'rally' && !this.doublesServing && c.next && seatSide(c.next) === c.side) turn = c.next === c.seat ? 'Your shot' : `${c.names[c.next] ?? 'Partner'}'s shot`;
+    this.matchHud.setTurn(turn, turn === 'Your shot');
+  }
+
   /** Each frame in single-player doubles: start the match once seated; stop the clock while paused. */
   private doublesFrame() {
     if (!this.offlineDoubles || !this.online) return;
@@ -1737,6 +1768,9 @@ export class Sandbox implements MenuHost {
 
   leaveOnline() {
     if (!this.online) return;
+    this.matchHud.setTurn(null);
+    if (this.serveBoxes) this.serveBoxes.visible = false;
+    this.doublesServing = false;
     if (this.offlineDoubles) {
       this.offlineDoubles = false;
       this.localServer = null;
@@ -1818,6 +1852,7 @@ export class Sandbox implements MenuHost {
         this.sfx.toss();
         break;
       case 'hit': {
+        if (!e.serve) this.doublesServing = false;
         const info = classifyShot(mapVec(c.side, e.pos), e.velOut, e.spinOut, e.paddleVel, e.velIn, e.spinIn);
         const who = e.by === c.seat ? 'You' : (c.names[e.by] ?? e.by);
         const name = e.serve ? 'Serve' : info.name;
@@ -1957,6 +1992,7 @@ export class Sandbox implements MenuHost {
       return;
     }
     this.updateServeBar(inMatch && this.playing && !!c.myServe);
+    this.updateDoublesHelp(c, inMatch);
     if (!inMatch) {
       this.matchHud.setPrompt(null);
       this.matchHud.setMeter(null);
@@ -1964,10 +2000,12 @@ export class Sandbox implements MenuHost {
       this.matchHud.setPrompt(this.offlineDoubles ? null : 'Paused locally — the match keeps going online!');
       this.matchHud.setMeter(null);
     } else if (c.myServe) {
-      this.matchHud.setPrompt(this.servePrompt());
+      const to = c.mode === 'doubles' && c.receiverSeat ? `<br><b>Serve to ${c.names[c.receiverSeat] ?? 'them'}</b>: bounce it in your right half, then in theirs (lit up)` : '';
+      this.matchHud.setPrompt(this.servePrompt() + to);
       this.matchHud.setMeter(this.tossHoldStart !== null ? (performance.now() - this.tossHoldStart) / 1000 / TOSS_HOLD_MAX : null);
     } else if (c.phase === 'serve-wait' && c.serverSeat) {
-      this.matchHud.setPrompt(`${c.names[c.serverSeat] ?? 'Opponent'} to serve`);
+      const who = (seat: Seat | null) => (seat === c.seat ? 'you' : seat ? `${c.names[seat] ?? seat}${c.seat && seatSide(seat) === c.side ? ' (your partner)' : ''}` : '');
+      this.matchHud.setPrompt(c.mode === 'doubles' && c.receiverSeat ? `${c.names[c.serverSeat] ?? 'Opponent'} serves to <b>${who(c.receiverSeat)}</b>` : `${c.names[c.serverSeat] ?? 'Opponent'} to serve`);
       this.matchHud.setMeter(null);
     } else {
       this.matchHud.setPrompt(null);

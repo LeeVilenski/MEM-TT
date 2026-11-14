@@ -176,6 +176,7 @@ export class OnlineClient {
   }
 
   leave() {
+    this.player.doubles = false;
     this.send({ t: 'leave' });
     this.transport.close();
     this.phase = 'closed';
@@ -200,7 +201,9 @@ export class OnlineClient {
 
   /** Where the local player holds the ball to serve (view frame). */
   handView(): Vec3 {
-    return v3(this.player.swing.pose.pos.x, TABLE.height + 0.06, this.player.restZ - SERVE_TOSS_AHEAD);
+    // Doubles: the toss is from your right half-court (the serve must bounce there first).
+    const x = this.mode === 'doubles' ? Math.max(0.18, Math.min(0.6, this.player.swing.pose.pos.x)) : this.player.swing.pose.pos.x;
+    return v3(x, TABLE.height + 0.06, this.player.restZ - SERVE_TOSS_AHEAD);
   }
 
   /** The local player's intercept point and time (view frame), for the marker and bots. */
@@ -345,6 +348,7 @@ export class OnlineClient {
         this.player.applyRealism(m.realism);
         if (this.speed !== r.gameSpeed) this.setSpeed(r.gameSpeed);
         this.mode = m.mode;
+        this.player.doubles = m.mode === 'doubles';
         this.names = m.names;
         this.score = m.score;
         this.phase = 'serve-wait';

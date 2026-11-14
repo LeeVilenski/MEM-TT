@@ -93,6 +93,8 @@ export class Player {
   }
   /** 'serve' while serving: the angle assist then targets own half → opponent's half. */
   shotMode: ShotMode = 'rally';
+  /** Playing doubles: serves must go diagonally (set by the game). */
+  doubles = false;
   /** The serve to play when serving ('auto': the swing decides). */
   serveType: ServeType = 'auto';
   /** The tossed ball while serving (view frame), until it is struck; set by the game each frame. */
@@ -150,7 +152,7 @@ export class Player {
     private params: PhysicsParams,
   ) {
     this.id = id;
-    this.angleAssist = makeAngleAssist(params, () => this.assists.angle, () => this.shotMode, () => this.aimTarget);
+    this.angleAssist = makeAngleAssist(params, () => this.assists.angle, () => this.shotMode, () => this.aimTarget, () => this.doubles);
     this.swing.reset(FOREHAND_OFFSET, TABLE.height + 0.25, this.restZ, this.body.x);
   }
 
@@ -345,7 +347,7 @@ export class Player {
     const perfect = this.shotMode === 'rally' && this.swing.strokePeakAge <= PERFECT_WINDOW;
     this.lastContactPerfect = perfect;
     if (this.shotMode === 'serve' && this.serveType !== 'auto') {
-      const adj = serveContact(this.serveType, ball, pose, rubber, this.params, this.assists.angle);
+      const adj = serveContact(this.serveType, ball, pose, rubber, this.params, this.assists.angle, false, this.doubles);
       if (adj) return adj;
     }
     if (!perfect || this.perfectBonus <= 0) return this.angleAssist(ball, pose, normal, rubber);

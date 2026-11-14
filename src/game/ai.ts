@@ -127,6 +127,9 @@ export class AiPlayer {
    * isn't its turn, so partners don't stand in each other's way (or in front of the camera).
    */
   doublesSide = 0;
+  /** Doubles: not involved in the next shot (steps aside); or receiving the serve (set by the room). */
+  waiting = false;
+  receiving = false;
   /** Playing style: stroke preferences, distance from the table and rubbers. */
   style: PlayStyle = STYLES.allround;
 
@@ -144,8 +147,12 @@ export class AiPlayer {
   /** Ready position for this style. */
   private get ready() {
     const z = TABLE.halfLength + Math.max(0.45, this.style.distance);
-    // Doubles: wait off to one side and a step back, out of the partner's way.
-    if (this.doubles && this.doublesSide) return { x: this.doublesSide * 0.75, z: z + 0.5 };
+    if (this.doubles) {
+      // Receiving the serve: ready in your right half-court (+x in your own frame).
+      if (this.receiving) return { x: 0.3, z };
+      // Not your shot next: off to one side and a step back, out of your partner's way.
+      if (this.waiting && this.doublesSide) return { x: this.doublesSide * 0.75, z: z + 0.5 };
+    }
     return { x: 0, z };
   }
 
@@ -329,8 +336,9 @@ export class AiPlayer {
       if (stroke === 'smash') personal *= pers.smashError ?? 1;
       if (stroke === 'block' && opts.steady) personal *= 1 - 0.6 * opts.steady;
       const pitch = bestPitch + this.gauss() * p.pitchError * errScale * personal;
-      const yawErr = yaw + this.gauss() * p.yawError * personal;
-      const speed = 1 + this.gauss() * p.speedError * personal;
+      // (Aim and pace are rehearsed too: a doubles serve must also land in the right half.)
+      const yawErr = yaw + this.gauss() * p.yawError * errScale * personal;
+      const speed = 1 + this.gauss() * p.speedError * errScale * personal;
       best = { t, pos, vel: scale(vel, speed), normal: faceNormal(pitch, yawErr), stroke, solved: true, aimX: target.x };
       this.lastTargetX = target.x;
       break;

@@ -33,6 +33,14 @@ export type LandingOutcome = 'in' | 'short' | 'long' | 'wide';
 export type ShotMode = 'rally' | 'serve';
 
 /**
+ * Doubles serve: first bounce in the server's right half (+x in the hitter's frame), then
+ * in the receiver's right half (−x), with a little room from the centre line.
+ */
+export function isDiagonal(first: Vec3 | undefined, second: Vec3 | undefined): boolean {
+  return !!first && !!second && first.x >= 0.03 && second.x <= -0.03;
+}
+
+/**
  * Where a hit with this face normal would land, in the hitter's frame (hitter at +z).
  * 'short' = into the net / own side; 'long' = past the far end.
  */
@@ -123,6 +131,8 @@ export function makeAngleAssist(
   strength: () => number,
   mode: () => ShotMode = () => 'rally',
   aim: () => { x: number; z: number } | null = () => null,
+  /** Doubles: serves must go diagonally. */
+  diagonal: () => boolean = () => false,
 ) {
   const STEP = 6;
   const RANGE = 60;
@@ -278,7 +288,24 @@ export function makeAngleAssist(
     const r = base(ball, pose, normal, rubber);
     if (k <= 0) return r;
     const adj = 'normal' in r ? r : { normal: r };
-    const out = steer(ball, pose, adj, rubber, k);
+    const out = mode() === 'serve' && diagonal() ? steerDiagonal(ball, pose, adj, rubber, k) : steer(ball, pose, adj, rubber, k);
     return out.vel ? out : out.normal;
   };
+
+  /**
+   * Doubles serve: turn the face (and the stroke with it) about the vertical, smallest turn
+   * first, until the serve lands diagonally (your right half, then theirs).
+   */
+  function steerDiagonal(ball: BallState, pose: PaddlePose, adj: ContactAdjust, rubber: Rubber, k: number): ContactAdjust {
+    const vel = adj.vel ?? pose.vel;
+    const maxYaw = 36 * k;
+    for (const deg of [0, -6, 6, -12, 12, -18, 18, -24, 24, -30, 30, -36, 36]) {
+      if (Math.abs(deg) > maxYaw) continue;
+      const rad = (deg * Math.PI) / 180;
+      const t = { normal: rotate(adj.normal, UP, rad), vel: rotate(vel, UP, rad) };
+      const r = landingOutcome(ball, { ...pose, vel: t.vel }, t.normal, rubber, params, 'serve');
+      if (r.outcome === 'in' && isDiagonal(r.first, r.pos)) return t;
+    }
+    return adj;
+  }
 }
