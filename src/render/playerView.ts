@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { PADDLE, UP, cross, dot, normalize, scale, sub, type Vec3 } from '../physics';
+import { PADDLE, UP, add, cross, dot, length, normalize, scale, sub, v3, type Vec3 } from '../physics';
 import type { Player } from '../game/player';
 import type { StrokeSide } from '../game/swing';
 import type { PaddlePose } from '../physics';
@@ -10,6 +10,11 @@ const RED = 0xc8202a;
 /** The ring turns gold this long (s) before contact: flick now for a perfect stroke. */
 const PERFECT_RING = 0.06;
 const BLACK = 0x15161a;
+/** The drawn backswing starts this long (game s) before the ball arrives, and reaches the contact point on time. */
+const WIND_UP = 0.2;
+/** Follow-through after contact: out along the stroke, then back (real s). */
+const FOLLOW_OUT = 0.12;
+const FOLLOW_TIME = 0.42;
 
 /**
  * Paddle + simple body avatar, plus the intercept marker that shows where the
@@ -134,10 +139,60 @@ export class PlayerView {
     this.markerLine.computeLineDistances();
   }
 
-  update(player: Player) {
-    // Draw the paddle where the mouse put it (the contact point may be pinned during a flick).
-    this.updatePose({ ...player.swing.pose, pos: player.swing.visualPos }, player.body, player.swing.side, player.swing.forward);
+  /** Drawn stroke offset from the physics pose (smoothed), and the current follow-through. */
+  private strokeOffset: Vec3 = v3();
+  private follow: { at: number; dir: Vec3; len: number } | null = null;
+
+  /**
+   * The ball was just struck: draw a follow-through along the stroke. The bat is drawn
+   * at the contact point at the moment of contact, so it meets the ball rather than
+   * passing through it.
+   */
+  strike(paddleVel: Vec3) {
+    const sp = length(paddleVel);
+    if (sp < 0.3) return; // a block: no follow-through
+    this.follow = { at: performance.now() / 1000, dir: scale(paddleVel, 1 / sp), len: Math.min(0.38, 0.1 + sp * 0.035) };
+    this.strokeOffset = v3();
   }
+
+  update(player: Player) {
+    // Contact always happens at the physics pose (the rest plane, where the ring is). The
+    // drawn stroke is timed around it: a wind-up that arrives at the contact point just
+    // as the ball does, then a follow-through. Away from contact (a shadow stroke), the
+    // bat lunges forward with the flick so swings still feel responsive.
+    const now = performance.now() / 1000;
+    const vel = player.swing.pose.vel;
+    const sp = length(vel);
+    const eta = player.interceptEta;
+    let target: Vec3;
+    let exact = false;
+    const f = this.follow;
+    if (f && now - f.at < FOLLOW_TIME) {
+      const u = (now - f.at) / FOLLOW_TIME;
+      const out = FOLLOW_OUT / FOLLOW_TIME;
+      const amount = u < out ? Math.sin(((u / out) * Math.PI) / 2) : 0.5 + 0.5 * Math.cos(((u - out) / (1 - out)) * Math.PI);
+      target = scale(f.dir, f.len * amount);
+      exact = true;
+    } else {
+      this.follow = null;
+      if (Number.isFinite(eta) && eta < WIND_UP && eta > -0.05) {
+        // Wind-up: back along the live stroke, closing to zero at contact.
+        const k = Math.max(0, eta) / WIND_UP;
+        target = sp > 0.5 ? scale(vel, (-Math.min(0.14, sp * 0.025) * k) / sp) : v3();
+        exact = eta < 0.06;
+      } else {
+        const n = player.swing.pose.normal;
+        target = v3(n.x * player.swing.forward, 0, n.z * player.swing.forward);
+      }
+    }
+    // Ease between modes, but be exact close to contact and during the follow-through.
+    const k = exact ? 1 : 1 - Math.exp(-(now - this.lastUpdate) * 30);
+    this.lastUpdate = now;
+    this.strokeOffset = add(this.strokeOffset, scale(sub(target, this.strokeOffset), Math.min(1, k)));
+    this.updatePose({ ...player.swing.pose, pos: add(player.swing.visualPos, this.strokeOffset) }, player.body, player.swing.side, 0);
+  }
+
+  private lastUpdate = performance.now() / 1000;
 
   /** Generic update (used for AI players too). Pose and body in world coordinates. */
   /** What was drawn last (for replays). */

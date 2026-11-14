@@ -67,6 +67,29 @@ export class RallyRecorder {
     if (t >= this.stopAt) this.finish();
   }
 
+  /**
+   * An exact moment between two recorded frames: a paddle contact or a bounce. Frames
+   * are only taken once per rendered frame, and at rally speeds the ball moves 15–30 cm
+   * between them; interpolating straight across a contact cuts the corner, so the ball
+   * never quite meets the bat. A keyframe pins the ball (and the hitter's bat) to where
+   * they actually met. `bats` moves those views' paddles to the given positions.
+   */
+  keyframe(t: number, ball: BallFrame, bats: { id: string; pos: Vec3 }[] = []) {
+    if (!this.recording) return;
+    const prev = this.frames[this.frames.length - 1];
+    if (!prev) return;
+    // The event happened during the frame now being simulated: between the last frame and now.
+    const kt = prev.t + Math.max(0.0005, (t - this.t0 - prev.t) * 0.5);
+    const views = prev.views.map((v) => {
+      const bat = bats.find((b) => b.id === v.id);
+      return bat ? { ...v, pose: { ...v.pose, pos: { ...bat.pos } }, forward: 0 } : v;
+    });
+    this.frames.push({ t: kt, ball: { pos: { ...ball.pos }, vel: { ...ball.vel }, spin: { ...ball.spin } }, views });
+    // The sound and caption for this moment were logged at the frame's time; move them to
+    // the moment itself, so in slow motion the hit is heard as the ball meets the bat.
+    for (let i = this.cues.length - 1; i >= 0 && this.cues[i].t > prev.t; i--) this.cues[i].t = kt;
+  }
+
   caption(t: number, text: string) {
     if (!this.recording) return;
     this.hits++;
