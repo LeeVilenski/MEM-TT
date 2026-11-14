@@ -19,7 +19,7 @@ export interface PauseContext {
 /** Everything the menus read and change; the Sandbox implements it. */
 export interface MenuHost {
   readonly isTouch: boolean;
-  matchSettings: { level: AiLevel; bestOf: number; aiStyle: StyleId | 'random' };
+  matchSettings: { level: AiLevel; bestOf: number; aiStyle: StyleId | 'random'; doubles: boolean };
   onlineSettings: { name: string; code: string; mode: 'singles' | 'doubles'; bestOf: number };
   realism: { percent: number; style: StyleId };
   look: { venue: VenueId; volume: number; muted: boolean; ambience: boolean; autoReplay: boolean; arcadeFx: boolean; bloom: boolean; fullSpeedOut: boolean; callouts: boolean };
@@ -29,6 +29,8 @@ export interface MenuHost {
   lockReason(kind: UnlockKind, id: string): string | null;
 
   startAiMatch(): void;
+  /** You and an AI partner against two AI. */
+  startDoubles(): void;
   startPractice(): void;
   startTutorial(): void;
   openCareer(): void;
@@ -239,8 +241,9 @@ export class Menu {
     const formats = BEST_OF.map((n) => this.choice('bestOf', String(n), `Best of ${n}`, m.bestOf === n)).join('');
     return `
       ${this.header('Match vs AI')}
+      ${this.group('Mode', `<div class="menu-choices">${this.choice('doubles', '0', 'Singles', !m.doubles, '1 v 1')}${this.choice('doubles', '1', 'Doubles', m.doubles, 'You + AI partner v 2 AI')}</div>`)}
       ${this.group('Opponent level', `<div class="menu-choices">${levels}</div>`)}
-      ${this.group('Opponent', `<div class="menu-choices wrap">${styles}</div>`)}
+      ${m.doubles ? '' : this.group('Opponent', `<div class="menu-choices wrap">${styles}</div>`)}
       ${this.group('Format', `<div class="menu-choices">${formats}</div>`)}
       <div class="menu-actions"><button data-a="start" class="primary big">▶ Start match</button></div>`;
   }
@@ -381,8 +384,9 @@ export class Menu {
         case 'back':
           return this.back();
         case 'quick':
-        case 'start':
           return h.startAiMatch();
+        case 'start':
+          return h.matchSettings.doubles ? h.startDoubles() : h.startAiMatch();
         case 'practice':
           return h.startPractice();
         case 'tutorial':
@@ -429,6 +433,9 @@ export class Menu {
     switch (k) {
       case 'level':
         h.matchSettings.level = v as AiLevel;
+        break;
+      case 'doubles':
+        h.matchSettings.doubles = v === '1';
         break;
       case 'aiStyle':
         h.matchSettings.aiStyle = v as StyleId | 'random';

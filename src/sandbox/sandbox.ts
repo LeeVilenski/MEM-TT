@@ -148,7 +148,60 @@ export class Sandbox implements MenuHost {
   private ai: AiPlayer | null = null;
   private aiView: PlayerView;
   private matchHud: MatchHud;
-  matchSettings = { level: 'medium' as AiLevel, bestOf: 3, aiStyle: 'random' as StyleId | 'random' };
+  matchSettings = { level: 'medium' as AiLevel, bestOf: 3, aiStyle: 'random' as StyleId | 'random', doubles: false };
+
+  // Single-player doubles: you and an AI partner against two AI, in a private in-browser
+  // room (the online doubles rules, serving order and AI seats) whose clock stops while
+  // you're paused.
+  private offlineDoubles = false;
+  private doublesStarted = false;
+  private pausedMs = 0;
+  /** When the current pause began (performance.now ms), or null while playing. */
+  private pausedAt: number | null = null;
+  private readonly localClock = () => {
+    const now = performance.now();
+    return (now - this.pausedMs - (this.pausedAt !== null ? now - this.pausedAt : 0)) / 1000;
+  };
+
+  startDoubles() {
+    this.leaveOnline();
+    this.endMatch();
+    this.stopDrill();
+    this.stopTutorial();
+    this.tournament = null;
+    this.practicing = false;
+    this.matchHud.hideOver();
+    const server = new LocalServer(this.localClock);
+    this.localServer = server;
+    const client = (this.online = new OnlineClient(server.connect('LOCAL'), this.player, this.params, this.localClock, {
+      name: 'You',
+      style: this.player.style.id,
+      create: { mode: 'doubles', bestOf: this.matchSettings.bestOf, aiLevel: this.matchSettings.level, realism: this.realism.percent / 100 },
+    }));
+    this.offlineDoubles = true;
+    this.doublesStarted = false;
+    this.pausedAt = null;
+    this.menu.hide();
+    this.practiceUi(false);
+    client.on((e) => this.onOnlineEvent(e));
+    this.requestPlay(); // from the click, so the mouse can be captured
+  }
+
+  /** Each frame in single-player doubles: start the match once seated; stop the clock while paused. */
+  private doublesFrame() {
+    if (!this.offlineDoubles || !this.online) return;
+    const c = this.online;
+    if (!this.doublesStarted && c.phase === 'lobby' && c.seat && c.isHost) {
+      this.doublesStarted = true;
+      c.start(true);
+    }
+    // The room's clock stops while you're paused (measured in real time, not frame steps).
+    if (!this.playing && this.pausedAt === null) this.pausedAt = performance.now();
+    else if (this.playing && this.pausedAt !== null) {
+      this.pausedMs += performance.now() - this.pausedAt;
+      this.pausedAt = null;
+    }
+  }
   /** Realism slider (0 = simulation, 100 = arcade), for offline play and new rooms. */
   realism = { percent: Math.round(DEFAULT_REALISM * 100), style: 'allround' as StyleId };
   /** Game speed from the realism slider (offline). */
@@ -760,6 +813,7 @@ export class Sandbox implements MenuHost {
     const realDt = Math.min(0.1, (now - this.lastFrame) / 1000);
     this.lastFrame = now;
 
+    this.doublesFrame();
     this.localServer?.pump();
     // Hit-stop pauses the game clock briefly; online the clock is the server's, so never.
     this.juice.allowHitStop = !this.online;
@@ -1250,7 +1304,8 @@ export class Sandbox implements MenuHost {
   }
 
   restart() {
-    if (this.tutorial) this.startTutorial();
+    if (this.offlineDoubles) this.startDoubles();
+    else if (this.tutorial) this.startTutorial();
     else if (this.drill) this.startDrill(this.drill.drill.id);
     else if (this.match && !this.tournament) this.startMatch();
     else this.resume();
@@ -1281,6 +1336,12 @@ export class Sandbox implements MenuHost {
   }
 
   private pauseContext(): PauseContext {
+    if (this.online && this.offlineDoubles) {
+      const sc = this.online.score;
+      const side = this.online.side;
+      const them = side === 'near' ? 'far' : 'near';
+      return { kind: 'match', detail: `Doubles vs AI${sc ? ` · <b>${sc.points[side]}–${sc.points[them]}</b> · games ${sc.games[side]}–${sc.games[them]}` : ''}` };
+    }
     if (this.online) return { kind: 'online', detail: 'Online match: it keeps going while you are paused.' };
     if (this.match && this.ai) {
       const sc = this.match.score;
@@ -1676,6 +1737,10 @@ export class Sandbox implements MenuHost {
 
   leaveOnline() {
     if (!this.online) return;
+    if (this.offlineDoubles) {
+      this.offlineDoubles = false;
+      this.localServer = null;
+    }
     this.hud.setOverlay(false);
     this.applyRealism(); // the room's realism no longer applies
     this.online.leave();
@@ -1688,12 +1753,14 @@ export class Sandbox implements MenuHost {
   }
 
   private onlineRematch() {
+    if (this.offlineDoubles) return this.startDoubles();
     this.matchHud.hideOver();
     if (this.online?.isHost) this.online.start(this.lobby.fillAI);
     else this.backToLobby();
   }
 
   private backToLobby() {
+    if (this.offlineDoubles) return this.quitToTitle();
     this.matchHud.hideOver();
     this.lobby.show(this.online);
     if (document.pointerLockElement) document.exitPointerLock();
@@ -1723,7 +1790,7 @@ export class Sandbox implements MenuHost {
     switch (e.type) {
       case 'room':
         this.lobby.render();
-        if (c.room?.phase === 'lobby' && !this.lobby.visible && c.phase === 'lobby') this.backToLobby();
+        if (!this.offlineDoubles && c.room?.phase === 'lobby' && !this.lobby.visible && c.phase === 'lobby') this.backToLobby();
         if (c.room && !location.search.includes(c.room.code)) history.replaceState(null, '', `?room=${c.room.code}`);
         break;
       case 'error':
@@ -1825,7 +1892,9 @@ export class Sandbox implements MenuHost {
       if (seat === c.seat) continue;
       let view = this.remoteViews.get(seat);
       if (!view) {
-        view = new PlayerView(this.scene, { bodyColor: seatSide(seat) === side ? 0x60a5fa : 0xe8562a, bodyOpacity: 1, style: c.room?.seats[seat]?.style ?? 'allround' });
+        // Your doubles partner stands between the camera and the table: draw them see-through.
+        const partner = seatSide(seat) === side;
+        view = new PlayerView(this.scene, { bodyColor: partner ? 0x60a5fa : 0xe8562a, bodyOpacity: 1, style: c.room?.seats[seat]?.style ?? 'allround', avatarOpacity: partner ? 0.35 : 1 });
         this.remoteViews.set(seat, view);
       }
       const r = c.remotes.get(seat);
@@ -1835,6 +1904,8 @@ export class Sandbox implements MenuHost {
       const normal = mapVec(side, fromV(r.pose.n));
       const body = mapVec(side, { x: r.pose.b[0], y: 0, z: r.pose.b[1] });
       view.updatePose({ pos, normal, vel: { x: 0, y: 0, z: 0 } }, { x: body.x, z: body.z }, r.pose.wing);
+      // (In replays the camera is elsewhere: show them at their usual see-through level.)
+      view.fadeNear(this.playing && !this.replay ? this.camera.position : { x: 1e3, y: 0, z: 1e3 });
     }
     for (const [seat, view] of this.remoteViews) if (!seats.includes(seat)) view.visible = false;
 
@@ -1878,7 +1949,7 @@ export class Sandbox implements MenuHost {
           `${this.teamName(sc.winner!)} won ${sc.games[sc.winner!]}–${sc.games[sc.winner === 'near' ? 'far' : 'near']}`,
           sc.history.map((g) => `${g[side]}–${g[them]}`).join('  ·  '),
           c.isHost ? 'Rematch' : null,
-          'Back to lobby',
+          this.offlineDoubles ? 'Back to the title' : 'Back to lobby',
         );
         if (document.pointerLockElement) document.exitPointerLock();
       }
@@ -1890,7 +1961,7 @@ export class Sandbox implements MenuHost {
       this.matchHud.setPrompt(null);
       this.matchHud.setMeter(null);
     } else if (!this.playing && c.seat) {
-      this.matchHud.setPrompt('Paused locally — the match keeps going online!');
+      this.matchHud.setPrompt(this.offlineDoubles ? null : 'Paused locally — the match keeps going online!');
       this.matchHud.setMeter(null);
     } else if (c.myServe) {
       this.matchHud.setPrompt(this.servePrompt());

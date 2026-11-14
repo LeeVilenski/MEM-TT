@@ -130,7 +130,32 @@ describe('online rooms (local server, simulated latency)', () => {
     expect(far).toBeGreaterThan(0);
     // Same bot, same AI: the two ends should perform alike (allowing for randomness).
     expect(Math.min(near, far) / Math.max(near, far)).toBeGreaterThan(0.6);
-  }, 30000);
+  }, 120000); // 12 whole online matches (longer since AI seats return serves)
+
+  it("an AI seat returns a human's serve", () => {
+    // The room judges the flight GRACE behind real time: a serve returned soon after its
+    // bounce used to be rejected as "not the receiver's ball yet" (a double bounce).
+    const w = world(0.04, 3);
+    const a = w.add('Ada', { mode: 'singles', bestOf: 1 });
+    w.step(5);
+    a.start(true);
+    let served = 0;
+    let returned = 0;
+    let lastServeBy = '';
+    a.on((e) => {
+      if (e.type !== 'hit') return;
+      if (e.serve) {
+        lastServeBy = e.by;
+        if (e.by === 'near1') served++;
+      } else if (lastServeBy === 'near1' && e.by === 'far1') {
+        returned++;
+        lastServeBy = '';
+      }
+    });
+    for (let i = 0; i < FPS * 120 && served < 4; i++) w.step();
+    expect(served).toBeGreaterThanOrEqual(3);
+    expect(returned).toBeGreaterThanOrEqual(Math.ceil(served / 2));
+  }, 60000);
 
   it('fills empty seats with the AI', () => {
     const w = world(0.04, 3);

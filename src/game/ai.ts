@@ -122,6 +122,11 @@ export class AiPlayer {
   plan: AiPlan | null = null;
   /** Doubles: serves must go diagonally (own right half → receiver's right half). */
   doubles = false;
+  /**
+   * Doubles: which side (−1 left, +1 right, in its own frame) this player waits on when it
+   * isn't its turn, so partners don't stand in each other's way (or in front of the camera).
+   */
+  doublesSide = 0;
   /** Playing style: stroke preferences, distance from the table and rubbers. */
   style: PlayStyle = STYLES.allround;
 
@@ -138,7 +143,10 @@ export class AiPlayer {
 
   /** Ready position for this style. */
   private get ready() {
-    return { x: 0, z: TABLE.halfLength + Math.max(0.45, this.style.distance) };
+    const z = TABLE.halfLength + Math.max(0.45, this.style.distance);
+    // Doubles: wait off to one side and a step back, out of the partner's way.
+    if (this.doubles && this.doublesSide) return { x: this.doublesSide * 0.75, z: z + 0.5 };
+    return { x: 0, z };
   }
 
   /** Reorder candidate strokes by style preference (randomised, so styles mix it up). */

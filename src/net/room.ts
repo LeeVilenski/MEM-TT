@@ -254,6 +254,8 @@ export class RoomCore {
   private makeAi(seat: Seat, style?: StyleId) {
     const ai = new AiPlayer(seatSide(seat), AI_LEVELS[this.info.aiLevel], this.params, this.rng);
     ai.doubles = this.info.mode === 'doubles';
+    // Partners wait on opposite sides (seat 1 to the right, seat 2 to the left).
+    ai.doublesSide = ai.doubles ? (seat.endsWith('1') ? 1 : -1) : 0;
     ai.setStyle(STYLES[style ?? this.info.seats[seat]?.style ?? 'allround']);
     return ai;
   }
@@ -359,13 +361,15 @@ export class RoomCore {
   private applyHit(by: Seat, at: number, post: BallState, velIn: { x: number; y: number; z: number }, spinIn: { x: number; y: number; z: number }, paddleVel: { x: number; y: number; z: number }) {
     if (this.phase !== 'rally' || !this.referee || !this.judge) return;
     const side = seatSide(by);
-    if (this.referee.expectedHitter !== side) return; // not this side's ball
     const now = this.now();
     at = Math.min(now, at);
     if (at < timeOf(this.judge) - 1e-6) return; // arrived after the grace period: too late
 
     // Judge the flight up to the contact; if the point ended first, the hit doesn't count.
+    // (Only then ask whose ball it is: the judge runs GRACE behind, so a serve returned
+    // soon after its bounce used to be thrown away as "not the receiver's ball yet".)
     if (!this.judgeTo(at)) return;
+    if (this.referee?.expectedHitter !== side) return; // not this side's ball
     const ref = this.referee;
     const j = this.judge!;
     const d = Math.hypot(j.sim.state.pos.x - post.pos.x, j.sim.state.pos.y - post.pos.y, j.sim.state.pos.z - post.pos.z);

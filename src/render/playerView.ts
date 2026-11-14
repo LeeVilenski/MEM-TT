@@ -31,12 +31,21 @@ export class PlayerView {
   private markerLine: THREE.Line;
   private shadow: THREE.Mesh;
 
-  constructor(scene: THREE.Scene, opts: { bodyColor?: number; bodyOpacity?: number; marker?: boolean; style?: StyleId } = {}) {
+  private paddleMaterials: THREE.MeshStandardMaterial[] = [];
+  /** Opacity of the character (a doubles partner on your side is drawn see-through). */
+  private avatarOpacity = 1;
+
+  constructor(scene: THREE.Scene, opts: { bodyColor?: number; bodyOpacity?: number; marker?: boolean; style?: StyleId; avatarOpacity?: number } = {}) {
+    this.avatarOpacity = opts.avatarOpacity ?? 1;
     // Blade: two thin discs (one per rubber) around a wooden core, slightly oval.
     const disc = new THREE.CylinderGeometry(PADDLE.radius, PADDLE.radius, 0.002, 40);
     disc.rotateX(Math.PI / 2); // face along ±z
     // Slightly see-through so the blade never completely hides the ball at contact.
-    const mk = (color: number) => new THREE.MeshStandardMaterial({ color, roughness: 0.6, transparent: true, opacity: 0.78 });
+    const mk = (color: number) => {
+      const m = new THREE.MeshStandardMaterial({ color, roughness: 0.6, transparent: true, opacity: 0.78 });
+      this.paddleMaterials.push(m);
+      return m;
+    };
     this.faceFront = new THREE.Mesh(disc, mk(RED));
     this.faceFront.position.z = 0.0045;
     this.faceBack = new THREE.Mesh(disc, mk(BLACK));
@@ -97,10 +106,23 @@ export class PlayerView {
       this.body.remove(this.avatar.group);
       this.avatar.dispose();
     }
-    this.avatar = new Avatar(style, 1);
+    this.avatar = new Avatar(style, this.avatarOpacity);
     this.avatar.setFirstPerson(this.firstPerson);
     this.body.add(this.avatar.group);
     this.body.getObjectByName('torso')!.visible = false;
+  }
+
+  /**
+   * Fade a see-through character (a doubles partner) by how close it is to the camera:
+   * gone when right in front of it, faint up close, at its usual see-through level further off.
+   */
+  fadeNear(camera: { x: number; y: number; z: number }) {
+    if (!this.avatar || this.avatarOpacity >= 1 || !this.last) return;
+    const b = this.last.body;
+    const d = Math.hypot(b.x - camera.x, b.z - camera.z);
+    const k = Math.max(0, Math.min(1, (d - 0.9) / 1.2));
+    this.avatar.setOpacity(this.avatarOpacity * k);
+    for (const m of this.paddleMaterials) m.opacity = 0.78 * Math.max(0.15, k);
   }
 
   /** A short body-language reaction to a point (no-op for the plain torso). */
