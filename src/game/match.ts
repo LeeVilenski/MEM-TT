@@ -16,7 +16,7 @@ import { other, type SideId } from './frame';
 import { IncomingPrediction } from './intercept';
 import { SERVE_TOSS_AHEAD, type MoveInput, type Player } from './player';
 import { RallyReferee, Scoreboard, DEFAULT_MATCH, type MatchConfig, type PointResult } from './rules';
-import { REACH, type SwingInput } from './swing';
+import { type SwingInput } from './swing';
 
 /** A side is played either by a local human (near end only, for now) or the AI. */
 export type Controller = { kind: 'human'; player: Player } | { kind: 'ai'; ai: AiPlayer };
@@ -138,11 +138,12 @@ export class Match {
     return this.interceptPointFor(side)?.pos ?? null;
   }
 
-  private interceptPointFor(side: SideId): { pos: Vec3; t: number } | null {
+  /** The human's planned contact point and time (the player chooses it; see Player.contactFor). */
+  interceptPointFor(side: SideId): { pos: Vec3; t: number } | null {
     const c = this.sides[side];
     const pred = this.incoming[side];
-    if (c.kind !== 'human' || !pred || this.phase !== 'rally') return null;
-    return pred.interceptAt(c.player.restZ, this.ballTime, REACH.maxHeight - 0.05);
+    if (c.kind !== 'human') return null;
+    return c.player.contactFor(pred && this.phase === 'rally' ? pred : null, this.ballTime);
   }
 
   /**
