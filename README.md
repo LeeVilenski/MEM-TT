@@ -36,7 +36,7 @@ Open **📈 Career, drills & tournaments**, from the start screen or the top of 
 
 **Unlocks**
 - **Venues:** Server room (Junior), Conference room (Mid-level), Rooftop (win the Cup).
-- **Styles:** Security Analyst (The Firewall drill), Sysadmin (On-call defence), Network Engineer (Senior).
+- **Styles:** Lee, Ryan, Ed and Will from the start; the Sysadmin (On-call defence drill).
 - **Rubbers:** Hotfix (Junior), Legacy Code (On-call defence), Air Gap (win the Championship).
 - **Unlock everything** (Unlocks tab) switches gating off for free play. Online lobbies aren't gated.
 
@@ -77,15 +77,15 @@ Everything is generated in code: geometry, textures and sound. There are no asse
 - **Rooftop (company offsite):** a sunset sky, a city skyline, string lights and an "OFFSITE 2026" banner.
 - **Sandbox:** the original plain hall.
 
-**Characters:** each player style has a low-poly look, and its arm really holds the paddle.
+**Characters:** four are modelled on Lee, Ed, Ryan and Will (from a parkrun photo), and the fifth is a generic Sysadmin. Each is low-poly, and its arm really holds the paddle.
 
-| Character | Look |
-|---|---|
-| Helpdesk Hero | headset |
-| Full-Stack Dev | hoodie and headphones |
-| Sysadmin | beard, lanyard and badge |
-| Security Analyst | suit, shades and earpiece |
-| Network Engineer | hi-vis vest, cap and a coil of patch cable |
+| Character | Role | Look |
+|---|---|---|
+| Lee | Helpdesk Hero | black cap, navy tee with orange-red patterned shoulders and sleeves |
+| Ed | Security Analyst | black cap, teal speckled tee, black shorts, watch and water bottle |
+| Ryan | Full-Stack Dev | tall; dark tousled hair and stubble, black rugby-style jersey with white trim |
+| Will | Network Engineer | blue cap, royal-blue running vest, grey shorts, watch |
+| Sysadmin | Sysadmin | beard, black t-shirt, lanyard and badge |
 
 In first person you see only your paddle, so nothing hides the ball. Replays and the other cameras show your full character.
 
@@ -125,17 +125,18 @@ Online, the whole room runs at the slider's game speed: the server and every cli
 
 | Character | Style | Stance | Rubbers (FH / BH) |
 |---|---|---|---|
-| Helpdesk Hero | All-rounder | mid | Standard Build / Standard Build |
-| Full-Stack Dev | Looper | mid-deep, +10% power | Standard Build / Standard Build |
+| Lee | All-rounder | mid | Standard Build / Standard Build |
+| Ryan | Tactician | mid, +10% footwork | Standard Build / Standard Build |
 | Sysadmin | Chopper | deep, +12% reach | Standard Build / Legacy Code (long pips) |
-| Security Analyst | Blocker ("The Firewall") | at the table | Standard Build / Hotfix (short pips) |
-| Network Engineer | Penhold hitter | close, +15% power and footwork | Hotfix / Standard Build |
+| Ed | Counter-attacker ("The Firewall") | deep, +10% reach | Standard Build / Standard Build |
+| Will | Spinner & slammer | close, +15% power | Standard Build / Standard Build |
 
-**AI per style:** an AI opponent is a style plus a level (Junior, Senior or Principal).
-- A **Sysadmin** AI chops from about 2.6 m back.
-- A **Full-Stack Dev** AI loops.
-- A **Security Analyst** AI blocks at the table.
-- A **Network Engineer** AI drives, flicks and smashes.
+**AI per character:** an AI opponent is a character plus a level (Junior, Senior or Principal). Each plays like the real person:
+- **Lee:** an all-rounder, but goes for smashes on balls that aren't really high enough, and misses some.
+- **Ryan:** moves you around with wide placement, switching sides, and only smashes a genuinely high ball.
+- **Ed:** defends deep, counter-loops topspin (including from below the table: he lets pushes drop and lifts them), and blocks smashes steadily. He returns about 70% of smashes and power loops, against roughly 25% for the others.
+- **Will:** heavy spin, especially on serve (mostly sidespin), and smashes often and wildly.
+- **Sysadmin:** chops from about 2.6 m back.
 
 You choose the AI's style in **Match vs AI** or in the online lobby (or leave it random).
 

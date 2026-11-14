@@ -37,6 +37,12 @@ const MAX_LEAN = 0.45;
 /** The magnet ramps up over the last this-many seconds before contact. */
 const MAGNET_WINDOW = 0.3;
 const AIM_LIMIT = 0.6;
+/**
+ * The serve toss rises and falls just in front of the bat's face (m), so the ball meets the
+ * hitting face, not the bat's edge or back (which knocked it back onto your own side).
+ */
+export const SERVE_TOSS_AHEAD = 0.012;
+
 /** A stroke whose peak is this close (s) before contact is perfectly timed. */
 export const PERFECT_WINDOW = 0.05;
 /** How far the bat can go sideways in the world. */

@@ -54,6 +54,12 @@ export interface MenuHost {
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
 const BEST_OF = [1, 3, 5, 7];
+
+/** "Helpdesk Hero · All-rounder" (the role only when it isn't the name). */
+const styleNote = (id: StyleId) => {
+  const st = STYLES[id];
+  return st.role !== st.character ? `${st.role} · ${st.label}` : st.label;
+};
 const QUALITY: [string, QualitySetting][] = [
   ['Auto', 'auto'],
   ['High', 2],
@@ -197,7 +203,7 @@ export class Menu {
       .map((id, i) => this.choice('level', id, AI_LEVELS[id].name, m.level === id, ['Gentle, slow to react', 'Solid all round', 'Fast, precise, aggressive'][i]))
       .join('');
     const styles = [this.choice('aiStyle', 'random', 'Random', m.aiStyle === 'random', 'Surprise me')]
-      .concat(STYLE_IDS.map((id) => this.choice('aiStyle', id, STYLES[id].character, m.aiStyle === id, STYLES[id].label)))
+      .concat(STYLE_IDS.map((id) => this.choice('aiStyle', id, STYLES[id].character, m.aiStyle === id, styleNote(id))))
       .join('');
     const formats = BEST_OF.map((n) => this.choice('bestOf', String(n), `Best of ${n}`, m.bestOf === n)).join('');
     return `
@@ -236,7 +242,7 @@ export class Menu {
     const realism = Object.entries(REALISM_PRESETS)
       .map(([name, v]) => this.choice('realism', String(Math.round(v * 100)), name, h.realism.percent === Math.round(v * 100), ['Real physics, no help', 'Some help', 'Forgiving (default)', 'Slow and very forgiving'][Object.keys(REALISM_PRESETS).indexOf(name)]))
       .join('');
-    const styles = STYLE_IDS.map((id) => this.choice('style', id, STYLES[id].character, h.realism.style === id, STYLES[id].label, h.lockReason('style', id))).join('');
+    const styles = STYLE_IDS.map((id) => this.choice('style', id, STYLES[id].character, h.realism.style === id, styleNote(id), h.lockReason('style', id))).join('');
     const venues = (Object.keys(VENUES) as VenueId[]).map((id) => this.choice('venue', id, VENUES[id].name, h.look.venue === id, undefined, h.lockReason('venue', id))).join('');
     const quality = QUALITY.map(([name, q]) => this.choice('quality', String(q), name, h.quality.setting === q)).join('');
     const toggle = (k: string, label: string, on: boolean, note?: string) =>

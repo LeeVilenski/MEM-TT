@@ -14,7 +14,7 @@ import {
 import { AiPlayer } from './ai';
 import { other, type SideId } from './frame';
 import { IncomingPrediction } from './intercept';
-import type { MoveInput, Player } from './player';
+import { SERVE_TOSS_AHEAD, type MoveInput, type Player } from './player';
 import { RallyReferee, Scoreboard, DEFAULT_MATCH, type MatchConfig, type PointResult } from './rules';
 import { REACH, type SwingInput } from './swing';
 
@@ -95,7 +95,7 @@ export class Match {
     }
     // Human: in line with the paddle and in its plane, so the dropping ball meets it.
     const pose = c.player.swing.pose;
-    return v3(pose.pos.x, TABLE.height + 0.06, c.player.restZ);
+    return v3(pose.pos.x, TABLE.height + 0.06, c.player.restZ - SERVE_TOSS_AHEAD);
   }
 
   /** Is a human waiting to serve? */

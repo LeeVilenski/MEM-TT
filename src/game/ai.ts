@@ -98,6 +98,8 @@ export interface AiPlan {
   stroke: StrokeKind;
   /** Whether the solver found an angle that lands (before error was added). */
   solved: boolean;
+  /** Where across the table it aimed (local x), if solved. */
+  aimX?: number;
 }
 
 const READY = { x: 0, z: TABLE.halfLength + 0.65 };
@@ -143,6 +145,8 @@ export class AiPlayer {
       .map((x) => x.k);
   }
   private moveFrom = 0;
+  /** Where the last shot was aimed (x), for switching sides. */
+  private lastTargetX = 0;
   private pose: PaddlePose = { pos: v3(0.3, TABLE.height + 0.25, READY.z - ARM), normal: v3(0, 0, -1), vel: v3() };
   private prevPose: PaddlePose = this.pose;
 
@@ -162,7 +166,9 @@ export class AiPlayer {
     const local = mapState(this.side, world);
     const pred = new IncomingPrediction(local, this.params, now);
     // Where it meets the ball depends on the style: blockers stay close, choppers deep.
-    const planeZ = TABLE.halfLength + Math.max(0.15, this.style.distance - 0.4) + this.rng() * 0.25;
+    // A counter-looper (lowLoop) lets the ball drop further, to topspin it from below the table.
+    const late = (this.style.personality?.lowLoop ?? 0) * 0.8 * this.rng();
+    const planeZ = TABLE.halfLength + Math.max(0.15, this.style.distance - 0.4) + this.rng() * 0.25 + late;
     const ic = pred.interceptAt(planeZ, now, TABLE.height + 0.95);
     if (!ic) return (this.plan = null);
 
@@ -173,9 +179,20 @@ export class AiPlayer {
     const overTable = at.pos.z < TABLE.halfLength;
     const a = this.profile.aggression;
     const r = this.rng();
+    const pers = this.style.personality ?? {};
+
+    // Personality first: a counter-attacker blocks pace steadily and loops balls taken
+    // low; these choices are made in a fixed order (not re-ranked by stroke preference).
+    const fast = length(at.vel) > 9;
+    if (fast && pers.blockPace && this.rng() < pers.blockPace) {
+      return (this.plan = this.solve(at, ic.t, ['block', 'loop', 'drive'], 'rally', now, { steady: pers.blockPace }));
+    }
+    if (pers.lowLoop && at.pos.y < TABLE.height + 0.02 && !overTable && this.rng() < pers.lowLoop) {
+      return (this.plan = this.solve(at, ic.t, ['loop', 'chop', 'block'], 'rally', now));
+    }
 
     let choices: StrokeKind[];
-    if (height > 0.42 && r < 0.35 + 0.6 * a) choices = ['smash', 'drive', 'block'];
+    if (height > (pers.smashHeight ?? 0.42) && r < Math.min(0.95, (0.35 + 0.6 * a) * (pers.smashAppetite ?? 1))) choices = ['smash', 'drive', 'block'];
     else if (overTable) choices = c.top < -10 && r > 0.25 + 0.5 * a ? ['push', 'flick', 'block'] : ['flick', 'push', 'block'];
     else if (c.top < -15) choices = r < 0.2 + 0.7 * a ? ['loop', 'push', 'drive'] : ['push', 'loop', 'block'];
     else if (at.pos.z > TABLE.halfLength + 1.2) choices = r < 0.5 ? ['chop', 'loop', 'block'] : ['loop', 'chop', 'block'];
@@ -205,7 +222,9 @@ export class AiPlayer {
     while (sim.time < 2 && !(sim.state.vel.y < 0 && sim.state.pos.y <= contactY)) sim.step(TICK_DT);
     const r = this.rng();
     const kinds: StrokeKind[] = r < 0.45 ? ['serve-short', 'serve-side', 'serve-long'] : r < 0.75 ? ['serve-long', 'serve-short'] : ['serve-side', 'serve-short'];
-    this.plan = this.solve(sim.state, now + sim.time, kinds, 'serve', now);
+    // Styles with serve preferences (Will's spinny sidespin serves) re-rank them.
+    const servePrefs = Object.keys(this.style.ai).some((k) => k.startsWith('serve-'));
+    this.plan = this.solve(sim.state, now + sim.time, servePrefs ? this.byStyle([...new Set([...kinds, 'serve-side', 'serve-short'] as StrokeKind[])]) : kinds, 'serve', now);
     return { hand: mapVec(this.side, hand), tossVy };
   }
 
@@ -225,18 +244,37 @@ export class AiPlayer {
   }
 
   /** Pick the first stroke in `choices` that can be made to land, aiming at a target. */
-  private solve(at: BallState, t: number, choices: StrokeKind[], mode: ShotMode, now: number): AiPlan {
+  private solve(at: BallState, t: number, choices: StrokeKind[], mode: ShotMode, now: number, opts: { steady?: number } = {}): AiPlan {
     const p = this.profile;
+    const pers = this.style.personality ?? {};
+    const spin = pers.spin ?? 1;
     // Paddle just behind the ball so contact happens at the planned moment.
     const pos = v3(at.pos.x, at.pos.y, at.pos.z + 0.018);
     let best: AiPlan | null = null;
 
-    for (const stroke of choices) {
+    // A sidespin serve can curve either way: try the mirrored brush if the first won't land.
+    const attempts = choices.flatMap<{ stroke: StrokeKind; mirror: boolean }>((stroke) => (stroke === 'serve-side' ? [{ stroke, mirror: false }, { stroke, mirror: true }] : [{ stroke, mirror: false }]));
+    for (const { stroke, mirror } of attempts) {
       const halfW = TABLE.halfWidth - p.margin;
       const diagonal = mode === 'serve' && this.doubles;
       // Receiver's right half-court is −x in the server's frame.
-      const target = { x: diagonal ? -(0.15 + this.rng() * (halfW - 0.15)) : (this.rng() * 2 - 1) * halfW, z: -DEPTH[stroke] };
-      let vel = STROKES[stroke];
+      let x = diagonal ? -(0.15 + this.rng() * (halfW - 0.15)) : (this.rng() * 2 - 1) * halfW;
+      // Placement: go for the wide angles, switching sides to move the opponent around.
+      if (mode === 'rally' && pers.placement && this.rng() < pers.placement) {
+        const side = this.lastTargetX === 0 ? (this.rng() < 0.5 ? 1 : -1) : -Math.sign(this.lastTargetX);
+        x = side * halfW * (0.8 + 0.2 * this.rng());
+      }
+      const target = { x, z: -DEPTH[stroke] };
+      let vel = mirror ? v3(-STROKES[stroke].x, STROKES[stroke].y, STROKES[stroke].z) : STROKES[stroke];
+      // Spin: more brush on loops and serves (more upward/downward and sideways swing).
+      // Serves trade a little forward speed for the extra brush, so they still land short.
+      if (spin !== 1 && stroke === 'loop') vel = v3(vel.x * spin, vel.y * spin, vel.z);
+      // Looping a ball taken below the table: a steeper, lifting swing (more up, less forward).
+      if (stroke === 'loop' && pos.y < TABLE.height + 0.05) {
+        const below = TABLE.height + 0.05 - pos.y;
+        vel = v3(vel.x, Math.min(18, vel.y + 2 + 18 * below), vel.z * (1 - Math.min(0.6, 1.5 * below)));
+      }
+      if (spin !== 1 && stroke.startsWith('serve-')) vel = v3(vel.x * spin, vel.y * spin, vel.z * Math.sqrt(spin));
       // Occasionally hook the loop for sidespin.
       if (stroke === 'loop' && this.rng() < 0.25 * p.aggression) vel = v3((this.rng() < 0.5 ? -1 : 1) * 3, vel.y, vel.z);
       const yaw = (Math.atan2(target.x - pos.x, -(target.z - pos.z)) * 180) / Math.PI;
@@ -267,10 +305,15 @@ export class AiPlayer {
       // Human-like execution error.
       // Serves are rehearsed: much more consistent than rally shots.
       const errScale = mode === 'serve' ? 0.35 : 1;
-      const pitch = bestPitch + this.gauss() * p.pitchError * errScale;
-      const yawErr = yaw + this.gauss() * p.yawError;
-      const speed = 1 + this.gauss() * p.speedError;
-      best = { t, pos, vel: scale(vel, speed), normal: faceNormal(pitch, yawErr), stroke, solved: true };
+      // Personal error: wild slammers spray their smashes; a counter-attacker blocks pace steadily.
+      let personal = 1;
+      if (stroke === 'smash') personal *= pers.smashError ?? 1;
+      if (stroke === 'block' && opts.steady) personal *= 1 - 0.6 * opts.steady;
+      const pitch = bestPitch + this.gauss() * p.pitchError * errScale * personal;
+      const yawErr = yaw + this.gauss() * p.yawError * personal;
+      const speed = 1 + this.gauss() * p.speedError * personal;
+      best = { t, pos, vel: scale(vel, speed), normal: faceNormal(pitch, yawErr), stroke, solved: true, aimX: target.x };
+      this.lastTargetX = target.x;
       break;
     }
     // Nothing lands: swing anyway (it will probably miss).

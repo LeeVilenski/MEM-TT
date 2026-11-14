@@ -23,10 +23,8 @@ export const UNLOCKS: UnlockRule[] = [
   { kind: 'venue', id: 'server', ...level(1, 'Junior') },
   { kind: 'venue', id: 'conference', ...level(2, 'Mid-level') },
   { kind: 'venue', id: 'rooftop', ...cup('department-cup', 'Department Cup') },
-  // Player styles (Helpdesk Hero and Full-Stack Dev from the start).
-  { kind: 'style', id: 'blocker', ...drill('firewall', 'The Firewall') },
+  // Player styles: Lee, Ryan, Ed and Will from the start; the Sysadmin is earned.
   { kind: 'style', id: 'chopper', ...drill('defence', 'On-call defence') },
-  { kind: 'style', id: 'penhold', ...level(3, 'Senior') },
   // Rubbers (Standard Build from the start).
   { kind: 'rubber', id: 'shortPips', ...level(1, 'Junior') },
   { kind: 'rubber', id: 'longPips', ...drill('defence', 'On-call defence') },

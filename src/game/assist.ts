@@ -43,19 +43,27 @@ export function landingOutcome(
   rubber: Rubber,
   params: PhysicsParams,
   mode: ShotMode = 'rally',
-): { outcome: LandingOutcome; pos?: Vec3; first?: Vec3 } {
+): { outcome: LandingOutcome; pos?: Vec3; first?: Vec3; net?: boolean } {
   const s = cloneState(ball);
   if (paddleImpulse(s, { ...pose, normal }, rubber) <= 0) return { outcome: 'short' };
   let tables = 0;
+  let wasAbove = false;
   const { events, path } = predict(s, params, {
     maxTime: 2.5,
     // Same stepping as the live ball, so net-skimmers and edge balls are judged the same way.
     dt: 1 / 240,
     sampleEvery: 1000,
     stop: (e) => e.type === 'floor' || (e.type === 'table' && ++tables >= (mode === 'serve' ? 2 : 1)),
-    // Rally: once the ball is below the table top or heading back to us, the outcome is
-    // settled (it can no longer land on the far half), so stop simulating.
-    until: mode === 'rally' ? (b) => b.pos.y < TABLE.height - 0.01 || b.vel.z > 0.5 : undefined,
+    // Rally: once the ball has risen above the table top and dropped back below it, or is
+    // heading back to us, the outcome is settled (it can't land on the far half), so stop.
+    // (A ball struck from below the table starts below the top: that doesn't count.)
+    until:
+      mode === 'rally'
+        ? (b) => {
+            if (b.pos.y > TABLE.height + 0.01) wasAbove = true;
+            return (wasAbove && b.pos.y < TABLE.height - 0.01) || b.vel.z > 0.5;
+          }
+        : undefined,
   });
   const bounces = events.filter((e) => e.type === 'table');
   const netTouched = events.some((e) => e.type === 'net');
@@ -67,7 +75,7 @@ export function landingOutcome(
     if (!first) return { outcome: crossedFar ? 'long' : 'short' };
     if (first.pos.z < 0) return { outcome: 'long' }; // didn't bounce on own half first
     if (!second) return { outcome: crossedFar ? 'long' : 'short' };
-    if (second.pos.z > 0 || netTouched) return { outcome: 'short' };
+    if (second.pos.z > 0 || netTouched) return { outcome: 'short', net: netTouched };
     return { outcome: 'in', pos: second.pos, first: first.pos };
   }
 
@@ -115,8 +123,9 @@ export function makeAngleAssist(
 ) {
   const STEP = 6;
   const RANGE = 60;
-  /** Pace the power assist may take off, at full strength. */
+  /** Pace the power assist may take off, or add to a too-gentle swing, at full strength. */
   const MAX_PACE_CUT = 0.6;
+  const MAX_PACE_ADD = 0.7;
 
   /** Where the outcome flips between net/short and long nearest the player's angle (a best guess when no angle clearly lands). */
   let edge: number | null = null;
@@ -227,10 +236,17 @@ export function makeAngleAssist(
 
     // Power assist: no face angle lands a swing this hot, so take some pace off (up to
     // MAX_PACE_CUT × strength) — a hard swing becomes a strong shot that lands.
+    // A swing too gentle to reach (e.g. a soft backspin serve) gets a little extra pace
+    // instead, up to MAX_PACE_ADD × strength.
     const minScale = 1 - MAX_PACE_CUT * k;
+    // Serves are gentle by nature: they may get more help than rally shots.
+    const maxScale = 1 + MAX_PACE_ADD * k * (m === 'serve' ? 2 : 1);
+    // Too weak = falls short on our own side (not caught in the net, where more pace won't help).
+    const r0 = landingOutcome(ball, pose, normal, rubber, params, m);
+    const tooWeak = r0.outcome === 'short' && !r0.net;
+    const scales = (tooWeak ? [1.3, 1.6, 2.0, 2.4, 0.7, 0.4] : [0.7, 0.4, 1.3, 1.6]).filter((f) => f >= minScale - 1e-9 && f <= maxScale + 1e-9);
     let guess: ContactAdjust | null = null;
-    for (const f of [0.7, 0.4]) {
-      if (f < minScale - 1e-9) break;
+    for (const f of scales) {
       const slower = { ...pose, vel: scale(pose.vel, f) };
       const out = outcomeWith(slower);
       if (out(0) === 'in') return { normal, vel: scale(pose.vel, f) };

@@ -1166,7 +1166,7 @@ export class Sandbox implements MenuHost {
     this.rubberSel.backhand = this.player.rubbers.backhand.id;
     this.online?.setStyle(id);
     this.gui.controllersRecursive().forEach((c) => c.updateDisplay());
-    if (!this.menu?.visible) this.hud.flash(STYLES[id].character.toUpperCase(), STYLES[id].description);
+    if (!this.menu?.visible) this.hud.flash(STYLES[id].character.toUpperCase(), `${STYLES[id].role !== STYLES[id].character ? STYLES[id].role + ' · ' : ''}${STYLES[id].label}: ${STYLES[id].description}`);
   }
 
   setVolume(v: number) {
@@ -1936,7 +1936,7 @@ export class Sandbox implements MenuHost {
     const mt = gui.addFolder('Match vs AI');
     const levelNames = Object.fromEntries(Object.entries(AI_LEVELS).map(([k, v]) => [`${v.name} (${k})`, k]));
     mt.add(this.matchSettings, 'level', levelNames).name('Opponent level');
-    mt.add(this.matchSettings, 'aiStyle', { Random: 'random', ...Object.fromEntries(STYLE_IDS.map((id) => [`${STYLES[id].character} (${STYLES[id].label})`, id])) }).name('Opponent style');
+    mt.add(this.matchSettings, 'aiStyle', { Random: 'random', ...Object.fromEntries(STYLE_IDS.map((id) => [styleTitle(id), id])) }).name('Opponent');
     mt.add(this.matchSettings, 'bestOf', { 'Best of 1': 1, 'Best of 3': 3, 'Best of 5': 5, 'Best of 7': 7 }).name('Format');
     mt.add({ start: () => this.startMatch() }, 'start').name('▶ Start match');
     mt.add({ end: () => this.endMatch() }, 'end').name('End match (back to practice)');
@@ -1956,7 +1956,7 @@ export class Sandbox implements MenuHost {
     }
     const rubberNames = Object.fromEntries(Object.values(RUBBERS).map((r) => [`${r.name} (${r.kind})`, r.id]));
     const rubberSel = this.rubberSel;
-    const styleNames = Object.fromEntries(STYLE_IDS.map((id) => [`${STYLES[id].character} — ${STYLES[id].label}`, id]));
+    const styleNames = Object.fromEntries(STYLE_IDS.map((id) => [styleTitle(id), id]));
     pl.add(this.realism, 'style', styleNames)
       .name('Your style')
       .onChange((id: StyleId) => {
@@ -2119,4 +2119,10 @@ function savePref(key: string, value: string) {
   } catch {
     /* storage unavailable */
   }
+}
+
+/** "Lee — Helpdesk Hero, All-rounder" for pickers. */
+function styleTitle(id: StyleId): string {
+  const st = STYLES[id];
+  return st.role === st.character ? `${st.character} — ${st.label}` : `${st.character} — ${st.role}, ${st.label}`;
 }

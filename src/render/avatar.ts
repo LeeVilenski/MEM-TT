@@ -2,102 +2,146 @@ import * as THREE from 'three';
 import type { StyleId } from '../game/styles';
 
 /**
- * Low-poly IT-office characters, built from primitives. One look per player style,
- * with an arm that reaches from the shoulder to the paddle handle each frame.
+ * Low-poly characters, built from primitives. One look per player style; four are
+ * modelled on real people (Lee, Ed, Ryan, Will) from their clothes, hair and build.
+ * An arm reaches from the shoulder to the paddle handle each frame.
  */
+type Mat = (c: number) => THREE.Material;
+
 interface Look {
   shirt: number;
-  trousers: number;
+  /** Sleeve colour (defaults to the shirt), or 'none' for a vest (bare arms). */
+  sleeves?: number | 'none';
+  /** Long sleeves cover the whole arm; short ones the upper arm. */
+  longSleeves?: boolean;
+  /** Shorts (bare lower legs) or full-length trousers. */
+  legs: { kind: 'shorts' | 'trousers'; color: number };
   skin: number;
   hair: number;
-  accessory: (g: THREE.Group, mat: (c: number) => THREE.Material) => void;
+  shoes?: number;
+  /** Overall height scale and torso width scale. */
+  height?: number;
+  build?: number;
+  cap?: { color: number; badge?: number };
+  beard?: number;
+  /** A watch on the free wrist. */
+  watch?: number;
+  /** Something held in the free hand (a water bottle), by colour. */
+  bottle?: number;
+  accessory?: (g: THREE.Group, mat: Mat, torsoW: number) => void;
 }
 
 const LOOKS: Record<StyleId, Look> = {
-  // Helpdesk Hero: blue polo and a headset with a mic boom.
+  // Lee: black cap, navy tee with orange-red patterned shoulders and sleeves.
   allround: {
-    shirt: 0x2f6fd6,
-    trousers: 0x3b3f4a,
-    skin: 0xe0b089,
-    hair: 0x4a3222,
-    accessory: (g, m) => {
-      const band = new THREE.Mesh(new THREE.TorusGeometry(0.115, 0.012, 6, 16, Math.PI), m(0x111827));
-      band.position.y = 1.66;
-      band.rotation.y = Math.PI / 2;
-      const mic = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.12, 6), m(0x111827));
-      mic.position.set(0.1, 1.55, -0.05);
-      mic.rotation.x = Math.PI / 2.4;
-      g.add(band, mic);
+    shirt: 0x26386e,
+    sleeves: 0xc8452c,
+    legs: { kind: 'shorts', color: 0x16181d },
+    skin: 0xf0c4a8,
+    hair: 0x6b4b2e,
+    shoes: 0x2b2f38,
+    height: 1.0,
+    build: 0.95,
+    cap: { color: 0x15161a, badge: 0xd1d5db },
+    accessory: (g, m, w) => {
+      // Shoulder yokes in the sleeve colour, with a darker stripe pattern.
+      for (const side of [-1, 1]) {
+        const yoke = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.1, 0.25), m(0xc8452c));
+        yoke.position.set(side * (w / 2 - 0.05), 1.37, 0);
+        g.add(yoke);
+        for (let i = 0; i < 3; i++) {
+          const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.1, 0.252), m(0x8f2a1c));
+          stripe.position.set(side * (w / 2 - 0.09 + i * 0.03), 1.37, 0);
+          g.add(stripe);
+        }
+      }
     },
   },
-  // Full-Stack Dev: charcoal hoodie (with hood) and headphones round the neck.
+  // Ryan: tall, dark tousled hair and stubble, black rugby-style jersey with white trim.
   looper: {
-    shirt: 0x374151,
-    trousers: 0x1e3a5f,
-    skin: 0xc68d63,
-    hair: 0x1f1a17,
-    accessory: (g, m) => {
-      const hood = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.05, 8, 16), m(0x374151));
-      hood.position.set(0, 1.42, 0.06);
-      hood.rotation.x = Math.PI / 2.2;
-      const phones = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.018, 6, 16), m(0xe8562a));
-      phones.position.set(0, 1.44, -0.02);
-      phones.rotation.x = Math.PI / 2;
-      g.add(hood, phones);
+    shirt: 0x121315,
+    legs: { kind: 'shorts', color: 0x1f2a24 },
+    skin: 0xe0ac86,
+    hair: 0x3b2618,
+    shoes: 0xe5e7eb,
+    height: 1.06,
+    build: 1.04,
+    beard: 0x8f6448, // stubble: between skin and hair
+    watch: 0x111111,
+    accessory: (g, m, w) => {
+      // White collar trim, a small crest on the chest and a white chest band.
+      const collar = new THREE.Mesh(new THREE.TorusGeometry(0.075, 0.012, 6, 16), m(0xf3f4f6));
+      collar.position.set(0, 1.41, 0);
+      collar.rotation.x = Math.PI / 2;
+      const crest = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.06, 0.01), m(0xf3f4f6));
+      crest.position.set(w * 0.22, 1.3, -0.125);
+      const band = new THREE.Mesh(new THREE.BoxGeometry(w * 0.6, 0.035, 0.01), m(0xe5e7eb));
+      band.position.set(0, 1.2, -0.125);
+      // Tousled hair: a few tufts on top.
+      for (const [x, z, r] of [[-0.05, -0.04, 0.04], [0.02, -0.06, 0.045], [0.06, -0.01, 0.035], [-0.02, 0.02, 0.045], [0.03, 0.05, 0.04]]) {
+        const tuft = new THREE.Mesh(new THREE.SphereGeometry(r, 8, 6), m(0x3b2618));
+        tuft.position.set(x, 1.69, z);
+        tuft.scale.y = 0.55;
+        g.add(tuft);
+      }
+      g.add(collar, crest, band);
     },
   },
   // Sysadmin: black band t-shirt, beard, lanyard with an access badge.
   chopper: {
     shirt: 0x111111,
-    trousers: 0x3f3f46,
+    legs: { kind: 'trousers', color: 0x3f3f46 },
     skin: 0xe7c2a0,
     hair: 0x6b4a2f,
+    beard: 0x6b4a2f,
     accessory: (g, m) => {
-      const beard = new THREE.Mesh(new THREE.SphereGeometry(0.085, 10, 8, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), m(0x6b4a2f));
-      beard.position.set(0, 1.55, -0.03);
       const lanyard = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.28, 0.01), m(0xe8562a));
-      lanyard.position.set(0, 1.28, -0.16);
+      lanyard.position.set(0, 1.28, -0.125);
       const badge = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.09, 0.01), m(0xffffff));
-      badge.position.set(0, 1.12, -0.165);
-      g.add(beard, lanyard, badge);
+      badge.position.set(0, 1.12, -0.13);
+      g.add(lanyard, badge);
     },
   },
-  // Security Analyst: navy suit, sunglasses, earpiece.
+  // Ed: black cap, teal speckled tee, black shorts, a watch and a water bottle.
   blocker: {
-    shirt: 0x1e293b,
-    trousers: 0x0f172a,
-    skin: 0x8d5a3b,
-    hair: 0x0b0b0b,
-    accessory: (g, m) => {
-      const shades = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.035, 0.03), m(0x050505));
-      shades.position.set(0, 1.64, -0.1);
-      const ear = new THREE.Mesh(new THREE.SphereGeometry(0.015, 6, 6), m(0xd1d5db));
-      ear.position.set(0.11, 1.62, 0);
-      const tie = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.22, 0.01), m(0xb91c1c));
-      tie.position.set(0, 1.3, -0.16);
-      g.add(shades, ear, tie);
+    shirt: 0x1d5a57,
+    legs: { kind: 'shorts', color: 0x111214 },
+    skin: 0xe8b896,
+    hair: 0x4b4038,
+    shoes: 0x9ca3af,
+    height: 0.98,
+    build: 1.12,
+    cap: { color: 0x1a1b1f },
+    watch: 0x111111,
+    bottle: 0x2f8fe0,
+    accessory: (g, m, w) => {
+      // Speckled print on the front and back of the shirt.
+      const dots = [0x7dd3c0, 0x0f3b39, 0x9ee6d6];
+      for (let i = 0; i < 26; i++) {
+        const dot = new THREE.Mesh(new THREE.SphereGeometry(0.009 + (i % 3) * 0.003, 5, 4), m(dots[i % 3]));
+        const front = i % 2 === 0 ? -1 : 1;
+        dot.position.set((((i * 37) % 100) / 100 - 0.5) * w * 0.85, 0.88 + ((i * 53) % 100) / 100 * 0.5, front * 0.122);
+        g.add(dot);
+      }
     },
   },
-  // Network Engineer: hi-vis vest, cap, a coil of blue patch cable on the shoulder.
+  // Will: blue cap, royal-blue running vest (bare arms), grey shorts, a watch.
   penhold: {
-    shirt: 0xf97316,
-    trousers: 0x334155,
-    skin: 0xf0c9a5,
-    hair: 0x2a1f1a,
-    accessory: (g, m) => {
-      const cap = new THREE.Mesh(new THREE.SphereGeometry(0.11, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), m(0x1d4ed8));
-      cap.position.y = 1.7;
-      const peak = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.01, 0.1), m(0x1d4ed8));
-      peak.position.set(0, 1.7, -0.12);
-      const coil = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.015, 6, 16), m(0x2563eb));
-      coil.position.set(-0.17, 1.38, 0);
-      coil.rotation.y = Math.PI / 2;
-      const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.37, 0.04, 0.27), m(0xe5e7eb));
-      stripe.position.y = 1.12;
-      g.add(cap, peak, coil, stripe);
-    },
+    shirt: 0x1f4fb0,
+    sleeves: 'none',
+    legs: { kind: 'shorts', color: 0x8c8f80 },
+    skin: 0xf2c8aa,
+    hair: 0x9a6b3f,
+    shoes: 0xf3f4f6,
+    height: 1.02,
+    build: 0.92,
+    cap: { color: 0x2f5bd3, badge: 0xf3f4f6 },
+    watch: 0x111111,
   },
 };
+
+/** Exported for tests: every style has a look. */
+export const AVATAR_STYLES = Object.keys(LOOKS) as StyleId[];
 
 export class Avatar {
   readonly group = new THREE.Group();
@@ -106,6 +150,9 @@ export class Avatar {
   /** Everything except the racket arm (hidden in first person). */
   private bodyParts: THREE.Object3D[] = [];
 
+  /** The racket arm's sleeve (short sleeves), oriented with the arm but not stretched. */
+  private sleeve: THREE.Mesh | null = null;
+
   constructor(style: StyleId, opacity = 1) {
     const look = LOOKS[style];
     const mat = (c: number) => {
@@ -113,31 +160,71 @@ export class Avatar {
       this.materials.push(m);
       return m;
     };
-    const add = (geo: THREE.BufferGeometry, color: number, x: number, y: number, z: number) => {
+    const add = (geo: THREE.BufferGeometry, color: number, x: number, y: number, z: number, parent: THREE.Object3D = this.group) => {
       const m = new THREE.Mesh(geo, mat(color));
       m.position.set(x, y, z);
       m.castShadow = opacity >= 1;
-      this.group.add(m);
+      parent.add(m);
       return m;
     };
-    // Legs, torso, shoulders, neck, head, hair.
-    add(new THREE.BoxGeometry(0.13, 0.82, 0.16), look.trousers, -0.09, 0.41, 0);
-    add(new THREE.BoxGeometry(0.13, 0.82, 0.16), look.trousers, 0.09, 0.41, 0);
-    add(new THREE.BoxGeometry(0.36, 0.58, 0.24), look.shirt, 0, 1.12, 0);
+    const w = 0.36 * (look.build ?? 1);
+    const sleeveColor = look.sleeves === 'none' ? null : (look.sleeves ?? look.shirt);
+    const armColor = look.longSleeves && sleeveColor !== null ? sleeveColor : look.skin;
+
+    // Legs: shorts over bare lower legs, or full trousers; shoes.
+    for (const x of [-0.09, 0.09]) {
+      if (look.legs.kind === 'shorts') {
+        add(new THREE.BoxGeometry(0.14, 0.3, 0.17), look.legs.color, x, 0.68, 0);
+        add(new THREE.BoxGeometry(0.105, 0.48, 0.12), look.skin, x, 0.3, 0);
+      } else add(new THREE.BoxGeometry(0.13, 0.78, 0.16), look.legs.color, x, 0.43, 0);
+      add(new THREE.BoxGeometry(0.12, 0.07, 0.25), look.shoes ?? 0x27272a, x, 0.035, -0.04);
+    }
+    // Torso, neck, head.
+    add(new THREE.BoxGeometry(w, 0.58, 0.24), look.shirt, 0, 1.12, 0);
     add(new THREE.SphereGeometry(0.06, 8, 6), look.skin, 0, 1.46, 0);
     add(new THREE.SphereGeometry(0.11, 14, 10), look.skin, 0, 1.6, 0);
-    const hair = add(new THREE.SphereGeometry(0.115, 14, 10, 0, Math.PI * 2, 0, Math.PI / 2.2), look.hair, 0, 1.62, 0.01);
-    hair.rotation.x = 0.15;
-    // Free arm hanging down.
-    const free = add(new THREE.CylinderGeometry(0.04, 0.035, 0.55, 8), look.shirt, -0.22, 1.1, 0);
+    // A friendly face: eyes and a smile (everyone in the photo is smiling).
+    for (const x of [-0.037, 0.037]) add(new THREE.SphereGeometry(0.012, 6, 5), 0x1f1a17, x, 1.62, -0.1);
+    const smile = add(new THREE.TorusGeometry(0.035, 0.007, 4, 10, Math.PI), 0x7a2e24, 0, 1.575, look.beard !== undefined ? -0.112 : -0.098);
+    smile.rotation.z = Math.PI;
+    // Hair (sides and back show under a cap).
+    const hair = add(new THREE.SphereGeometry(0.117, 14, 10, 0, Math.PI * 2, 0, Math.PI / 2.1), look.hair, 0, 1.615, 0.012);
+    hair.rotation.x = 0.18;
+    if (look.beard !== undefined) {
+      const beard = add(new THREE.SphereGeometry(0.105, 12, 8, 0, Math.PI * 2, Math.PI / 1.9, Math.PI / 2.6), look.beard, 0, 1.6, -0.01);
+      beard.scale.set(1, 1, 1.02);
+    }
+    if (look.cap) {
+      add(new THREE.SphereGeometry(0.122, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), look.cap.color, 0, 1.655, 0.005);
+      const peak = add(new THREE.BoxGeometry(0.15, 0.012, 0.11), look.cap.color, 0, 1.665, -0.135);
+      peak.rotation.x = -0.12;
+      if (look.cap.badge !== undefined) add(new THREE.BoxGeometry(0.05, 0.025, 0.01), look.cap.badge, 0, 1.72, -0.112);
+    }
+    // Free arm hanging down, with sleeve and watch following its angle.
+    const free = add(new THREE.CylinderGeometry(0.038, 0.033, 0.55, 8), armColor, -w / 2 - 0.04, 1.1, 0);
     free.rotation.z = -0.15;
-    look.accessory(this.group, mat);
+    if (sleeveColor !== null && !look.longSleeves) add(new THREE.CylinderGeometry(0.05, 0.046, 0.17, 8), sleeveColor, 0, 0.19, 0, free);
+    if (look.watch !== undefined) add(new THREE.CylinderGeometry(0.039, 0.039, 0.035, 8), look.watch, 0, -0.21, 0, free);
+    if (look.bottle !== undefined) {
+      const bottle = add(new THREE.CylinderGeometry(0.03, 0.03, 0.16, 10), look.bottle, 0, -0.3, -0.04, free);
+      bottle.rotation.x = Math.PI / 2.3;
+      add(new THREE.CylinderGeometry(0.018, 0.018, 0.03, 8), 0xf3f4f6, 0, 0.09, 0, bottle);
+    }
+    look.accessory?.(this.group, mat, w);
     this.bodyParts = [...this.group.children];
     // Racket arm: a cylinder stretched from shoulder to hand every frame.
-    this.arm = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.032, 1, 8).translate(0, 0.5, 0), mat(look.shirt));
+    this.shoulderX = w / 2 + 0.02;
+    this.arm = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.032, 1, 8).translate(0, 0.5, 0), mat(armColor));
     this.arm.castShadow = opacity >= 1;
     this.group.add(this.arm);
+    if (sleeveColor !== null && !look.longSleeves) {
+      this.sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.046, 0.17, 8).translate(0, 0.085, 0), mat(sleeveColor));
+      this.group.add(this.sleeve);
+    }
+    this.group.scale.setScalar(look.height ?? 1);
   }
+
+  private shoulderX = 0.2;
 
   /**
    * Place the character. body: floor position; hand: world position of the paddle
@@ -149,12 +236,16 @@ export class Avatar {
     this.group.updateMatrixWorld();
     // Shoulder on the paddle side.
     const local = this.group.worldToLocal(hand.clone());
-    const shoulder = new THREE.Vector3(local.x >= 0 ? 0.2 : -0.2, 1.36, 0);
+    const shoulder = new THREE.Vector3(local.x >= 0 ? this.shoulderX : -this.shoulderX, 1.36, 0);
     const d = local.clone().sub(shoulder);
     const len = Math.min(0.75, d.length());
     this.arm.position.copy(shoulder);
     this.arm.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize());
     this.arm.scale.set(1, len, 1);
+    if (this.sleeve) {
+      this.sleeve.position.copy(shoulder);
+      this.sleeve.quaternion.copy(this.arm.quaternion);
+    }
   }
 
   set visible(v: boolean) {
@@ -167,6 +258,7 @@ export class Avatar {
     // below head height) the body and racket arm would sit between you and the table.
     for (const p of this.bodyParts) p.visible = !on;
     this.arm.visible = !on;
+    if (this.sleeve) this.sleeve.visible = !on;
   }
 
   dispose() {
