@@ -278,7 +278,7 @@ export class RoomCore {
     }
     // Realism: physics (spin curve) and game speed are room-wide so everyone agrees.
     const r = realismSettings(this.info.realism);
-    this.params = { ...this.baseParams, liftCoefficientMax: this.baseParams.liftCoefficientMax * r.spinCurve };
+    this.params = { ...this.baseParams, liftCoefficientMax: this.baseParams.liftCoefficientMax * r.spinCurve, tableBounceKeep: r.bounceKeep };
     this.setSpeed(r.gameSpeed);
     this.lastTick = this.now();
     this.ais = {};

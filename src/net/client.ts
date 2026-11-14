@@ -341,6 +341,7 @@ export class OnlineClient {
         const r = realismSettings(m.realism);
         this.realism = m.realism;
         this.params.liftCoefficientMax = DEFAULT_PARAMS.liftCoefficientMax * r.spinCurve;
+        this.params.tableBounceKeep = r.bounceKeep;
         this.player.applyRealism(m.realism);
         if (this.speed !== r.gameSpeed) this.setSpeed(r.gameSpeed);
         this.mode = m.mode;

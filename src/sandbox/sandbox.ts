@@ -175,6 +175,7 @@ export class Sandbox implements MenuHost {
     const r = realismSettings(a);
     this.player.applyRealism(a);
     this.params.liftCoefficientMax = DEFAULT_PARAMS.liftCoefficientMax * r.spinCurve;
+    this.params.tableBounceKeep = r.bounceKeep;
     this.gameSpeed = r.gameSpeed;
     this.gui?.controllersRecursive().forEach((c) => c.updateDisplay());
   }
@@ -206,6 +207,8 @@ export class Sandbox implements MenuHost {
     shotDetails: loadPref('mem.shotDetails', '0') === '1',
     bloom: loadPref('mem.bloom', '1') === '1',
     fullSpeedOut: loadPref('mem.fullSpeedOut', '1') === '1',
+    /** The IT-joke call-out after each point / practice return (404, PACKET LOSS…). Off by default. */
+    callouts: loadPref('mem.callouts', '0') === '1',
   };
   /** Arcade effects: hit-stop, shake, comet tail, sparks (see render/juice). */
   private juice!: Juice;
@@ -622,7 +625,7 @@ export class Sandbox implements MenuHost {
         break;
       case 'net':
         if (!returned) r.netTouches = (r.netTouches ?? 0) + 1;
-        this.hud.flash(e.part === 'tape' ? 'NET CORD' : 'PACKET LOSS', e.part === 'tape' ? 'Clipped the tape' : 'Into the net');
+        this.callout(e.part === 'tape' ? 'NET CORD' : 'PACKET LOSS', e.part === 'tape' ? 'Clipped the tape' : 'Into the net');
         break;
       case 'table': {
         this.recorder.keyframe(this.clock(), { pos: e.pos, vel: e.velOut, spin: e.spinOut });
@@ -656,7 +659,7 @@ export class Sandbox implements MenuHost {
         } else {
           if (r.result === undefined) {
             r.result = 'OUT';
-            this.hud.flash('404', 'Ball not found (on the table)');
+            this.callout('404', 'Ball not found (on the table)');
           }
           if (this.playing && this.phase === 'incoming') {
             if (r.result === 'IN') this.resolveMiss();
@@ -699,8 +702,8 @@ export class Sandbox implements MenuHost {
       if (this.look.arcadeFx && this.stats.streak % 5 === 0) this.sfx.crowd(this.stats.streak % 10 === 0 ? 'cheer' : 'applause', Math.min(1, this.stats.streak / 20));
     } else {
       this.stats.streak = 0;
-      if (result === 'OUT') this.hud.flash('404', 'Ball not found (on the table)');
-      if (result === 'OWN SIDE') this.hud.flash('SEGFAULT', 'Bounced on your own side');
+      if (result === 'OUT') this.callout('404', 'Ball not found (on the table)');
+      if (result === 'OWN SIDE') this.callout('SEGFAULT', 'Bounced on your own side');
     }
     this.hud.setStats(this.stats);
     this.updateDrillHud();
@@ -714,7 +717,7 @@ export class Sandbox implements MenuHost {
     this.career.recordPractice(false);
     this.drillRegister('MISSED');
     this.tutorialRegister('MISSED');
-    this.hud.flash('TIMEOUT', 'Request not handled');
+    this.callout('TIMEOUT', 'Request not handled');
     this.hud.setStats(this.stats);
     this.updateDrillHud();
     this.resolve();
@@ -892,7 +895,7 @@ export class Sandbox implements MenuHost {
           }
           break;
         case 'let':
-          this.hud.flash(LET_MESSAGE.title, LET_MESSAGE.sub);
+          this.callout(LET_MESSAGE.title, LET_MESSAGE.sub);
           this.recorder.end(this.clock());
           break;
         case 'point': {
@@ -905,8 +908,8 @@ export class Sandbox implements MenuHost {
           this.fxPoint(e.result.reason, match.referee?.hits ?? 0, e.result.winner === 'near', e.match);
           const m = pointMessage(e.result, names);
           if (e.match) this.hud.flash(e.result.winner === 'near' ? 'SHIPPED TO PROD' : 'INCIDENT REPORT', e.result.winner === 'near' ? 'You won the match!' : `${ai.displayName} won the match`);
-          else if (e.game) this.hud.flash(e.result.winner === 'near' ? 'DEPLOYED' : 'ROLLBACK', `Game to ${names[e.result.winner]} — ${m.title}: ${m.sub}`);
-          else this.hud.flash(m.title, m.sub);
+          else if (e.game) this.hud.flash(e.result.winner === 'near' ? 'DEPLOYED' : 'ROLLBACK', `Game to ${names[e.result.winner]}${this.look.callouts ? ` — ${m.title}: ${m.sub}` : ''}`);
+          else this.callout(m.title, m.sub);
           break;
         }
       }
@@ -1405,6 +1408,16 @@ export class Sandbox implements MenuHost {
     this.juice?.setGlow(this.post.enabled);
   }
 
+  /** A per-point / per-return call-out: only if the player wants them. */
+  private callout(title: string, sub: string) {
+    if (this.look.callouts) this.hud.flash(title, sub);
+  }
+
+  setCallouts(on: boolean) {
+    this.look.callouts = on;
+    savePref('mem.callouts', on ? '1' : '0');
+  }
+
   setFullSpeedOut(on: boolean) {
     this.look.fullSpeedOut = on;
     savePref('mem.fullSpeedOut', on ? '1' : '0');
@@ -1769,7 +1782,7 @@ export class Sandbox implements MenuHost {
         }
         break;
       case 'let':
-        this.hud.flash(LET_MESSAGE.title, LET_MESSAGE.sub);
+        this.callout(LET_MESSAGE.title, LET_MESSAGE.sub);
         this.recorder.end(this.clock());
         break;
       case 'point': {
@@ -1784,8 +1797,8 @@ export class Sandbox implements MenuHost {
         const m = pointMessage(e.result, names);
         const mine = e.result.winner === c.side;
         if (e.match) this.hud.flash(mine ? 'SHIPPED TO PROD' : 'INCIDENT REPORT', `${names[e.result.winner]} won the match`);
-        else if (e.game) this.hud.flash(mine ? 'DEPLOYED' : 'ROLLBACK', `Game to ${names[e.result.winner]} — ${m.title}: ${m.sub}`);
-        else this.hud.flash(m.title, m.sub);
+        else if (e.game) this.hud.flash(mine ? 'DEPLOYED' : 'ROLLBACK', `Game to ${names[e.result.winner]}${this.look.callouts ? ` — ${m.title}: ${m.sub}` : ''}`);
+        else this.callout(m.title, m.sub);
         break;
       }
       case 'over':

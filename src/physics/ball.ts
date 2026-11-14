@@ -248,6 +248,20 @@ export class BallSim {
       const spinIn = clone(s.spin);
       s.pos.y = TABLE_TOP + r;
       surfaceBounce(s, v3(0, 1, 0), tableRestitution(impactSpeed, p), p.tableFriction, p.tableSpinBite, p.tableFrictionMax);
+      // Backspin checks the ball up, but (outside pure simulation) never sends it back.
+      if (p.tableBounceKeep > 0) {
+        const hIn = Math.hypot(velIn.x, velIn.z);
+        if (hIn > 1e-6) {
+          const dx = velIn.x / hIn;
+          const dz = velIn.z / hIn;
+          const along = s.vel.x * dx + s.vel.z * dz;
+          const min = p.tableBounceKeep * hIn;
+          if (along < min) {
+            s.vel.x += (min - along) * dx;
+            s.vel.z += (min - along) * dz;
+          }
+        }
+      }
       // A ball that has almost stopped bouncing is dead: stop instead of micro-bouncing forever.
       if (impactSpeed < 0.15 && Math.hypot(s.vel.x, s.vel.z) < 0.5) {
         s.vel = v3();

@@ -21,6 +21,8 @@ export interface RealismSettings {
   perfectBonus: number;
   /** Multiplier on Magnus lift: above 1 exaggerates how spin curves the ball. */
   spinCurve: number;
+  /** Least forward speed kept through a table bounce (see PhysicsParams.tableBounceKeep). */
+  bounceKeep: number;
   /** Auto face angle (0–1): opens the face on downward strokes, closes it on upward ones. */
   autoFace: number;
 }
@@ -43,6 +45,8 @@ export function realismSettings(arcade: number): RealismSettings {
     perfectBonus: a >= 0.5 ? 0.1 : 0,
     // Spin is only exaggerated in the arcade half of the range.
     spinCurve: 1 + 0.8 * Math.max(0, a - 0.5),
+    // Backspin can't bring the ball back over the net, except in (near-)pure simulation.
+    bounceKeep: a < 0.15 ? 0 : 0.35,
     autoFace: clamp01((a - 0.2) / 0.5),
   };
 }
