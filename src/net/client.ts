@@ -3,7 +3,7 @@ import { mapPose, mapState, mapVec, type SideId } from '../game/frame';
 import { IncomingPrediction } from '../game/intercept';
 import { SERVE_TOSS_AHEAD, type MoveInput, type Player } from '../game/player';
 import type { PointResult } from '../game/rules';
-import { REACH, type SwingInput } from '../game/swing';
+import { type SwingInput } from '../game/swing';
 import {
   PROTOCOL_VERSION,
   fromV,
@@ -205,8 +205,7 @@ export class OnlineClient {
 
   /** The local player's intercept point and time (view frame), for the marker and bots. */
   interceptPoint(): { pos: Vec3; t: number } | null {
-    if (!this.incoming || this.phase !== 'rally') return null;
-    return this.incoming.interceptAt(this.player.restZ, this.serverNow(), REACH.maxHeight - 0.05);
+    return this.player.contactFor(this.phase === 'rally' ? this.incoming : null, this.serverNow());
   }
 
   interceptView(): Vec3 | null {

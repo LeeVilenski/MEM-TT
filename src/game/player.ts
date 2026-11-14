@@ -3,7 +3,8 @@ import { makeAngleAssist, type ShotMode } from './assist';
 import { realismSettings } from './realism';
 import { STYLES, type PlayStyle, type StyleId } from './styles';
 import { DEFAULT_SWING } from './swing';
-import { SwingController, type StrokeSide, type SwingInput } from './swing';
+import { REACH, SwingController, type StrokeSide, type SwingInput } from './swing';
+import type { IncomingPrediction, PathPoint } from './intercept';
 
 export interface AssistSettings {
   /** 0–1: pull the face angle toward one that lands on the table. */
@@ -42,6 +43,16 @@ const AIM_LIMIT = 0.6;
  * hitting face, not the bat's edge or back (which knocked it back onto your own side).
  */
 export const SERVE_TOSS_AHEAD = 0.012;
+
+/** Contact points are kept at least this high: the ball is played at table level, not off the floor. */
+const CONTACT_MIN_Y = TABLE.height + 0.04;
+/** The bat can reach this far in front of / behind its usual plane to meet the ball (m). */
+const DEPTH_IN = 0.35;
+const DEPTH_OUT = 0.3;
+/** Taking it early: the flick must come at least this long (game s) before the planned contact… */
+const EARLY_MIN = 0.05;
+/** …and the bat must be this close to the ball's line (m, beyond the magnet radius). */
+const EARLY_SLACK = 0.12;
 
 /** A stroke whose peak is this close (s) before contact is perfectly timed. */
 export const PERFECT_WINDOW = 0.05;
@@ -117,6 +128,79 @@ export class Player {
   /** The wing the footwork assist is setting up for. */
   private wing: StrokeSide = 'forehand';
 
+  // ------------------------------------------------------------ where to meet the ball
+
+  private plannedFor: IncomingPrediction | null = null;
+  private planned: PathPoint | null = null;
+  /** A ball taken early (a flick while it was still rising), overriding the plan. */
+  private early: PathPoint | null = null;
+  private incoming: IncomingPrediction | null = null;
+  private now = 0;
+
+  /**
+   * Where (and when) to meet an incoming ball, chosen once per ball:
+   *  - at the player's usual depth (their stance), the first point the ball reaches it;
+   *  - never below table level: if the ball would drop that low before reaching that
+   *    depth (a short ball, or a long low one), at the top of its bounce instead, and the
+   *    footwork assist steps in for it;
+   *  - a lob above reach is taken on the way down.
+   * A flick earlier than that, with the bat on the ball's line, takes it early (see update).
+   * Null once the moment has passed.
+   */
+  contactFor(pred: IncomingPrediction | null, now: number): PathPoint | null {
+    this.incoming = pred;
+    this.now = now;
+    if (pred !== this.plannedFor) {
+      this.plannedFor = pred;
+      this.early = null;
+      this.planned = pred ? this.planContact(pred) : null;
+    }
+    const p = this.early ?? this.planned;
+    return p && p.t >= now ? p : null;
+  }
+
+  private planContact(pred: IncomingPrediction): PathPoint | null {
+    const maxY = REACH.maxHeight - 0.05;
+    const window = pred.playable().filter((p) => p.pos.y <= maxY);
+    if (window.length === 0) return null;
+    const ok = window.filter((p) => p.pos.y >= CONTACT_MIN_Y);
+    // A ball that never comes up to table level (a dead-low chop): its highest point.
+    if (ok.length === 0) return window.reduce((a, b) => (b.pos.y > a.pos.y ? b : a));
+    const planeZ = this.homeZ - ARM_REACH;
+    const atDepth = ok.find((p) => p.pos.z >= planeZ);
+    // It drops below the table before reaching the usual depth: meet it at the top of the bounce.
+    return atDepth ?? ok.reduce((a, b) => (b.pos.y > a.pos.y ? b : a));
+  }
+
+  /** Paddle plane for this frame: the contact point's depth, as far as the arm can reach. */
+  private contactZ(): number {
+    const rest = this.restZ;
+    // Within a few cm of the usual plane, stay on it (the ball is met there as it crosses).
+    if (!this.intercept || Math.abs(this.intercept.z - rest) < 0.06) return rest;
+    return clamp(this.intercept.z, rest - DEPTH_IN, rest + DEPTH_OUT);
+  }
+
+  /**
+   * Taking the ball early: a fresh flick while the ball is already up off the bounce,
+   * before the planned contact, with the bat on its line, meets it there and then.
+   */
+  private tryEarly() {
+    const pred = this.incoming;
+    const plan = this.planned;
+    if (!pred || !plan || this.early || this.shotMode !== 'rally') return;
+    if (this.swing.strokePeakAge > 0) return; // a flick this very frame
+    const cur = pred.pointAt(this.now + 0.016);
+    if (!cur || cur.t <= pred.nearBounceTime || cur.t > plan.t - EARLY_MIN) return;
+    if (cur.pos.y < CONTACT_MIN_Y || cur.pos.y > REACH.maxHeight - 0.05) return;
+    // Within reach in depth of where the body is now.
+    if (cur.pos.z < this.restZ - DEPTH_IN - 0.05) return;
+    const bat = this.swing.pose.pos;
+    if (Math.hypot(cur.pos.x - bat.x, cur.pos.y - bat.y) > this.assists.magnet + EARLY_SLACK) return;
+    this.early = cur;
+    this.magnetLocked = true;
+    this.setIntercept(cur, this.now);
+  }
+
   /** Where the cursor puts the bat, world x (before the magnet). */
   get batX() {
     return this.body.x + this.swing.x;
@@ -177,7 +261,10 @@ export class Player {
     this.lean += (needLean - this.lean) * (1 - Math.exp(-dt / 0.08));
 
     this.swing.serving = this.shotMode === 'serve';
-    this.swing.update(dt, input, this.body, this.restZ, this.aimFor(aim));
+    this.swing.update(dt, input, this.body, this.contactZ(), this.aimFor(aim));
+    this.tryEarly();
+    // Taken early: the bat goes to the ball's depth now.
+    if (this.early) this.swing.pose.pos.z = this.contactZ();
     // Read after the swing update, so a flick on the contact frame already counts.
     this.aimTarget = this.shotMode === 'rally' ? this.aimFor(aim) : null;
     const pose = this.swing.pose;

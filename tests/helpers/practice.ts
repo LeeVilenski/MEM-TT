@@ -2,7 +2,7 @@ import { BallSim, DEFAULT_PARAMS, TABLE, TICK_DT, launchState, solveAim, v3, typ
 import { IncomingPrediction } from '../../src/game/intercept';
 import { Player } from '../../src/game/player';
 import { classifyShot } from '../../src/game/shots';
-import { NO_INPUT, REACH } from '../../src/game/swing';
+import { NO_INPUT } from '../../src/game/swing';
 import { PRESETS } from '../../src/sandbox/presets';
 
 export const FPS = 60;
@@ -43,7 +43,7 @@ export function playBall(presetName: string, angleAssist: number, flickLead = 2 
 
   for (let frame = 0; frame < FPS * 4 && !result; frame++) {
     const input = { ...NO_INPUT };
-    const ic = hit ? null : pred.interceptAt(player.restZ, sim.time, REACH.maxHeight - 0.05);
+    const ic = player.contactFor(hit ? null : pred, sim.time);
     player.setIntercept(ic, sim.time);
     if (ic) {
       const ttc = ic.t - sim.time;

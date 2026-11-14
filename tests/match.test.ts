@@ -60,7 +60,7 @@ describe('AI vs AI matches', () => {
 });
 
 import { Player } from '../src/game/player';
-import { NO_INPUT, REACH } from '../src/game/swing';
+import { NO_INPUT } from '../src/game/swing';
 import { TABLE as T } from '../src/physics';
 
 describe('human player in a match (scripted input through the real pipeline)', () => {
@@ -118,8 +118,7 @@ describe('human player in a match (scripted input through the real pipeline)', (
         flickedFor = m.stats.rallies;
       } else {
         const ic = m.interceptFor('near');
-        const pred = (m as unknown as { incoming: { near?: { interceptAt: (z: number, t: number, h: number) => { t: number } | null } } }).incoming.near;
-        const icT = pred?.interceptAt(player.restZ, m.ballTime, REACH.maxHeight - 0.05);
+        const icT = m.interceptPointFor('near');
         if (ic && icT) {
           player.swing.basePitch = -25;
           if (icT.t - m.ballTime <= 2 / 60 && flick === 0 && flickedFor !== m.stats.hits) {

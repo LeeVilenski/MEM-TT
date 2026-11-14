@@ -238,6 +238,10 @@ Play against the ball machine with a mouse-driven paddle. Click **▶ Play**: th
   - Simulation (0%) turns all of this off.
 - **Physics:** the gesture becomes a real paddle velocity and face angle, and the physics below decides the shot.
 
+**Where you meet the ball:**
+- The ring shows the normal contact point: where the ball reaches your usual distance from the table. It's never below table level: if a ball would drop that low first (a short ball, or a long low one), you take it at the top of its bounce and the footwork assist steps you in.
+- **Take it early:** a flick while the ball is still rising off the bounce, with the bat within reach of it, meets it there and then. The bat reaches in (or back) up to about 35 cm to meet the ball where it is.
+
 **Arcade effects** (Look & sound → *Arcade effects*, on by default):
 - **Feel:** a short hit-stop on hard hits (not online, where the clock is the server's), camera shake and a zoom kick on smashes.
 - **Visuals:** a glowing comet tail coloured by spin, sparks at contact, and puffs on hard bounces.

@@ -32,7 +32,7 @@ import { IncomingPrediction } from '../game/intercept';
 import { Match } from '../game/match';
 import { LET_MESSAGE, pointMessage } from '../game/messages';
 import { classifyShot } from '../game/shots';
-import { NO_INPUT, REACH, type SwingInput } from '../game/swing';
+import { NO_INPUT, type SwingInput } from '../game/swing';
 import { BallView, spinColor } from '../render/ballView';
 import { Juice, hitPower } from '../render/juice';
 import { PlayerView } from '../render/playerView';
@@ -567,8 +567,7 @@ export class Sandbox implements MenuHost {
 
   /** Where (and when) the incoming ball reaches the player's hitting plane. */
   computeIntercept(now: number) {
-    if (this.phase !== 'incoming' || !this.incoming) return null;
-    return this.incoming.interceptAt(this.player.restZ, now, REACH.maxHeight - 0.05);
+    return this.player.contactFor(this.phase === 'incoming' ? this.incoming : null, now);
   }
 
   // ---------------------------------------------------------------- events

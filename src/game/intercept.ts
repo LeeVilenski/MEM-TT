@@ -13,7 +13,22 @@ export class IncomingPrediction {
   /** Time of the next bounce after that (the ball must be played before it). */
   readonly secondBounceTime: number;
 
+  readonly startTime: number;
+
+  /** The predicted point at time t (null outside the prediction). */
+  pointAt(t: number): PathPoint | null {
+    const i = Math.round((t - this.startTime) / TICK_DT);
+    return this.path[i] ?? null;
+  }
+
+  /** Points that can be played: after the bounce on the near half, before the next bounce. */
+  playable(): PathPoint[] {
+    if (this.nearBounceTime === Infinity) return [];
+    return this.path.filter((p) => p.t > this.nearBounceTime && p.t < this.secondBounceTime - 0.01);
+  }
+
   constructor(start: BallState, params: PhysicsParams, startTime = 0) {
+    this.startTime = startTime;
     const { path, events } = predict(start, params, { maxTime: 3, sampleEvery: 1, stop: (e) => e.type === 'floor' });
     this.path = path.map((pos, i) => ({ pos, t: startTime + i * TICK_DT }));
     const tables = events.filter((e) => e.type === 'table');
