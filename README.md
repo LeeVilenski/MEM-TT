@@ -124,6 +124,7 @@ In first person you see only your paddle, so nothing hides the ball. Replays and
 | Hit area | +0 cm | +3.9 cm | +5.3 cm | +7 cm |
 | Footwork assist | 25% | 69% | 85% | 100% |
 | Spin curve | real | ×1.04 | ×1.2 | ×1.4 |
+| Backspin can bring the ball back over the net | yes | no | no | no |
 
 **Auto face angle:** a downward stroke opens the face (push or chop) and an upward one closes it (loop), as real players do. So flicking down gives backspin and flicking up gives topspin, with no keys needed.
 
@@ -190,7 +191,7 @@ Open **Match vs AI** in the panel, choose an opponent and a format, and press **
 - **Kinematic swing:** the blade really travels through the contact point at the planned moment.
 - **Difficulty only changes execution:** reaction time, footwork speed, and angle, aim and speed errors.
 
-**Call-outs**
+**Call-outs** (off by default: Settings → Gameplay → *Point call-outs*; game and match results always show)
 
 | Event | Call-out |
 |---|---|
@@ -237,6 +238,8 @@ Play against the ball machine with a mouse-driven paddle. Click **▶ Play**: th
   - It then turns the whole stroke (face and bat path) sideways so the ball lands where the flick aimed, if that still lands.
   - Simulation (0%) turns all of this off.
 - **Physics:** the gesture becomes a real paddle velocity and face angle, and the physics below decides the shot.
+
+**Doubles vs AI** (Match vs AI → Mode → Doubles): you and an AI partner against two AI, with the real doubles rules (partners alternate shots, diagonal serves, serving order). It runs in a private in-browser room, so it pauses properly. Your partner is drawn see-through (and fades out near the camera) so they never block your view, and players waiting for their turn stand off to one side.
 
 **Camera** (Settings → Camera):
 - **Dynamic** (default): nearer and lower than before with a wider lens, following your footwork; its aim drifts toward the ball, it eases in as a ball arrives and lifts briefly after your shot.

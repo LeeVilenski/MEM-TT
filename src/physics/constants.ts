@@ -59,6 +59,12 @@ export interface PhysicsParams {
   tableSpinBite: number;
   /** Upper limit on effective friction. */
   tableFrictionMax: number;
+  /**
+   * Gameplay: the least of its forward (horizontal) speed a ball keeps through a table
+   * bounce, as a fraction of the incoming speed. 0 = pure physics, where heavy backspin
+   * on a slow, steep ball can stop it dead or send it back over the net.
+   */
+  tableBounceKeep: number;
   /** Restitution of the ball against the net mesh / tape. */
   netRestitution: number;
   /** Fraction of tangential velocity kept when brushing the net. */
@@ -77,6 +83,7 @@ export const DEFAULT_PARAMS: PhysicsParams = {
   tableFriction: 0.25,
   tableSpinBite: 0.025,
   tableFrictionMax: 0.7,
+  tableBounceKeep: 0,
   netRestitution: 0.15,
   netTangentialKeep: 0.6,
   floorRestitution: 0.75,

@@ -289,6 +289,12 @@ export class Avatar {
     this.group.visible = v;
   }
 
+  /** Fade the whole character (for see-through drawing; needs a character made with opacity < 1). */
+  setOpacity(o: number) {
+    for (const m of this.materials) m.opacity = o;
+    this.group.visible = o > 0.02;
+  }
+
   // ------------------------------------------------------------- animation
 
   private lastTime: number | null = null;
