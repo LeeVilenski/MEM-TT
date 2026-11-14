@@ -26,6 +26,33 @@ function doublesRoom(seed: number, player?: Player, bestOf = 1) {
 }
 
 describe('doubles', { timeout: 120000 }, () => {
+  it('plays the chosen line-up, and random seats never repeat a character', () => {
+    let t = 100;
+    const server = new LocalServer(() => t, { rng: mulberry32(4) });
+    const params = { ...P };
+    const c = new OnlineClient(server.connect('R', 0), new Player('H', params), params, () => t, {
+      name: 'H',
+      style: 'allround',
+      create: { mode: 'doubles', bestOf: 1, aiLevel: 'medium', aiStyles: { near2: 'looper', far2: 'blocker' } },
+    });
+    for (let i = 0; i < 5; i++) {
+      t += 1 / FPS;
+      server.pump();
+      c.frame(1 / FPS, { ...NO_INPUT }, { x: 0, z: 0 });
+    }
+    c.start(true);
+    for (let i = 0; i < 5; i++) {
+      t += 1 / FPS;
+      server.pump();
+      c.frame(1 / FPS, { ...NO_INPUT }, { x: 0, z: 0 });
+    }
+    const seats = c.room!.seats;
+    expect(seats.near2?.style).toBe('looper');
+    expect(seats.far2?.style).toBe('blocker');
+    const styles = ['near1', 'near2', 'far1', 'far2'].map((s) => seats[s as 'near1']?.style);
+    expect(new Set(styles).size).toBe(4); // far1 (random) is someone else
+  });
+
   it("a human's serves go diagonally (the assist aims for your right half, then theirs)", () => {
     for (const type of ['auto', 'backspin', 'sidespin'] as ServeType[]) {
       const player = new Player('H', { ...P });

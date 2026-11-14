@@ -105,7 +105,7 @@ export class OnlineClient {
     /** Shared physics parameters; the room's spin-curve setting is applied to them. */
     private params: PhysicsParams,
     private rawClock: () => number,
-    hello: { name: string; style?: StyleId; create?: { mode: GameMode; bestOf: number; aiLevel: AiLevel; realism?: number } },
+    hello: { name: string; style?: StyleId; create?: { mode: GameMode; bestOf: number; aiLevel: AiLevel; realism?: number; aiStyles?: Partial<Record<Seat, StyleId>> } },
   ) {
     this.clockBase = this.rawBase = rawClock();
     transport.onOpen = () => {

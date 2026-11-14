@@ -148,7 +148,23 @@ export class Sandbox implements MenuHost {
   private ai: AiPlayer | null = null;
   private aiView: PlayerView;
   private matchHud: MatchHud;
-  matchSettings = { level: 'medium' as AiLevel, bestOf: 3, aiStyle: 'random' as StyleId | 'random', doubles: false };
+  matchSettings = {
+    level: 'medium' as AiLevel,
+    bestOf: 3,
+    aiStyle: 'random' as StyleId | 'random',
+    doubles: false,
+    /** Single-player doubles: your partner and the two opponents (remembered). */
+    partner: pickPref('mem.dblPartner'),
+    opp1: pickPref('mem.dblOpp1'),
+    opp2: pickPref('mem.dblOpp2'),
+  };
+
+  /** Save the doubles line-up choices. */
+  saveDoublesPicks() {
+    savePref('mem.dblPartner', this.matchSettings.partner);
+    savePref('mem.dblOpp1', this.matchSettings.opp1);
+    savePref('mem.dblOpp2', this.matchSettings.opp2);
+  }
 
   // Single-player doubles: you and an AI partner against two AI, in a private in-browser
   // room (the online doubles rules, serving order and AI seats) whose clock stops while
@@ -176,7 +192,7 @@ export class Sandbox implements MenuHost {
     const client = (this.online = new OnlineClient(server.connect('LOCAL'), this.player, this.params, this.localClock, {
       name: 'You',
       style: this.player.style.id,
-      create: { mode: 'doubles', bestOf: this.matchSettings.bestOf, aiLevel: this.matchSettings.level, realism: this.realism.percent / 100 },
+      create: { mode: 'doubles', bestOf: this.matchSettings.bestOf, aiLevel: this.matchSettings.level, realism: this.realism.percent / 100, aiStyles: this.doublesLineup() },
     }));
     this.offlineDoubles = true;
     this.doublesStarted = false;
@@ -216,6 +232,20 @@ export class Sandbox implements MenuHost {
     let turn: string | null = null;
     if (doubles && c.phase === 'rally' && !this.doublesServing && c.next && seatSide(c.next) === c.side) turn = c.next === c.seat ? 'Your shot' : `${c.names[c.next] ?? 'Partner'}'s shot`;
     this.matchHud.setTurn(turn, turn === 'Your shot');
+  }
+
+  /** The characters chosen for the AI seats (you're near1, your partner near2); random ones left out. */
+  private doublesLineup(): Partial<Record<Seat, StyleId>> {
+    const m = this.matchSettings;
+    const out: Partial<Record<Seat, StyleId>> = {};
+    // Nobody twice: a pick that clashes with you (or an earlier pick) goes back to random.
+    const used = new Set<StyleId>([this.player.style.id]);
+    for (const [seat, pick] of [['near2', m.partner], ['far1', m.opp1], ['far2', m.opp2]] as const) {
+      if (pick === 'random' || used.has(pick)) continue;
+      used.add(pick);
+      out[seat] = pick;
+    }
+    return out;
   }
 
   /** Each frame in single-player doubles: start the match once seated; stop the clock while paused. */
@@ -2498,6 +2528,12 @@ function createMachineMesh(): THREE.Group {
  */
 const DEFAULT_SERVER: string =
   (import.meta.env.VITE_ROOM_SERVER as string | undefined) || (['localhost', '127.0.0.1'].includes(location.hostname) ? 'ws://localhost:8787' : 'local');
+
+/** A remembered character choice ('random' if none or unknown). */
+function pickPref(key: string): StyleId | 'random' {
+  const v = loadPref(key, 'random');
+  return v in STYLES ? (v as StyleId) : 'random';
+}
 
 function loadPref(key: string, fallback: string): string {
   try {

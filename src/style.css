@@ -2496,3 +2496,9 @@ body.menu-open .mhud-serves {
 body.menu-open .mhud-turn {
   display: none !important;
 }
+
+/* Six options (Random + five characters) in two rows of three. */
+.menu-choices.six {
+  grid-auto-flow: row;
+  grid-template-columns: repeat(3, 1fr);
+}
