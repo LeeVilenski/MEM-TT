@@ -1749,7 +1749,7 @@ export class Sandbox {
     const mt = gui.addFolder('Match vs AI');
     const levelNames = Object.fromEntries(Object.entries(AI_LEVELS).map(([k, v]) => [`${v.name} (${k})`, k]));
     mt.add(this.matchSettings, 'level', levelNames).name('Opponent level');
-    mt.add(this.matchSettings, 'aiStyle', { Random: 'random', ...Object.fromEntries(STYLE_IDS.map((id) => [`${STYLES[id].character} (${STYLES[id].label})`, id])) }).name('Opponent style');
+    mt.add(this.matchSettings, 'aiStyle', { Random: 'random', ...Object.fromEntries(STYLE_IDS.map((id) => [styleTitle(id), id])) }).name('Opponent');
     mt.add(this.matchSettings, 'bestOf', { 'Best of 1': 1, 'Best of 3': 3, 'Best of 5': 5, 'Best of 7': 7 }).name('Format');
     mt.add({ start: () => this.startMatch() }, 'start').name('▶ Start match');
     mt.add({ end: () => this.endMatch() }, 'end').name('End match (back to practice)');
@@ -1769,7 +1769,7 @@ export class Sandbox {
     }
     const rubberNames = Object.fromEntries(Object.values(RUBBERS).map((r) => [`${r.name} (${r.kind})`, r.id]));
     const rubberSel = { forehand: 'inverted', backhand: 'inverted' };
-    const styleNames = Object.fromEntries(STYLE_IDS.map((id) => [`${STYLES[id].character} — ${STYLES[id].label}`, id]));
+    const styleNames = Object.fromEntries(STYLE_IDS.map((id) => [styleTitle(id), id]));
     pl.add(this.realism, 'style', styleNames)
       .name('Your style')
       .onChange((id: StyleId) => {
@@ -1784,7 +1784,7 @@ export class Sandbox {
         rubberSel.backhand = this.player.rubbers.backhand.id;
         this.online?.setStyle(id);
         pl.controllersRecursive().forEach((c) => c.updateDisplay());
-        this.hud.flash(STYLES[id].character.toUpperCase(), STYLES[id].description);
+        this.hud.flash(STYLES[id].character.toUpperCase(), `${STYLES[id].role !== STYLES[id].character ? STYLES[id].role + ' · ' : ''}${STYLES[id].label}: ${STYLES[id].description}`);
       });
     const pickRubber = (wing: 'forehand' | 'backhand') => (id: string) => {
       if (this.locked('rubber', id)) {
@@ -1938,4 +1938,10 @@ function savePref(key: string, value: string) {
   } catch {
     /* storage unavailable */
   }
+}
+
+/** "Lee — Helpdesk Hero, All-rounder" for pickers. */
+function styleTitle(id: StyleId): string {
+  const st = STYLES[id];
+  return st.role === st.character ? `${st.character} — ${st.label}` : `${st.character} — ${st.role}, ${st.label}`;
 }

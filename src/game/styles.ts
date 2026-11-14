@@ -1,7 +1,7 @@
 import { RUBBERS, type Rubber } from '../physics';
 
 /**
- * Player styles: the IT-themed characters. A style changes handling (not the
+ * Player styles: the characters (Lee, Ryan, Ed, Will and a Sysadmin), each with an IT job. A style changes handling (not the
  * physics): swing power, reach, footwork speed, where you stand, and your default
  * rubbers. For the AI it also sets stroke preferences and playing distance.
  */
@@ -14,6 +14,8 @@ export interface PlayStyle {
   id: StyleId;
   /** Character name shown in the game. */
   character: string;
+  /** Their IT job (the game's theme). */
+  role: string;
   /** Playing style in table tennis terms. */
   label: string;
   description: string;
@@ -33,7 +35,8 @@ export interface PlayStyle {
 export const STYLES: Record<StyleId, PlayStyle> = {
   allround: {
     id: 'allround',
-    character: 'Helpdesk Hero',
+    character: 'Lee',
+    role: 'Helpdesk Hero',
     label: 'All-rounder',
     description: 'Balanced: a bit of everything, no weaknesses.',
     power: 1,
@@ -45,7 +48,8 @@ export const STYLES: Record<StyleId, PlayStyle> = {
   },
   looper: {
     id: 'looper',
-    character: 'Full-Stack Dev',
+    character: 'Ryan',
+    role: 'Full-Stack Dev',
     label: 'Looper',
     description: 'Heavy topspin from both wings, from mid-distance.',
     power: 1.1,
@@ -58,6 +62,7 @@ export const STYLES: Record<StyleId, PlayStyle> = {
   chopper: {
     id: 'chopper',
     character: 'Sysadmin',
+    role: 'Sysadmin',
     label: 'Chopper',
     description: 'Defends far from the table and sends everything back with backspin.',
     power: 0.95,
@@ -69,7 +74,8 @@ export const STYLES: Record<StyleId, PlayStyle> = {
   },
   blocker: {
     id: 'blocker',
-    character: 'Security Analyst',
+    character: 'Ed',
+    role: 'Security Analyst',
     label: 'Blocker ("The Firewall")',
     description: 'Glued to the table, blocking and redirecting your pace.',
     power: 0.9,
@@ -81,7 +87,8 @@ export const STYLES: Record<StyleId, PlayStyle> = {
   },
   penhold: {
     id: 'penhold',
-    character: 'Network Engineer',
+    character: 'Will',
+    role: 'Network Engineer',
     label: 'Penhold hitter',
     description: 'Fast, flat and early: drives, flicks and smashes.',
     power: 1.15,
