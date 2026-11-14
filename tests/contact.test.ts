@@ -48,6 +48,35 @@ describe('where the player meets the ball', () => {
     expect(early).toBeGreaterThanOrEqual(2);
   });
 
+  it('a quick drag to put the bat by the ball is not a stroke (no early take, no weak return)', () => {
+    for (const preset of ['Long push', 'Block', 'Drive', 'Push']) {
+      const clean = playBall(preset, 0.75, 3 / FPS, 45, { setup: (p) => p.applyRealism(0.85) });
+      let early = false;
+      let dragged = 0;
+      const r = playBall(preset, 0.75, 3 / FPS, 45, {
+        setup: (p) => {
+          p.applyRealism(0.85);
+          const update = p.update.bind(p);
+          p.update = (dt, input, m, a) => {
+            const pred = (p as unknown as { incoming: IncomingPrediction | null }).incoming;
+            const now = (p as unknown as { now: number }).now;
+            // A fast finger drag (down and across) just after the bounce, well before contact.
+            if (pred && now > pred.nearBounceTime && dragged < 4 && p.interceptEta > 0.12) {
+              dragged++;
+              input = { ...input, dx: 42, dy: 60 };
+            }
+            update(dt, input, m, a);
+            if ((p as unknown as { early: unknown }).early) early = true;
+          };
+        },
+      });
+      expect(early, preset).toBe(false);
+      expect(r.result, preset).toBe('IN');
+      // The flick that followed is the stroke: as deep as without the drag.
+      expect(r.landing!.z, preset).toBeLessThan(clean.landing!.z + 0.15);
+    }
+  });
+
   it('a flick on time still meets the ball at the planned point', () => {
     for (const preset of ['Block', 'Drive']) {
       const planned = new Player('p', DEFAULT_PARAMS).contactFor(incoming(preset), 0)!;

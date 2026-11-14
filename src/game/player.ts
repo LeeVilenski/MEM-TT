@@ -56,8 +56,12 @@ const DEPTH_IN = 0.35;
 const DEPTH_OUT = 0.3;
 /** Taking it early: the flick must come at least this long (game s) before the planned contact… */
 const EARLY_MIN = 0.05;
+/** …the ball must be up off the bounce by this much (m): taken any lower, it's a weak shot… */
+const EARLY_MIN_HEIGHT = 0.12;
+/** …and the flick must be a real stroke: this fast (m/s, mouse plane), mostly up or down. */
+const EARLY_STROKE_SPEED = 3.2;
 /** …and the bat must be this close to the ball's line (m, beyond the magnet radius). */
-const EARLY_SLACK = 0.12;
+const EARLY_SLACK = 0.05;
 
 /** A stroke whose peak is this close (s) before contact is perfectly timed. */
 export const PERFECT_WINDOW = 0.05;
@@ -222,9 +226,14 @@ export class Player {
     const plan = this.planned;
     if (!pred || !plan || this.early || this.shotMode !== 'rally') return;
     if (this.swing.strokePeakAge > 0) return; // a flick this very frame
+    // A deliberate stroke, not a quick drag to put the bat by the ball (on touch screens a
+    // repositioning drag is easily as fast as a swing, and used to take the ball early,
+    // straight off the bounce, for a weak return that died short or into the net).
+    const g = this.swing.flickVelocity;
+    if (Math.hypot(g.x, g.y) < EARLY_STROKE_SPEED || Math.abs(g.y) < 1.5 * Math.abs(g.x)) return;
     const cur = pred.pointAt(this.now + 0.016);
     if (!cur || cur.t <= pred.nearBounceTime || cur.t > plan.t - EARLY_MIN) return;
-    if (cur.pos.y < CONTACT_MIN_Y || cur.pos.y > REACH.maxHeight - 0.05) return;
+    if (cur.pos.y < TABLE.height + EARLY_MIN_HEIGHT || cur.pos.y > REACH.maxHeight - 0.05) return;
     // Within reach in depth of where the body is now.
     if (cur.pos.z < this.restZ - DEPTH_IN - 0.05) return;
     const bat = this.swing.pose.pos;

@@ -255,7 +255,7 @@ Play against the ball machine with a mouse-driven paddle. Click **▶ Play**: th
 
 **Where you meet the ball:**
 - The ring shows the normal contact point: where the ball reaches your usual distance from the table. It's never below table level: if a ball would drop that low first (a short ball, or a long low one), you take it at the top of its bounce and the footwork assist steps you in.
-- **Take it early:** a flick while the ball is still rising off the bounce, with the bat within reach of it, meets it there and then. The bat reaches in (or back) up to about 35 cm to meet the ball where it is.
+- **Take it early:** a real stroke (a fast flick, mostly up or down) while the ball is rising off the bounce, at least 12 cm up, with the bat by it, meets it there and then. A quick drag to put the bat in place doesn't count, and a flick the other way up/down replaces a drag as the stroke. The bat reaches in (or back) up to about 35 cm to meet the ball where it is.
 
 **Arcade effects** (Look & sound → *Arcade effects*, on by default):
 - **Feel:** a short hit-stop on hard hits (not online, where the clock is the server's), camera shake and a zoom kick on smashes.
