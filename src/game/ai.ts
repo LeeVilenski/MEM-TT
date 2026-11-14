@@ -107,6 +107,11 @@ const ARM = 0.45;
 const REACH = 0.95;
 /** Paddle stroke velocity is applied within this window around the planned contact time. */
 const STROKE_WINDOW = 0.1;
+/** Nearest the net a contact can be (local z): the body can't go past the end line, plus a long lean. */
+const MIN_REACH_Z = TABLE.halfLength + 0.15 - REACH;
+/** During the stroke the bat stays this close to the body (m), and this far back from the net. */
+const STRIKE_REACH = REACH + 0.1;
+const NET_CLEARANCE_Z = 0.12;
 /** Half-duration of the visible swing through the contact point, seconds. */
 const SWING_TIME = 0.05;
 
@@ -169,7 +174,13 @@ export class AiPlayer {
     // A counter-looper (lowLoop) lets the ball drop further, to topspin it from below the table.
     const late = (this.style.personality?.lowLoop ?? 0) * 0.8 * this.rng();
     const planeZ = TABLE.halfLength + Math.max(0.15, this.style.distance - 0.4) + this.rng() * 0.25 + late;
-    const ic = pred.interceptAt(planeZ, now, TABLE.height + 0.95);
+    let ic = pred.interceptAt(planeZ, now, TABLE.height + 0.95);
+    // Out of reach over the table (a short ball, or heavy backspin checking back toward the
+    // net): take it at the highest point it can still be reached, or let it go.
+    if (ic && ic.pos.z < MIN_REACH_Z) {
+      const reachable = pred.playable().filter((p) => p.t >= now && p.pos.z >= MIN_REACH_Z && p.pos.y <= TABLE.height + 0.95);
+      ic = reachable.length ? reachable.reduce((a, b) => (b.pos.y > a.pos.y ? b : a)) : null;
+    }
     if (!ic) return (this.plan = null);
 
     const at = this.stateAt(local, now, ic.t);
@@ -369,6 +380,13 @@ export class AiPlayer {
     if (plan && striking && now >= this.moveFrom) {
       const dtc = Math.max(-SWING_TIME, Math.min(SWING_TIME, now - plan.t));
       pos = v3(plan.pos.x + plan.vel.x * dtc, plan.pos.y + plan.vel.y * dtc, plan.pos.z + plan.vel.z * dtc);
+      // Still within reach of the body (a late body means a miss, not a stretching arm),
+      // and the follow-through stays on this side of the net.
+      pos = v3(
+        Math.max(this.body.x - STRIKE_REACH, Math.min(this.body.x + STRIKE_REACH, pos.x)),
+        pos.y,
+        Math.max(NET_CLEARANCE_Z, this.body.z - STRIKE_REACH, Math.min(this.body.z - 0.05, pos.z)),
+      );
     }
     this.pose = {
       pos,
