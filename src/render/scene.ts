@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { NET, TABLE } from '../physics';
 
 /**
@@ -13,6 +14,17 @@ export function createScene(renderer: THREE.WebGLRenderer) {
 
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
+  // Filmic-but-faithful tone mapping: highlights roll off instead of clipping,
+  // without the colour shift of ACES (the table stays table-blue).
+  renderer.toneMapping = THREE.NeutralToneMapping;
+  renderer.toneMappingExposure = 1;
+
+  // Soft image-based light: gives the table, paddles and props real reflections
+  // and shading on the sides facing away from the key light. Venues set its strength.
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  scene.environmentIntensity = 0.35;
+  pmrem.dispose();
 
   // Lighting: soft fill plus a high key light casting the ball's shadow straight down.
   const hemi = new THREE.HemisphereLight(0xdfe8ff, 0x22252c, 1.1);
@@ -30,6 +42,9 @@ export function createScene(renderer: THREE.WebGLRenderer) {
   sc.near = 1;
   sc.far = 10;
   key.shadow.bias = -0.0005;
+  key.shadow.normalBias = 0.01;
+  // Softer shadow edges (PCF filtering radius, in shadow-map texels).
+  key.shadow.radius = 3;
   key.name = 'key';
   scene.add(key);
 
@@ -52,7 +67,8 @@ export function createScene(renderer: THREE.WebGLRenderer) {
 
 function createTable(): THREE.Group {
   const g = new THREE.Group();
-  const topMat = new THREE.MeshStandardMaterial({ color: 0x1b3f7a, roughness: 0.55 });
+  // Satin top: a broad, soft sheen from the lights and environment, like a real table.
+  const topMat = new THREE.MeshPhysicalMaterial({ color: 0x173a75, roughness: 0.5, clearcoat: 0.12, clearcoatRoughness: 0.45, envMapIntensity: 0.6 });
   const top = new THREE.Mesh(new THREE.BoxGeometry(TABLE.width, TABLE.thickness, TABLE.length), topMat);
   top.position.y = TABLE.height - TABLE.thickness / 2;
   top.receiveShadow = true;

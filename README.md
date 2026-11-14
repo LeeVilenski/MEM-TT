@@ -10,6 +10,14 @@ The game opens on a **title screen** over a slowly orbiting view of the venue: *
 
 **Esc** (or **☰** on touch) during play opens the **pause menu**: Resume, Restart, How to play, Settings, Quit to title. Menus work with the mouse, touch, Tab or the arrow keys, and Esc goes back.
 
+**Choose your player** (the "Playing as" card on the title, or Settings): a live 3D turntable of each character (drag to turn), with their role, style, stat bars (power, reach, footwork, stance) and rubbers. Locked characters say how to unlock them.
+
+**Tutorial** (title screen, or from How to play): a guided ball-machine session in seven steps: meet the ball, keep it on the table, topspin, backspin, block, aim left, aim right. A coach card shows what to do, tracks progress and gives a tip after each miss (too late, too long, into the net, not enough spin…). There's no ball limit; it ends with a choice of a quick match, more practice or the title.
+
+**Characters move:** side-step shuffles when moving, a bouncy ready stance, the upper body turning into strokes and leaning for low balls, and after each point a hop and fist pump or a slump.
+
+**Glow (bloom)** at High quality: lamps, LEDs, string lights, the ball's comet tail and sparks glow softly; lit surfaces don't. Toggle under Settings → Graphics quality.
+
 The old tuning panel is now **Developer tools**: off by default, toggled with <kbd>`</kbd> or **Settings → Advanced**. With it on, the menus also offer a free camera (the inspect view with the ball-machine controls below).
 
 Open **📈 Career, drills & tournaments**, from the start screen or the top of the panel. **❓ How to play** explains each shot; it also opens automatically the first time you play. Progress is saved in your browser; there are no accounts.
@@ -69,6 +77,8 @@ The game plays on phones and tablets, in landscape (portrait shows a "turn your 
 ### Milestone 6 — look and theme
 
 Everything is generated in code: geometry, textures and sound. There are no asset files.
+
+**Lighting:** neutral tone mapping (highlights roll off rather than clip), a soft environment light so the table, paddles and metal pick up reflections, PCF-filtered soft shadows and a satin table top. Each venue sets its own environment strength (the server room stays dark).
 
 **Venues** (panel → **Look & sound → Venue**; your choice is remembered):
 - **Open-plan office:** a window wall, desks with code on the monitors, and a "SPRINT 42" whiteboard.

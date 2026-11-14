@@ -32,6 +32,12 @@ interface Spark {
 export class Juice {
   /** Master switch (the "Arcade effects" setting). */
   enabled = true;
+  private materials: THREE.MeshBasicMaterial[] = [];
+
+  /** With bloom on, the trail and sparks are pushed above white so they glow. */
+  setGlow(on: boolean) {
+    for (const m of this.materials) m.color.setScalar(on ? 2.2 : 1);
+  }
   /** Hit-stop needs a pausable clock: off in online rooms. */
   allowHitStop = true;
 
@@ -59,6 +65,7 @@ export class Juice {
     // point sprites: they render the same on every GPU.
     const mk = (count: number, additive: boolean) => {
       const m = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: additive, depthWrite: !additive, blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending, toneMapped: false });
+      this.materials.push(m);
       const mesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), m, count);
       for (let i = 0; i < count; i++) mesh.setColorAt(i, new THREE.Color(0, 0, 0));
       mesh.count = 0;

@@ -4,13 +4,14 @@ import { REALISM_PRESETS } from '../game/realism';
 import { VENUES, type VenueId } from '../render/venues';
 import type { QualitySetting } from '../render/quality';
 import type { UnlockKind } from '../progress/unlocks';
+import { CharacterPreview } from '../render/charPreview';
 
 /** Which screen the menu shows (null: hidden). */
-export type MenuScreen = 'title' | 'pause' | 'vsai' | 'online' | 'settings';
+export type MenuScreen = 'title' | 'pause' | 'vsai' | 'online' | 'settings' | 'characters';
 
 /** What the player was doing when the pause menu opened. */
 export interface PauseContext {
-  kind: 'match' | 'tournament' | 'drill' | 'practice' | 'online';
+  kind: 'match' | 'tournament' | 'drill' | 'practice' | 'online' | 'tutorial';
   /** One line under "Paused", e.g. "vs Sysadmin · 4–7 · games 1–0". */
   detail: string;
 }
@@ -21,7 +22,7 @@ export interface MenuHost {
   matchSettings: { level: AiLevel; bestOf: number; aiStyle: StyleId | 'random' };
   onlineSettings: { name: string; code: string; mode: 'singles' | 'doubles'; bestOf: number };
   realism: { percent: number; style: StyleId };
-  look: { venue: VenueId; volume: number; muted: boolean; ambience: boolean; autoReplay: boolean; arcadeFx: boolean };
+  look: { venue: VenueId; volume: number; muted: boolean; ambience: boolean; autoReplay: boolean; arcadeFx: boolean; bloom: boolean };
   quality: { setting: QualitySetting };
   devTools: boolean;
   /** null if unlocked, otherwise how to unlock it. */
@@ -29,6 +30,7 @@ export interface MenuHost {
 
   startAiMatch(): void;
   startPractice(): void;
+  startTutorial(): void;
   openCareer(): void;
   showHowTo(): void;
   createOnline(): void;
@@ -48,6 +50,7 @@ export interface MenuHost {
   setAutoReplay(a: boolean): void;
   setArcadeFx(a: boolean): void;
   setQuality(q: QualitySetting): void;
+  setBloom(on: boolean): void;
   setDevTools(on: boolean): void;
 }
 
@@ -78,6 +81,10 @@ export class Menu {
   screen: MenuScreen | null = null;
   /** Where Back goes from a sub-screen: the title or the pause menu. */
   private home: 'title' | 'pause' = 'title';
+  /** Character select: which character is being looked at, and where Back returns to. */
+  private browse: StyleId | null = null;
+  private charReturn: MenuScreen = 'title';
+  private preview: CharacterPreview | null = null;
   private pause: PauseContext = { kind: 'practice', detail: '' };
   /** Called whenever the menu opens or closes (the Sandbox adjusts the camera and HUD). */
   onChange: (screen: MenuScreen | null) => void = () => {};
@@ -109,6 +116,10 @@ export class Menu {
     if (pause) this.pause = pause;
     if (screen === 'title' || screen === 'pause') this.home = screen;
     const changed = this.screen !== screen;
+    if (screen === 'characters' && changed) {
+      this.charReturn = this.screen ?? 'title';
+      this.browse = this.host.realism.style;
+    }
     this.screen = screen;
     this.render();
     this.el.style.display = 'flex';
@@ -122,6 +133,7 @@ export class Menu {
   hide() {
     if (this.screen === null) return;
     this.screen = null;
+    this.preview?.stop();
     this.el.style.display = 'none';
     document.body.classList.remove('menu-open');
     this.onChange(null);
@@ -132,7 +144,8 @@ export class Menu {
    * released the mouse can arrive here too, and resuming would grab it straight back.
    */
   back() {
-    if (this.screen && this.screen !== 'title' && this.screen !== 'pause') this.show(this.home);
+    if (this.screen === 'characters') this.show(this.charReturn);
+    else if (this.screen && this.screen !== 'title' && this.screen !== 'pause') this.show(this.home);
   }
 
   /** Re-render in place (e.g. after an unlock), keeping focus where it was. */
@@ -154,6 +167,14 @@ export class Menu {
     else if (s === 'vsai') this.card.innerHTML = this.vsAiHtml();
     else if (s === 'online') this.card.innerHTML = this.onlineHtml();
     else if (s === 'settings') this.card.innerHTML = this.settingsHtml();
+    else if (s === 'characters') this.card.innerHTML = this.charactersHtml();
+    if (s === 'characters') {
+      this.preview ??= new CharacterPreview();
+      const st = STYLES[this.browse!];
+      this.preview.setStyle(st.id, `${st.character}, ${st.role}`);
+      this.card.querySelector('.cs-stage')!.prepend(this.preview.canvas);
+      this.preview.start();
+    } else this.preview?.stop();
     this.el.setAttribute('aria-label', this.card.querySelector('h1, h2')?.textContent ?? 'Menu');
   }
 
@@ -164,24 +185,30 @@ export class Menu {
       <div class="menu-logo" aria-hidden="true"><span class="menu-ball"></span></div>
       <h1 class="menu-title">MEM <span>Table Tennis</span></h1>
       <p class="menu-tag">Spin, pace and office politics.</p>
+      <button data-a="go-characters" class="menu-player" aria-label="Playing as ${esc(st.character)}. Change player">
+        <span class="mp-avatar" aria-hidden="true">${esc(st.character[0])}</span>
+        <span class="mp-text"><small>Playing as</small><b>${esc(st.character)}</b><small>${esc(styleNote(st.id))}</small></span>
+        <span class="mp-change">Change ›</span>
+      </button>
       <div class="menu-buttons">
         <button data-a="quick" class="primary big">▶ Quick match <small>vs ${AI_LEVELS[h.matchSettings.level].name} AI · best of ${h.matchSettings.bestOf}</small></button>
         <button data-a="go-vsai">Match vs AI <small>Choose opponent and format</small></button>
         <button data-a="practice">Practice <small>Ball machine, no score</small></button>
         <button data-a="career">Career <small>Drills, tournaments, stats</small></button>
         <button data-a="go-online">Online <small>Play friends: singles or doubles</small></button>
-        <div class="menu-row">
+        <div class="menu-row three">
+          <button data-a="tutorial" class="secondary">Tutorial</button>
           <button data-a="howto" class="secondary">How to play</button>
           <button data-a="go-settings" class="secondary">Settings</button>
         </div>
       </div>
       ${h.devTools ? '<button data-a="inspect" class="link menu-dev">Developer: free camera</button>' : ''}
-      <p class="menu-foot">Playing as <b>${esc(st.character)}</b> · ${esc(this.realismName(h.realism.percent))} · <button data-a="go-settings" class="link">change</button></p>`;
+      <p class="menu-foot">Difficulty: <b>${esc(this.realismName(h.realism.percent))}</b> · <button data-a="go-settings" class="link">change</button></p>`;
   }
 
   private pauseHtml() {
     const k = this.pause.kind;
-    const restart = k === 'match' ? 'Restart match' : k === 'drill' ? 'Restart drill' : null;
+    const restart = k === 'match' ? 'Restart match' : k === 'drill' ? 'Restart drill' : k === 'tutorial' ? 'Restart tutorial' : null;
     const quit = k === 'online' ? 'Leave room' : 'Quit to title';
     return `
       <h2 class="menu-title small">Paused</h2>
@@ -242,7 +269,6 @@ export class Menu {
     const realism = Object.entries(REALISM_PRESETS)
       .map(([name, v]) => this.choice('realism', String(Math.round(v * 100)), name, h.realism.percent === Math.round(v * 100), ['Real physics, no help', 'Some help', 'Forgiving (default)', 'Slow and very forgiving'][Object.keys(REALISM_PRESETS).indexOf(name)]))
       .join('');
-    const styles = STYLE_IDS.map((id) => this.choice('style', id, STYLES[id].character, h.realism.style === id, styleNote(id), h.lockReason('style', id))).join('');
     const venues = (Object.keys(VENUES) as VenueId[]).map((id) => this.choice('venue', id, VENUES[id].name, h.look.venue === id, undefined, h.lockReason('venue', id))).join('');
     const quality = QUALITY.map(([name, q]) => this.choice('quality', String(q), name, h.quality.setting === q)).join('');
     const toggle = (k: string, label: string, on: boolean, note?: string) =>
@@ -252,7 +278,7 @@ export class Menu {
       ${this.header('Settings')}
       <div class="menu-scroll">
         ${this.group('Difficulty (realism)', `<div class="menu-choices">${realism}</div>${custom ? `<p class="menu-note">Currently a custom ${h.realism.percent}%: pick a preset to change it.</p>` : ''}`)}
-        ${this.group('Your character', `<div class="menu-choices wrap">${styles}</div><p class="menu-note">${esc(STYLES[h.realism.style].description)}</p>`)}
+        ${this.group('Your character', `<button data-a="go-characters" class="menu-player compact"><span class="mp-avatar" aria-hidden="true">${esc(STYLES[h.realism.style].character[0])}</span><span class="mp-text"><b>${esc(STYLES[h.realism.style].character)}</b><small>${esc(styleNote(h.realism.style))}</small></span><span class="mp-change">Change ›</span></button>`)}
         ${this.group('Venue', `<div class="menu-choices wrap">${venues}</div>`)}
         ${this.group(
           'Sound',
@@ -265,9 +291,56 @@ export class Menu {
           `${toggle('arcadeFx', 'Arcade effects', h.look.arcadeFx, 'Hit-stop, camera shake, sparks, crowd')}
            ${toggle('autoReplay', 'Auto-replay long rallies', h.look.autoReplay)}`,
         )}
-        ${this.group('Graphics quality', `<div class="menu-choices">${quality}</div>`)}
+        ${this.group('Graphics quality', `<div class="menu-choices">${quality}</div>${toggle('bloom', 'Glow effects', h.look.bloom, 'Bloom on the ball trail, sparks and lights (High quality only)')}`)}
         ${this.group('Advanced', toggle('devTools', 'Developer tools', h.devTools, 'Physics tuning, ball machine and every assist. <kbd>`</kbd> toggles it too.'))}
       </div>`;
+  }
+
+  private charactersHtml() {
+    const h = this.host;
+    const id = this.browse!;
+    const st = STYLES[id];
+    const lock = h.lockReason('style', id);
+    const current = h.realism.style === id;
+    const list = STYLE_IDS.map((sid) => {
+      const s2 = STYLES[sid];
+      const l = h.lockReason('style', sid);
+      return `<button class="cs-pick${sid === id ? ' on' : ''}${l ? ' locked' : ''}" data-k="browse" data-v="${sid}" aria-pressed="${sid === id}" aria-label="${esc(s2.character)}, ${esc(s2.role)}${l ? ', locked' : ''}${h.realism.style === sid ? ', your player' : ''}">
+        <span class="mp-avatar" aria-hidden="true">${l ? '🔒' : esc(s2.character[0])}</span><span class="cs-pick-name">${esc(s2.character)}${h.realism.style === sid ? ' <i>✓</i>' : ''}</span></button>`;
+    }).join('');
+    const bar = (label: string, v: number, lo: number, hi: number, word: string) => {
+      const pct = Math.round(15 + (85 * (v - lo)) / (hi - lo));
+      return `<div class="cs-stat"><span>${label}</span><span class="cs-bar" role="meter" aria-label="${label}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}" aria-valuetext="${word}"><i style="width:${Math.max(8, Math.min(100, pct))}%"></i></span><b>${word}</b></div>`;
+    };
+    const rate = (v: number) => (v >= 1.12 ? 'Very high' : v >= 1.04 ? 'High' : v > 0.97 ? 'Average' : 'Low');
+    const stance = st.distance < 0.7 ? 'At the table' : st.distance < 1 ? 'Mid-distance' : st.distance < 1.5 ? 'Back' : 'Far back';
+    const rubber = (r: { name: string; kind: string }) => `<span>${esc(r.name)} <small>(${esc(r.kind)})</small></span>`;
+    const action = lock
+      ? `<button class="primary big" aria-disabled="true" disabled>🔒 Locked <small>${esc(lock)}</small></button>`
+      : current
+        ? `<button data-a="back" class="primary big">✓ ${esc(st.character)} is your player <small>Back</small></button>`
+        : `<button data-a="pick" class="primary big">Play as ${esc(st.character)}</button>`;
+    return `
+      ${this.header('Choose your player')}
+      <div class="cs-layout">
+        <div class="cs-stage">
+          <div class="cs-hint" aria-hidden="true">Drag to turn</div>
+        </div>
+        <div class="cs-info">
+          <div class="cs-name">${esc(st.character)}</div>
+          <div class="cs-role">${esc(st.role)} · <b>${esc(st.label)}</b></div>
+          <p class="cs-desc">${esc(st.description)}</p>
+          <div class="cs-stats">
+            ${bar('Power', st.power, 0.85, 1.2, rate(st.power))}
+            ${bar('Reach', st.reach, 0.9, 1.15, rate(st.reach))}
+            ${bar('Footwork', st.footwork, 0.95, 1.15, rate(st.footwork))}
+            ${bar('Stance', st.distance, 0.4, 1.9, stance)}
+          </div>
+          <div class="cs-rubbers"><span class="k">Forehand</span>${rubber(st.rubbers.forehand)}<span class="k">Backhand</span>${rubber(st.rubbers.backhand)}</div>
+          <div class="menu-actions">${action}</div>
+        </div>
+      </div>
+      <div class="cs-list" role="group" aria-label="Characters">${list}</div>`;
   }
 
   private header(title: string) {
@@ -305,6 +378,8 @@ export class Menu {
           return h.startAiMatch();
         case 'practice':
           return h.startPractice();
+        case 'tutorial':
+          return h.startTutorial();
         case 'career':
           return h.openCareer();
         case 'howto':
@@ -321,12 +396,23 @@ export class Menu {
           return h.quitToTitle();
         case 'inspect':
           return h.inspect();
+        case 'pick':
+          if (this.browse && !h.lockReason('style', this.browse)) {
+            h.setStyle(this.browse);
+            this.preview?.react('celebrate');
+            this.refresh();
+          }
+          return;
       }
       return;
     }
     const k = t.dataset.k;
     const v = t.dataset.v;
     if (!k || v === undefined) return;
+    if (k === 'browse') {
+      this.browse = v as StyleId;
+      return this.refresh();
+    }
     if (t.getAttribute('aria-disabled') === 'true') {
       t.classList.remove('shake');
       void t.offsetWidth;
@@ -384,6 +470,7 @@ export class Menu {
       else if (k === 'ambience') h.setAmbience(t.checked);
       else if (k === 'arcadeFx') h.setArcadeFx(t.checked);
       else if (k === 'autoReplay') h.setAutoReplay(t.checked);
+      else if (k === 'bloom') h.setBloom(t.checked);
       else if (k === 'devTools') h.setDevTools(t.checked);
     }
   }
@@ -400,6 +487,15 @@ export class Menu {
     }
     if (target.tagName === 'INPUT' && (target as HTMLInputElement).type === 'text') {
       if (e.key === 'Enter' && target.dataset.k === 'code') this.host.joinOnline(this.host.onlineSettings.code);
+      return;
+    }
+    // Character select: left/right flip through the characters.
+    if (this.screen === 'characters' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+      e.preventDefault();
+      const i = STYLE_IDS.indexOf(this.browse!);
+      this.browse = STYLE_IDS[(i + (e.key === 'ArrowRight' ? 1 : -1) + STYLE_IDS.length) % STYLE_IDS.length];
+      this.render();
+      (this.card.querySelector(`.cs-pick[data-v="${this.browse}"]`) as HTMLElement | null)?.focus();
       return;
     }
     // Arrow keys move between buttons, like a console menu.

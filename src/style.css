@@ -1872,3 +1872,473 @@ body.menu-open .mhud-meter {
     transform: none;
   }
 }
+
+/* ---------------------------------------------------------------- player chip and character select */
+
+.menu .menu-player {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 56px;
+  padding: 8px 14px 8px 8px;
+  text-align: left;
+  background: rgba(18, 20, 27, 0.75);
+  border: 2px solid #2c3140;
+  border-radius: 12px;
+  transition: border-color 0.12s, background 0.12s;
+}
+
+.menu .menu-player:hover {
+  border-color: var(--accent);
+  background: rgba(232, 86, 42, 0.12);
+}
+
+.mp-avatar {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #f26a3f, #b8401c);
+  color: #fff;
+  font-size: 19px;
+  font-weight: 900;
+}
+
+.mp-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  line-height: 1.2;
+}
+
+.mp-text b {
+  font-size: 18px;
+}
+
+.mp-text small {
+  font-size: 13px;
+  color: #b7bfcf;
+  font-weight: 500;
+}
+
+.mp-change {
+  font-size: 14px;
+  font-weight: 700;
+  color: #ffb08f;
+}
+
+.menu[data-screen='characters'] .menu-card {
+  width: 920px;
+}
+
+.cs-layout {
+  display: grid;
+  grid-template-columns: 1fr 1.05fr;
+  gap: 20px;
+  min-height: 0;
+}
+
+.cs-stage {
+  position: relative;
+  min-height: 380px;
+  border-radius: 12px;
+  background: radial-gradient(ellipse at 50% 70%, rgba(232, 86, 42, 0.22) 0%, rgba(18, 20, 27, 0) 65%), #14161c;
+  overflow: hidden;
+}
+
+.cs3d {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  touch-action: none;
+}
+
+.cs3d:active {
+  cursor: grabbing;
+}
+
+.cs-hint {
+  position: absolute;
+  top: 8px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 12px;
+  color: #8b93a5;
+  pointer-events: none;
+}
+
+.cs-info {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.cs-name {
+  font-size: 46px;
+  font-weight: 900;
+  line-height: 1;
+  color: #fff;
+}
+
+.cs-role {
+  font-size: 16px;
+  color: #ffb08f;
+}
+
+.cs-role b {
+  color: #fff;
+}
+
+.cs-desc {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.45;
+  color: #d4d9e3;
+}
+
+.cs-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.cs-stat {
+  display: grid;
+  grid-template-columns: 76px 1fr 96px;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+}
+
+.cs-stat > span:first-child {
+  color: #b7bfcf;
+  font-weight: 600;
+}
+
+.cs-stat b {
+  font-size: 13px;
+  text-align: right;
+}
+
+.cs-bar {
+  height: 10px;
+  border-radius: 5px;
+  background: #2c3140;
+  overflow: hidden;
+}
+
+.cs-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 5px;
+  background: linear-gradient(90deg, #b8401c, #ff8a5c);
+  transition: width 0.25s ease-out;
+}
+
+.cs-rubbers {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 12px;
+  font-size: 14px;
+}
+
+.cs-rubbers > span.k {
+  color: #b7bfcf;
+  font-weight: 600;
+}
+
+.cs-rubbers small {
+  color: #8b93a5;
+}
+
+.cs-info .menu-actions {
+  margin-top: auto;
+}
+
+.menu button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.cs-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.cs-pick {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 6px 10px 6px 6px;
+  background: rgba(30, 34, 44, 0.95);
+  border: 2px solid #2c3140;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.cs-pick .mp-avatar {
+  width: 36px;
+  height: 36px;
+  font-size: 16px;
+}
+
+.cs-pick.locked .mp-avatar {
+  background: #2c3140;
+}
+
+.cs-pick.locked {
+  color: #8b93a5;
+}
+
+.cs-pick i {
+  font-style: normal;
+  color: var(--good);
+}
+
+.cs-pick:hover {
+  border-color: #4a5268;
+}
+
+.cs-pick.on {
+  border-color: var(--accent);
+  background: rgba(232, 86, 42, 0.18);
+}
+
+@media (max-width: 700px) {
+  .cs-layout {
+    grid-template-columns: 1fr;
+  }
+  .cs-stage {
+    min-height: 260px;
+  }
+}
+
+@media (max-height: 500px) {
+  .menu[data-screen='characters'] .menu-card {
+    gap: 8px;
+  }
+  .cs-layout {
+    grid-template-columns: 0.8fr 1.2fr;
+    gap: 12px;
+  }
+  .cs-stage {
+    min-height: 0;
+    height: 220px;
+  }
+  .cs-name {
+    font-size: 30px;
+  }
+  .cs-desc {
+    font-size: 13px;
+  }
+  .cs-stat {
+    font-size: 12px;
+    grid-template-columns: 64px 1fr 80px;
+  }
+  .cs-rubbers {
+    display: none;
+  }
+  .cs-pick {
+    min-height: 40px;
+    font-size: 14px;
+  }
+  .menu[data-screen='characters'] .menu-card {
+    overflow: auto;
+  }
+  .cs-info .menu-actions button.big {
+    min-height: 44px;
+    font-size: 16px;
+    padding: 6px 14px;
+  }
+  .cs-pick .mp-avatar {
+    width: 28px;
+    height: 28px;
+  }
+  .menu .menu-player {
+    grid-column: 1 / -1;
+    min-height: 44px;
+    padding: 4px 10px 4px 4px;
+  }
+  .menu .menu-player .mp-avatar {
+    width: 32px;
+    height: 32px;
+  }
+  .mp-text small:first-child {
+    display: none;
+  }
+}
+
+/* ---------------------------------------------------------------- tutorial coach */
+
+.menu-row.three {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+.coach {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 520px;
+  max-width: calc(100vw - 24px);
+  padding: 12px 16px 14px;
+  background: rgba(18, 20, 27, 0.9);
+  border: 1px solid #2c3140;
+  border-left: 4px solid var(--accent);
+  border-radius: 12px;
+  font-size: 15px;
+  line-height: 1.45;
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+  z-index: 3;
+}
+
+body.menu-open .coach {
+  display: none !important;
+}
+
+.coach-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.coach-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #b7bfcf;
+}
+
+.coach-steps {
+  display: flex;
+  gap: 4px;
+}
+
+.coach-steps i {
+  width: 16px;
+  height: 4px;
+  border-radius: 2px;
+  background: #2c3140;
+}
+
+.coach-steps i.done {
+  background: var(--good);
+}
+
+.coach-steps i.now {
+  background: var(--accent);
+}
+
+.coach-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 20px;
+  font-weight: 800;
+  color: #fff;
+}
+
+.coach-pips {
+  display: inline-flex;
+  gap: 5px;
+}
+
+.coach-pips i {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid #4a5268;
+}
+
+.coach-pips i.on {
+  background: var(--good);
+  border-color: var(--good);
+}
+
+.coach-text {
+  margin-top: 4px;
+  color: #d4d9e3;
+}
+
+.coach-hint {
+  margin-top: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(255, 200, 61, 0.12);
+  color: #ffe1a1;
+  font-size: 14px;
+}
+
+.coach-finish {
+  z-index: 7;
+}
+
+.coach-finish-card {
+  width: 480px;
+  text-align: center;
+}
+
+.coach-finish-card p {
+  font-size: 16px;
+  line-height: 1.5;
+  color: #d4d9e3;
+  padding: 0 22px;
+}
+
+.coach-trophy {
+  font-size: 56px;
+  margin-top: 18px;
+}
+
+.coach-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 22px 22px;
+}
+
+.coach-actions button {
+  min-height: 46px;
+  font-size: 16px !important;
+}
+
+@media (max-height: 500px) {
+  .coach {
+    top: 6px;
+    padding: 8px 12px;
+    font-size: 13px;
+    width: 460px;
+  }
+  .coach-title {
+    font-size: 16px;
+  }
+  .coach-text {
+    margin-top: 2px;
+  }
+}
+
+/* The coach card explains the controls step by step; the full key list would be noise. */
+body.tutorial .hud-help,
+body.tutorial .hud-stats {
+  display: none !important;
+}
+
+/* Short screens: keep call-outs clear of the coach card. */
+@media (max-height: 500px) {
+  body.tutorial .hud-flash {
+    top: 62%;
+  }
+}

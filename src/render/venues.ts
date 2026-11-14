@@ -1,6 +1,16 @@
 import * as THREE from 'three';
 
 /**
+ * A light source (lamp, LED, bulb): brighter than white, so it clears the bloom
+ * threshold at High quality while lit surfaces don't. Tone mapping keeps it in range.
+ */
+function glow(color: number, strength = 2.2) {
+  const m = new THREE.MeshBasicMaterial({ color });
+  m.color.multiplyScalar(strength);
+  return m;
+}
+
+/**
  * IT-themed venues, built procedurally (no external assets). A venue restyles the
  * core scene's lights, floor and background, and adds its own props. Everything
  * stays outside the playing area so the ball and its shadow remain readable.
@@ -160,7 +170,7 @@ function office(): Venue {
   g.add(instances(new THREE.BoxGeometry(0.5, 0.55, 0.06), std(0x1f2937), chairs.map((m) => m.clone().multiply(new THREE.Matrix4().makeTranslation(0, 0.3, 0.25)))));
 
   // Ceiling light panels.
-  const panel = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const panel = glow(0xffffff);
   const panels: THREE.Matrix4[] = [];
   for (let x = -4; x <= 4; x += 4) for (let z = -8; z <= 8; z += 4) panels.push(at(x, H - 0.01, z));
   const pm = instances(new THREE.PlaneGeometry(1.2, 0.6).rotateX(Math.PI / 2), panel, panels);
@@ -187,7 +197,7 @@ function office(): Venue {
     },
     [24, 24],
   );
-  return makeVenue('office', g, { background: 0xe8eef5, fog: [0xe8eef5, 14, 34], hemi: [0xffffff, 0x8a8f99, 1.5], key: [0xffffff, 2.0], floor: carpet });
+  return makeVenue('office', g, { background: 0xe8eef5, fog: [0xe8eef5, 14, 34], hemi: [0xffffff, 0x8a8f99, 1.1], key: [0xffffff, 2.0], env: 0.4, floor: carpet });
 }
 
 function serverRoom(): Venue {
@@ -218,7 +228,7 @@ function serverRoom(): Venue {
   }
   for (let x = -3.6; x <= 3.6; x += 0.7) addRack(x, -9.6, 0);
   g.add(instances(new THREE.BoxGeometry(0.6, 2.1, 0.7), rackMat, racks));
-  const ledMesh = instances(new THREE.BoxGeometry(0.025, 0.012, 0.01), new THREE.MeshBasicMaterial({ color: 0xffffff }), leds);
+  const ledMesh = instances(new THREE.BoxGeometry(0.025, 0.012, 0.01), glow(0xffffff, 2.6), leds);
   const palette = [new THREE.Color(0x22c55e), new THREE.Color(0x22c55e), new THREE.Color(0x38bdf8), new THREE.Color(0xf59e0b), new THREE.Color(0x111827)];
   for (let i = 0; i < leds.length; i++) ledMesh.setColorAt(i, palette[(i * 7) % palette.length]);
   g.add(ledMesh);
@@ -226,7 +236,7 @@ function serverRoom(): Venue {
   // Cable trays overhead and cold-aisle lights.
   const tray = std(0xd4a017, { metalness: 0.3 });
   g.add(box(0.4, 0.08, D, tray, -4, H - 0.4, 0), box(0.4, 0.08, D, tray, 4, H - 0.4, 0));
-  const strip = new THREE.MeshBasicMaterial({ color: 0x7dd3fc });
+  const strip = glow(0x7dd3fc);
   for (const x of [-2.5, 2.5]) g.add(box(0.08, 0.03, D - 2, strip, x, H - 0.02, 0));
   const sign = board(['⚠ AUTHORISED', '   PERSONNEL ONLY', '  (and ping pong)'], 1.8, 0.9, { bg: '#fde047', fg: '#111827', font: 'bold 40px sans-serif' });
   sign.position.set(-6.98, 1.8, -3);
@@ -252,8 +262,9 @@ function serverRoom(): Venue {
   return makeVenue('server', g, {
     background: 0x070a10,
     fog: [0x070a10, 8, 24],
-    hemi: [0x9cc3ff, 0x0b0f17, 0.75],
+    hemi: [0x9cc3ff, 0x0b0f17, 0.6],
     key: [0xdbeafe, 2.1],
+    env: 0.18,
     floor: tiles,
     update: (dt) => {
       acc += dt;
@@ -311,7 +322,7 @@ function conference(): Venue {
   const chairs: THREE.Matrix4[] = [];
   for (let z = -3; z <= 1; z += 1) chairs.push(at(-4.95, 0.45, z), at(-3.45, 0.45, z));
   g.add(instances(new THREE.BoxGeometry(0.45, 0.08, 0.45), std(0x374151), chairs));
-  const pend = new THREE.MeshBasicMaterial({ color: 0xfff1d6 });
+  const pend = glow(0xfff1d6);
   for (const z of [-4, 0, 4]) g.add(box(0.5, 0.06, 0.5, pend, 0, H - 0.5, z), box(0.01, 0.5, 0.01, std(0x111111), 0, H - 0.25, z));
   const okr = board(['Q4 OKRs', '1. Ship it', '2. Win the', '   ping pong cup'], 1.6, 1.0);
   okr.position.set(-W / 2 + 0.02, 1.6, 3.5);
@@ -335,8 +346,9 @@ function conference(): Venue {
   return makeVenue('conference', g, {
     background: 0xd9d3c8,
     fog: [0xd9d3c8, 12, 26],
-    hemi: [0xfff6e8, 0x6b5a48, 1.35],
+    hemi: [0xfff6e8, 0x6b5a48, 0.95],
     key: [0xfff3df, 2.0],
+    env: 0.3,
     floor: wood,
     setScore: (lines) => {
       screenLines = lines;
@@ -418,7 +430,7 @@ function rooftop(): Venue {
       bulbs.push(at(ax + (bx - ax) * t, 3.1 - Math.sin(t * Math.PI) * 0.7, az + (bz - az) * t));
     }
   }
-  const bulbMat = new THREE.MeshBasicMaterial({ color: 0xffe2a8 });
+  const bulbMat = glow(0xffe2a8, 2.6);
   const bulbMesh = instances(new THREE.SphereGeometry(0.05, 8, 6), bulbMat, bulbs);
   g.add(bulbMesh);
   g.add(plant(-7.5, -7.5, 1.6), plant(7.5, -7.5, 1.6), plant(7.5, 7.5, 1.3), plant(-7.5, 7.5, 1.3));
@@ -443,8 +455,9 @@ function rooftop(): Venue {
   return makeVenue('rooftop', g, {
     background: 0x2b2d42,
     fog: [0x6b4e6b, 30, 70],
-    hemi: [0xffc49a, 0x3b2f4a, 1.15],
+    hemi: [0xffc49a, 0x3b2f4a, 0.9],
     key: [0xffe0c0, 2.1],
+    env: 0.3,
     floor: deck,
     update: (dt) => {
       tw += dt;
@@ -460,6 +473,8 @@ interface Look {
   fog: [number, number, number];
   hemi: [number, number, number];
   key: [number, number];
+  /** Strength of the image-based (environment) light. */
+  env?: number;
   floor?: THREE.Texture;
   update?: (dt: number, time: number) => void;
   setScore?: (lines: string[]) => void;
@@ -491,7 +506,7 @@ function makeVenue(id: VenueId, group: THREE.Group, look: Look): Venue {
 
 const BUILDERS: Record<Exclude<VenueId, 'sandbox'>, () => Venue> = { office, server: serverRoom, conference, rooftop };
 
-const SANDBOX_LOOK: Look = { background: 0x14161c, fog: [0x14161c, 12, 30], hemi: [0xdfe8ff, 0x22252c, 1.1], key: [0xffffff, 2.2] };
+const SANDBOX_LOOK: Look = { background: 0x14161c, fog: [0x14161c, 12, 30], hemi: [0xdfe8ff, 0x22252c, 0.85], key: [0xffffff, 2.2], env: 0.35 };
 
 /** Swap the scene to a venue, disposing the previous one. */
 export function setVenue(scene: THREE.Scene, id: VenueId, previous: Venue | null): Venue | null {
@@ -510,6 +525,7 @@ export function setVenue(scene: THREE.Scene, id: VenueId, previous: Venue | null
   const key = scene.getObjectByName('key') as THREE.DirectionalLight;
   key.color.set(look.key[0]);
   key.intensity = look.key[1];
+  scene.environmentIntensity = look.env ?? 0.35;
   const floor = scene.getObjectByName('floor') as THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>;
   floor.material.map = look.floor ?? null;
   floor.material.color.set(look.floor ? 0xffffff : 0x23262e);

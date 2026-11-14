@@ -143,9 +143,26 @@ const LOOKS: Record<StyleId, Look> = {
 /** Exported for tests: every style has a look. */
 export const AVATAR_STYLES = Object.keys(LOOKS) as StyleId[];
 
+/** Hip height: the legs swing from here and the upper body twists and leans about it. */
+const HIP = 0.83;
+/** Reactions to a point, played for this long (s). */
+const REACT_TIME = 1.5;
+
+export type Reaction = 'celebrate' | 'dismay';
+
+const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+/** Frame-rate independent approach of `cur` to `target` (rate per second). */
+const approach = (cur: number, target: number, rate: number, dt: number) => cur + (target - cur) * (1 - Math.exp(-rate * dt));
+
 export class Avatar {
   readonly group = new THREE.Group();
   private arm: THREE.Mesh;
+  /** Upper body, pivoting at the hips (twist into strokes, lean, reactions). */
+  private upper = new THREE.Group();
+  /** Inside `upper`, offset so its children use the same absolute heights as before. */
+  private upperAbs = new THREE.Group();
+  private legs: THREE.Group[] = [];
+  private freeArm: THREE.Object3D;
   private materials: THREE.MeshStandardMaterial[] = [];
   /** Everything except the racket arm (hidden in first person). */
   private bodyParts: THREE.Object3D[] = [];
@@ -160,7 +177,11 @@ export class Avatar {
       this.materials.push(m);
       return m;
     };
-    const add = (geo: THREE.BufferGeometry, color: number, x: number, y: number, z: number, parent: THREE.Object3D = this.group) => {
+    this.upper.position.y = HIP;
+    this.upperAbs.position.y = -HIP;
+    this.upper.add(this.upperAbs);
+    this.group.add(this.upper);
+    const add = (geo: THREE.BufferGeometry, color: number, x: number, y: number, z: number, parent: THREE.Object3D = this.upperAbs) => {
       const m = new THREE.Mesh(geo, mat(color));
       m.position.set(x, y, z);
       m.castShadow = opacity >= 1;
@@ -171,13 +192,17 @@ export class Avatar {
     const sleeveColor = look.sleeves === 'none' ? null : (look.sleeves ?? look.shirt);
     const armColor = look.longSleeves && sleeveColor !== null ? sleeveColor : look.skin;
 
-    // Legs: shorts over bare lower legs, or full trousers; shoes.
+    // Legs: shorts over bare lower legs, or full trousers; shoes. Each leg swings from the hip.
     for (const x of [-0.09, 0.09]) {
+      const leg = new THREE.Group();
+      leg.position.set(x, HIP, 0);
+      this.group.add(leg);
+      this.legs.push(leg);
       if (look.legs.kind === 'shorts') {
-        add(new THREE.BoxGeometry(0.14, 0.3, 0.17), look.legs.color, x, 0.68, 0);
-        add(new THREE.BoxGeometry(0.105, 0.48, 0.12), look.skin, x, 0.3, 0);
-      } else add(new THREE.BoxGeometry(0.13, 0.78, 0.16), look.legs.color, x, 0.43, 0);
-      add(new THREE.BoxGeometry(0.12, 0.07, 0.25), look.shoes ?? 0x27272a, x, 0.035, -0.04);
+        add(new THREE.BoxGeometry(0.14, 0.3, 0.17), look.legs.color, 0, 0.68 - HIP, 0, leg);
+        add(new THREE.BoxGeometry(0.105, 0.48, 0.12), look.skin, 0, 0.3 - HIP, 0, leg);
+      } else add(new THREE.BoxGeometry(0.13, 0.78, 0.16), look.legs.color, 0, 0.43 - HIP, 0, leg);
+      add(new THREE.BoxGeometry(0.12, 0.07, 0.25), look.shoes ?? 0x27272a, 0, 0.035 - HIP, -0.04, leg);
     }
     // Torso, neck, head.
     add(new THREE.BoxGeometry(w, 0.58, 0.24), look.shirt, 0, 1.12, 0);
@@ -200,18 +225,20 @@ export class Avatar {
       peak.rotation.x = -0.12;
       if (look.cap.badge !== undefined) add(new THREE.BoxGeometry(0.05, 0.025, 0.01), look.cap.badge, 0, 1.72, -0.112);
     }
-    // Free arm hanging down, with sleeve and watch following its angle.
-    const free = add(new THREE.CylinderGeometry(0.038, 0.033, 0.55, 8), armColor, -w / 2 - 0.04, 1.1, 0);
+    // Free arm hanging from the shoulder, with sleeve and watch following its angle.
+    const free = add(new THREE.CylinderGeometry(0.038, 0.033, 0.55, 8).translate(0, -0.275, 0), armColor, -w / 2 - 0.04, 1.375, 0);
     free.rotation.z = -0.15;
-    if (sleeveColor !== null && !look.longSleeves) add(new THREE.CylinderGeometry(0.05, 0.046, 0.17, 8), sleeveColor, 0, 0.19, 0, free);
-    if (look.watch !== undefined) add(new THREE.CylinderGeometry(0.039, 0.039, 0.035, 8), look.watch, 0, -0.21, 0, free);
+    this.freeArm = free;
+    if (sleeveColor !== null && !look.longSleeves) add(new THREE.CylinderGeometry(0.05, 0.046, 0.17, 8), sleeveColor, 0, -0.085, 0, free);
+    if (look.watch !== undefined) add(new THREE.CylinderGeometry(0.039, 0.039, 0.035, 8), look.watch, 0, -0.485, 0, free);
     if (look.bottle !== undefined) {
-      const bottle = add(new THREE.CylinderGeometry(0.03, 0.03, 0.16, 10), look.bottle, 0, -0.3, -0.04, free);
+      const bottle = add(new THREE.CylinderGeometry(0.03, 0.03, 0.16, 10), look.bottle, 0, -0.575, -0.04, free);
       bottle.rotation.x = Math.PI / 2.3;
       add(new THREE.CylinderGeometry(0.018, 0.018, 0.03, 8), 0xf3f4f6, 0, 0.09, 0, bottle);
     }
-    look.accessory?.(this.group, mat, w);
-    this.bodyParts = [...this.group.children];
+    look.accessory?.(this.upperAbs, mat, w);
+    this.upperAbs.traverse((o) => (o.castShadow = opacity >= 1));
+    this.bodyParts = [this.upper, ...this.legs];
     // Racket arm: a cylinder stretched from shoulder to hand every frame.
     this.shoulderX = w / 2 + 0.02;
     this.arm = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.032, 1, 8).translate(0, 0.5, 0), mat(armColor));
@@ -231,12 +258,17 @@ export class Avatar {
    * handle; facingNegZ: true for a player at the near end looking down the table.
    */
   update(body: { x: number; z: number }, hand: THREE.Vector3, facingNegZ: boolean) {
-    this.group.position.set(body.x, 0, body.z);
+    const now = performance.now() / 1000;
+    const dt = this.lastTime === null ? 0 : clamp(now - this.lastTime, 0, 0.1);
+    this.lastTime = now;
     this.group.rotation.y = facingNegZ ? 0 : Math.PI;
+    this.group.position.set(body.x, 0, body.z);
     this.group.updateMatrixWorld();
-    // Shoulder on the paddle side.
     const local = this.group.worldToLocal(hand.clone());
-    const shoulder = new THREE.Vector3(local.x >= 0 ? this.shoulderX : -this.shoulderX, 1.36, 0);
+    this.animate(dt, now, body, local);
+    this.group.updateMatrixWorld(true);
+    // Shoulder on the paddle side (it moves with the upper body), in the group's frame.
+    const shoulder = this.group.worldToLocal(this.upperAbs.localToWorld(new THREE.Vector3(local.x >= 0 ? this.shoulderX : -this.shoulderX, 1.36, 0)));
     const d = local.clone().sub(shoulder);
     const len = Math.min(0.75, d.length());
     this.arm.position.copy(shoulder);
@@ -250,6 +282,88 @@ export class Avatar {
 
   set visible(v: boolean) {
     this.group.visible = v;
+  }
+
+  // ------------------------------------------------------------- animation
+
+  private lastTime: number | null = null;
+  private lastBody: { x: number; z: number } | null = null;
+  private lastHand: THREE.Vector3 | null = null;
+  private walkPhase = 0;
+  private stride = 0;
+  private twist = 0;
+  private lean = 0;
+  private swingVel = 0;
+  private reaction: { kind: Reaction; t: number } | null = null;
+
+  /** Play a short reaction to a point: a jump and fist pump, or a slump. */
+  react(kind: Reaction) {
+    this.reaction = { kind, t: 0 };
+  }
+
+  /**
+   * Procedural animation: shuffle steps when moving, a bouncy ready stance, the
+   * upper body turning into the stroke and leaning for low balls, and reactions.
+   * `hand` is in the group's local frame (the character faces local −z).
+   */
+  private animate(dt: number, time: number, body: { x: number; z: number }, hand: THREE.Vector3) {
+    // Footwork: speed in the local frame drives a side-step shuffle.
+    let speed = 0;
+    if (this.lastBody && dt > 0) speed = Math.hypot(body.x - this.lastBody.x, body.z - this.lastBody.z) / dt;
+    this.lastBody = { x: body.x, z: body.z };
+    this.stride = approach(this.stride, clamp(speed * 0.35, 0, 0.32), 12, dt);
+    this.walkPhase += dt * (4 + speed * 9);
+    const step = Math.sin(this.walkPhase) * this.stride;
+    this.legs[0].rotation.z = -Math.abs(step) * 0.9 - 0.04;
+    this.legs[1].rotation.z = Math.abs(step) * 0.9 + 0.04;
+    this.legs[0].rotation.x = step * 0.5;
+    this.legs[1].rotation.x = -step * 0.5;
+
+    // Swing speed of the hand across the body (follow-through twists the torso).
+    if (this.lastHand && dt > 0) this.swingVel = approach(this.swingVel, (hand.x - this.lastHand.x) / dt, 20, dt);
+    this.lastHand = hand.clone();
+
+    // Turn toward the paddle side and into the swing; lean over low or far-forward balls.
+    const twistTarget = clamp(-hand.x * 0.55 - this.swingVel * 0.06, -0.7, 0.7);
+    this.twist = approach(this.twist, twistTarget, 10, dt);
+    const reachDown = clamp((1.15 - hand.y) * 0.5, 0, 0.3);
+    const reachForward = clamp((-hand.z - 0.3) * 0.25, 0, 0.15);
+    this.lean = approach(this.lean, 0.1 + reachDown + reachForward, 8, dt);
+
+    // Ready stance: knees bent, a light bounce on the toes.
+    let y = -0.025 + Math.sin(time * Math.PI * 2 * 1.4) * 0.006 * (1 - this.stride * 2);
+    let lean = this.lean;
+    let twist = this.twist;
+    let freeZ = -0.15 - this.stride * 0.6;
+    let freeX = 0.25 + this.lean * 0.6; // free arm a little forward, for balance
+    let jump = 0;
+
+    const r = this.reaction;
+    if (r) {
+      r.t += dt;
+      const k = r.t / REACT_TIME;
+      const fade = k < 0.75 ? 1 : 1 - (k - 0.75) / 0.25;
+      if (r.kind === 'celebrate') {
+        // A hop and a fist pump with the free arm.
+        jump = r.t < 0.42 ? Math.sin((r.t / 0.42) * Math.PI) * 0.11 : 0;
+        freeZ = THREE.MathUtils.lerp(freeZ, -2.75 + Math.sin(r.t * 14) * 0.18, fade);
+        freeX = THREE.MathUtils.lerp(freeX, 0, fade);
+        lean = THREE.MathUtils.lerp(lean, -0.08, fade);
+      } else {
+        // Shoulders drop, head down, a slow shake.
+        lean = THREE.MathUtils.lerp(lean, 0.42, fade);
+        twist += Math.sin(r.t * 7) * 0.18 * fade * (1 - k);
+        freeZ = THREE.MathUtils.lerp(freeZ, -0.05, fade);
+        freeX = THREE.MathUtils.lerp(freeX, -0.2, fade);
+        y -= 0.02 * fade;
+      }
+      if (r.t >= REACT_TIME) this.reaction = null;
+    }
+
+    this.upper.position.y = HIP + y + jump;
+    this.upper.rotation.set(-lean, twist, 0, 'YXZ');
+    for (const leg of this.legs) leg.position.y = HIP + jump;
+    this.freeArm.rotation.set(freeX, 0, freeZ);
   }
 
   /** First person: nothing of the body is drawn, only the paddle (handled by the player view). */
