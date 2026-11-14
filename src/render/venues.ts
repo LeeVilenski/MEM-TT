@@ -44,6 +44,8 @@ function canvasTexture(w: number, h: number, draw: (ctx: CanvasRenderingContext2
   draw(c.getContext('2d')!);
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
+  // Signs and boards are seen at a slant: keep them sharp (clamped to what the GPU supports).
+  t.anisotropy = 8;
   if (repeat) {
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
     t.repeat.set(...repeat);
@@ -296,13 +298,16 @@ function conference(): Venue {
 
   // Big screen on the far wall: shows the score.
   let screenLines = ['MEM TABLE TENNIS', 'Q4 ALL-HANDS'];
+  // Drawn at 2× (1024 × 576) so the text stays crisp; redrawn only when the score changes.
   const scr = document.createElement('canvas');
-  scr.width = 512;
-  scr.height = 288;
+  scr.width = 1024;
+  scr.height = 576;
   const scrTex = new THREE.CanvasTexture(scr);
   scrTex.colorSpace = THREE.SRGBColorSpace;
+  scrTex.anisotropy = 8;
   const drawScreen = () => {
     const ctx = scr.getContext('2d')!;
+    ctx.setTransform(2, 0, 0, 2, 0, 0);
     ctx.fillStyle = '#0b1220';
     ctx.fillRect(0, 0, 512, 288);
     ctx.fillStyle = '#e8562a';
@@ -314,7 +319,9 @@ function conference(): Venue {
   };
   drawScreen();
   const tv = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 1.8), new THREE.MeshBasicMaterial({ map: scrTex }));
-  tv.position.set(0, 1.75, -D / 2 + 0.03);
+  // 1 cm in front of the bezel's face (which is at +0.03): coplanar, the two fought over
+  // every pixel and the picture flickered in and out.
+  tv.position.set(0, 1.75, -D / 2 + 0.04);
   g.add(tv, box(3.3, 1.9, 0.05, std(0x111111), 0, 1.75, -D / 2 + 0.005));
 
   // Conference table pushed to the side, with chairs; pendant lights.
