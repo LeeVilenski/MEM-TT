@@ -4,6 +4,14 @@ A 3D browser table tennis game for 1–4 players, built around spin, pace and a 
 
 ## Status: Milestone 8 — progression (all planned milestones done)
 
+### Menus
+
+The game opens on a **title screen** over a slowly orbiting view of the venue: **Quick match**, **Match vs AI** (opponent level, character and format), **Practice**, **Career**, **Online** (create or join a room), **How to play** and **Settings** (difficulty, your character, venue, sound, effects, graphics quality). Locked characters and venues show what unlocks them.
+
+**Esc** (or **☰** on touch) during play opens the **pause menu**: Resume, Restart, How to play, Settings, Quit to title. Menus work with the mouse, touch, Tab or the arrow keys, and Esc goes back.
+
+The old tuning panel is now **Developer tools**: off by default, toggled with <kbd>`</kbd> or **Settings → Advanced**. With it on, the menus also offer a free camera (the inspect view with the ball-machine controls below).
+
 Open **📈 Career, drills & tournaments**, from the start screen or the top of the panel. **❓ How to play** explains each shot; it also opens automatically the first time you play. Progress is saved in your browser; there are no accounts.
 
 **Career and stats**

@@ -46,6 +46,7 @@ import { TOURNAMENTS, TournamentRun, tournamentUnlocked } from '../progress/tour
 import { isUnlocked, newlyUnlocked, unlockedKeys, UNLOCKS, type UnlockKind } from '../progress/unlocks';
 import { CareerScreen } from './career';
 import { HowToPlay } from './howto';
+import { Menu, type MenuHost, type PauseContext } from './menu';
 import { VENUES, setVenue, type Venue, type VenueId } from '../render/venues';
 import { OnlineClient } from '../net/client';
 import { LocalServer, WebSocketTransport, roomUrl, type Transport } from '../net/transport';
@@ -91,7 +92,7 @@ interface MachineSettings {
 /** Rally state for practice: the machine's ball, then (maybe) the player's return. */
 type Phase = 'idle' | 'incoming' | 'returned' | 'done';
 
-export class Sandbox {
+export class Sandbox implements MenuHost {
   private renderer: THREE.WebGLRenderer;
   private scene: THREE.Scene;
   private camera: THREE.PerspectiveCamera;
@@ -180,6 +181,15 @@ export class Sandbox {
   career = new Career();
   private careerScreen!: CareerScreen;
   private howTo!: HowToPlay;
+
+  // Front end: title screen, settings and the pause menu. The lil-gui panel is "Developer tools".
+  private menu!: Menu;
+  devTools = loadPref('mem.devTools', '0') === '1';
+  /** Developer free-camera view: no menu while not playing. */
+  private inspecting = false;
+  /** Free practice against the ball machine was started (so Esc pauses it rather than going to the title). */
+  private practicing = false;
+  private rubberSel = { forehand: 'inverted', backhand: 'inverted' };
   private unlocked = new Set<string>();
   private drill: DrillSession | null = null;
   private drillZone: THREE.Mesh | null = null;
@@ -244,12 +254,15 @@ export class Sandbox {
     this.hud.showDetails = this.look.shotDetails;
     this.matchHud.showDetails = this.look.shotDetails;
     this.matchHud.onRematch = () => (this.online ? this.onlineRematch() : this.startMatch());
-    this.matchHud.onExit = () => (this.online ? this.backToLobby() : this.endMatch());
+    this.matchHud.onExit = () => (this.online ? this.backToLobby() : this.quitToTitle());
     this.lobby = new Lobby(container);
     this.lobby.onStart = () => {
       this.online?.start(this.lobby.fillAI);
     };
-    this.lobby.onLeave = () => this.leaveOnline();
+    this.lobby.onLeave = () => {
+      this.leaveOnline();
+      this.menu.show('title');
+    };
 
     this.predictionLine = new THREE.Line(
       new THREE.BufferGeometry(),
@@ -313,6 +326,9 @@ export class Sandbox {
 
     this.buildGui();
     if (this.isTouch || window.innerWidth < 700) this.gui.close();
+    this.menu = new Menu(container, this);
+    this.menu.onChange = (screen) => this.onMenuChange(screen);
+    this.setDevTools(this.devTools);
     this.applyQuality();
     this.applyRealism();
     // A venue saved before progression existed might still be locked.
@@ -364,7 +380,7 @@ export class Sandbox {
     if (invited && isRoomCode(invited)) {
       this.onlineSettings.code = invited;
       this.joinOnline(invited);
-    }
+    } else this.menu.show('title');
   }
 
   // ---------------------------------------------------------------- play mode
@@ -392,6 +408,11 @@ export class Sandbox {
   setPlaying(on: boolean) {
     if (this.playing === on) return;
     this.playing = on;
+    if (on) {
+      this.inspecting = false;
+      if (!this.match && !this.drill && !this.online) this.practicing = true;
+      this.menu.hide();
+    }
     this.controls.enabled = !on;
     this.touch.show(on && this.isTouch);
     document.body.classList.toggle('playing', on);
@@ -690,6 +711,7 @@ export class Sandbox {
       this.maybeAutoReplay();
       if (this.playing) this.updatePlayCamera(realDt);
     }
+    this.syncMenu();
     this.venue?.update(realDt, now / 1000);
     // Your own character: just the racket arm in first person, the full character otherwise.
     this.playerView.setFirstPerson(this.playing && !this.replay);
@@ -755,6 +777,7 @@ export class Sandbox {
     this.endMatch(false);
     this.stopDrill();
     this.careerScreen?.hide();
+    this.practicing = false;
     this.matchRecorded = false;
     const ai = (this.ai = new AiPlayer('far', AI_LEVELS[this.matchSettings.level], this.params));
     const st = this.matchSettings.aiStyle === 'random' ? STYLE_IDS[Math.floor(Math.random() * STYLE_IDS.length)] : this.matchSettings.aiStyle;
@@ -891,7 +914,7 @@ export class Sandbox {
       return;
     }
     if (!this.playing) {
-      this.matchHud.setPrompt('Match paused — click <b>▶ Resume match</b> to continue');
+      this.matchHud.setPrompt(null);
       this.matchHud.setMeter(null);
     } else if (match.humanToServe) {
       this.matchHud.setPrompt(this.servePrompt());
@@ -948,6 +971,7 @@ export class Sandbox {
     this.tournament = null;
     this.careerScreen.hide();
     this.drill = new DrillSession(DRILLS[idx]);
+    this.practicing = false;
     this.machine.mix = false;
     this.clearMarkers();
     // Target zone, if the drill has one.
@@ -1036,6 +1060,169 @@ export class Sandbox {
     this.careerScreen.show('tournaments', banner);
   }
 
+  // ---------------------------------------------------------------- menu (title, settings, pause)
+
+  /** null if unlocked, otherwise the requirement. */
+  lockReason(kind: UnlockKind, id: string): string | null {
+    if (isUnlocked(kind, id, this.career.data, this.career.levelIndex)) return null;
+    return UNLOCKS.find((u) => u.kind === kind && u.id === id)?.requirement ?? 'Locked';
+  }
+
+  /** A match from the menu (not a tournament round: that would abandon the run). */
+  startAiMatch() {
+    this.tournament = null;
+    this.careerScreen.run = null;
+    this.startMatch();
+  }
+
+  startPractice() {
+    this.leaveOnline();
+    this.endMatch();
+    this.stopDrill();
+    this.tournament = null;
+    this.practicing = true;
+    this.requestPlay();
+  }
+
+  showHowTo() {
+    this.howTo.show();
+  }
+
+  resume() {
+    this.requestPlay();
+  }
+
+  restart() {
+    if (this.drill) this.startDrill(this.drill.drill.id);
+    else if (this.match && !this.tournament) this.startMatch();
+    else this.resume();
+  }
+
+  quitToTitle() {
+    if (document.pointerLockElement) document.exitPointerLock();
+    this.setPlaying(false);
+    this.leaveOnline();
+    this.endMatch();
+    this.matchHud.hideOver();
+    this.stopDrill();
+    this.practicing = false;
+    this.inspecting = false;
+    this.phase = 'done';
+    this.menu.show('title');
+  }
+
+  /** Developer free camera (only offered with developer tools on). */
+  inspect() {
+    this.inspecting = true;
+    this.menu.hide();
+  }
+
+  private inSession() {
+    return !!(this.match || this.drill || this.online || this.practicing);
+  }
+
+  private pauseContext(): PauseContext {
+    if (this.online) return { kind: 'online', detail: 'Online match: it keeps going while you are paused.' };
+    if (this.match && this.ai) {
+      const sc = this.match.score;
+      return {
+        kind: this.tournament ? 'tournament' : 'match',
+        detail: `${this.tournament ? `${this.tournament.tournament.name} · ` : ''}vs ${this.ai.displayName} · <b>${sc.points.near}–${sc.points.far}</b> · games ${sc.games.near}–${sc.games.far}`,
+      };
+    }
+    if (this.drill) return { kind: 'drill', detail: `Drill: ${this.drill.drill.name} · ball ${Math.min(this.drill.fed, this.drill.drill.balls)}/${this.drill.drill.balls}` };
+    return { kind: 'practice', detail: `Practice vs the ball machine · ${this.stats.made}/${this.stats.attempts} returned` };
+  }
+
+  /** Whenever nothing else is on screen and you're not playing, show the title or pause menu. */
+  private syncMenu() {
+    if (this.playing || this.menu.visible || this.inspecting) return;
+    if (this.careerScreen.visible || this.howTo.visible || this.lobby.visible || this.matchHud.overVisible) return;
+    if (this.inSession()) this.menu.show('pause', this.pauseContext());
+    else this.menu.show('title');
+  }
+
+  private onMenuChange(screen: string | null) {
+    const title = screen === 'title';
+    this.controls.autoRotate = title;
+    this.controls.autoRotateSpeed = 0.35;
+    if (title) {
+      this.setCamera('Broadcast');
+      this.machineMesh.visible = true;
+    } else if (screen === null && !this.playing) this.setCamera(this.settings.camera);
+  }
+
+  setRealismPercent(p: number) {
+    this.realism.percent = p;
+    this.applyRealism();
+  }
+
+  setStyle(id: StyleId) {
+    if (this.lockReason('style', id)) return;
+    this.realism.style = id;
+    this.player.applyStyle(id);
+    this.playerView.setStyle(id);
+    this.rubberSel.forehand = this.player.rubbers.forehand.id;
+    this.rubberSel.backhand = this.player.rubbers.backhand.id;
+    this.online?.setStyle(id);
+    this.gui.controllersRecursive().forEach((c) => c.updateDisplay());
+    if (!this.menu?.visible) this.hud.flash(STYLES[id].character.toUpperCase(), STYLES[id].description);
+  }
+
+  setVolume(v: number) {
+    this.look.volume = v;
+    this.sfx.volume = v;
+    this.sfx.applyVolume();
+    savePref('mem.volume', String(v));
+    this.gui.controllersRecursive().forEach((c) => c.updateDisplay());
+  }
+
+  setMuted(m: boolean) {
+    this.look.muted = m;
+    this.sfx.muted = m;
+    this.sfx.applyVolume();
+    savePref('mem.muted', m ? '1' : '0');
+    this.gui.controllersRecursive().forEach((c) => c.updateDisplay());
+  }
+
+  setAmbience(a: boolean) {
+    this.look.ambience = a;
+    this.sfx.ambienceOn = a;
+    this.sfx.setAmbience(a ? VENUES[this.look.venue].ambience : 'none');
+    savePref('mem.ambience', a ? '1' : '0');
+    this.gui.controllersRecursive().forEach((c) => c.updateDisplay());
+  }
+
+  setAutoReplay(a: boolean) {
+    this.look.autoReplay = a;
+    savePref('mem.autoReplay', a ? '1' : '0');
+    this.gui.controllersRecursive().forEach((c) => c.updateDisplay());
+  }
+
+  setArcadeFx(a: boolean) {
+    this.look.arcadeFx = a;
+    this.juice.enabled = a;
+    this.sfx.heavyHits = a;
+    savePref('mem.arcadeFx', a ? '1' : '0');
+    this.gui.controllersRecursive().forEach((c) => c.updateDisplay());
+  }
+
+  setQuality(q: QualitySetting) {
+    this.quality.setting = q;
+    savePref('mem.quality', String(q));
+    this.applyQuality();
+    this.gui.controllersRecursive().forEach((c) => c.updateDisplay());
+  }
+
+  setDevTools(on: boolean) {
+    this.devTools = on;
+    savePref('mem.devTools', on ? '1' : '0');
+    this.gui.show(on);
+    document.body.classList.toggle('dev-tools', on);
+    if (!on) this.inspecting = false;
+    this.menu?.refresh();
+  }
+
   // ---------------------------------------------------------------- quality
 
   /** Apply the quality setting (or the automatic controller's current level). */
@@ -1066,6 +1253,7 @@ export class Sandbox {
     this.sfx.setAmbience(this.look.ambience ? VENUES[id].ambience : 'none');
     savePref('mem.venue', id);
     this.updateVenueScreen();
+    this.gui?.controllersRecursive().forEach((c) => c.updateDisplay());
   }
 
   /** The conference room's TV shows the score. */
@@ -1267,6 +1455,8 @@ export class Sandbox {
     this.lobby.fillAI = true;
     this.lobby.setError('');
     this.lobby.show(client);
+    this.menu.hide();
+    this.practicing = false;
     this.practiceUi(false);
     client.on((e) => this.onOnlineEvent(e));
     if (document.pointerLockElement) document.exitPointerLock();
@@ -1473,7 +1663,7 @@ export class Sandbox {
       this.matchHud.setPrompt(null);
       this.matchHud.setMeter(null);
     } else if (!this.playing && c.seat) {
-      this.matchHud.setPrompt('Paused locally — click <b>▶ Resume match</b> (the match keeps going online!)');
+      this.matchHud.setPrompt('Paused locally — the match keeps going online!');
       this.matchHud.setMeter(null);
     } else if (c.myServe) {
       this.matchHud.setPrompt(this.servePrompt());
@@ -1527,7 +1717,7 @@ export class Sandbox {
       } else if (this.sinceFire > 6) {
         this.resolve();
       }
-    } else if (this.machine.autoFire && this.sinceFire >= this.machine.interval) {
+    } else if ((this.machine.autoFire || this.menu.screen === 'title') && this.sinceFire >= this.machine.interval) {
       this.fire();
     }
     if (!this.sim) return;
@@ -1574,6 +1764,22 @@ export class Sandbox {
   private onKey(e: KeyboardEvent, down: boolean) {
     const tag = (e.target as HTMLElement).tagName;
     if (tag === 'INPUT' || tag === 'SELECT') return;
+    if (down && e.code === 'Backquote' && !e.repeat) return this.setDevTools(!this.devTools);
+    if (this.menu.visible) {
+      if (down && e.code === 'Escape') this.menu.handleEscape();
+      if (down && e.code === 'Space') e.preventDefault();
+      return;
+    }
+    // Esc pauses (pointer lock normally does this itself; this covers play without it).
+    if (down && e.code === 'Escape' && this.playing && !document.pointerLockElement) {
+      this.setPlaying(false);
+      return;
+    }
+    // Esc in the developer free-camera view brings the menu back.
+    if (down && e.code === 'Escape' && !this.playing && this.inspecting) {
+      this.inspecting = false;
+      return;
+    }
     if (down) this.keys.add(e.code);
     else this.keys.delete(e.code);
     if (this.playing && e.code.startsWith('Arrow')) e.preventDefault();
@@ -1655,7 +1861,7 @@ export class Sandbox {
   }
 
   private buildGui() {
-    const gui = (this.gui = new GUI({ title: 'MEM Table Tennis · Sandbox' }));
+    const gui = (this.gui = new GUI({ title: 'Developer tools  ( ` )' }));
     const onMachine = () => this.updateMachineVisuals();
 
     gui.add({ play: () => this.requestPlay() }, 'play').name('▶ Play  (Esc to leave)');
@@ -1692,28 +1898,16 @@ export class Sandbox {
       });
     lf.add(this.look, 'volume', 0, 1, 0.05)
       .name('Volume')
-      .onChange((v: number) => {
-        this.sfx.volume = v;
-        this.sfx.applyVolume();
-        savePref('mem.volume', String(v));
-      });
+      .onChange((v: number) => this.setVolume(v));
     lf.add(this.look, 'muted')
       .name('Mute')
-      .onChange((m: boolean) => {
-        this.sfx.muted = m;
-        this.sfx.applyVolume();
-        savePref('mem.muted', m ? '1' : '0');
-      });
+      .onChange((m: boolean) => this.setMuted(m));
     lf.add(this.look, 'ambience')
       .name('Venue ambience')
-      .onChange((a: boolean) => {
-        this.sfx.ambienceOn = a;
-        this.sfx.setAmbience(a ? VENUES[this.look.venue].ambience : 'none');
-        savePref('mem.ambience', a ? '1' : '0');
-      });
+      .onChange((a: boolean) => this.setAmbience(a));
     lf.add(this.look, 'autoReplay')
       .name('Auto-replay long rallies')
-      .onChange((a: boolean) => savePref('mem.autoReplay', a ? '1' : '0'));
+      .onChange((a: boolean) => this.setAutoReplay(a));
     lf.add(this.look, 'shotDetails')
       .name('Shot details while playing')
       .onChange((d: boolean) => {
@@ -1722,18 +1916,11 @@ export class Sandbox {
       });
     lf.add(this.look, 'arcadeFx')
       .name('Arcade effects (hit-stop, sparks, crowd)')
-      .onChange((a: boolean) => {
-        this.juice.enabled = a;
-        this.sfx.heavyHits = a;
-        savePref('mem.arcadeFx', a ? '1' : '0');
-      });
+      .onChange((a: boolean) => this.setArcadeFx(a));
     lf.add({ replay: () => this.startReplay() }, 'replay').name('Replay last rally  [R]');
     lf.add(this.quality, 'setting', { 'Auto (adapts to your device)': 'auto', High: 2, Medium: 1, Low: 0 })
       .name('Graphics quality')
-      .onChange((v: QualitySetting) => {
-        savePref('mem.quality', String(v));
-        this.applyQuality();
-      });
+      .onChange((v: QualitySetting) => this.setQuality(v));
     lf.add(this.quality, 'showFps').name('Show FPS');
 
     const on = gui.addFolder('Online multiplayer');
@@ -1768,7 +1955,7 @@ export class Sandbox {
       pl.add({ cal: () => this.tilt.recalibrate() }, 'cal').name('Recalibrate tilt');
     }
     const rubberNames = Object.fromEntries(Object.values(RUBBERS).map((r) => [`${r.name} (${r.kind})`, r.id]));
-    const rubberSel = { forehand: 'inverted', backhand: 'inverted' };
+    const rubberSel = this.rubberSel;
     const styleNames = Object.fromEntries(STYLE_IDS.map((id) => [`${STYLES[id].character} — ${STYLES[id].label}`, id]));
     pl.add(this.realism, 'style', styleNames)
       .name('Your style')
@@ -1778,13 +1965,7 @@ export class Sandbox {
           pl.controllersRecursive().forEach((c) => c.updateDisplay());
           return;
         }
-        this.player.applyStyle(id);
-        this.playerView.setStyle(id);
-        rubberSel.forehand = this.player.rubbers.forehand.id;
-        rubberSel.backhand = this.player.rubbers.backhand.id;
-        this.online?.setStyle(id);
-        pl.controllersRecursive().forEach((c) => c.updateDisplay());
-        this.hud.flash(STYLES[id].character.toUpperCase(), STYLES[id].description);
+        this.setStyle(id);
       });
     const pickRubber = (wing: 'forehand' | 'backhand') => (id: string) => {
       if (this.locked('rubber', id)) {
