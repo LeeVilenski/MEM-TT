@@ -33,6 +33,7 @@ import { BallView, spinColor } from '../render/ballView';
 import { Juice, hitPower } from '../render/juice';
 import { PlayerView } from '../render/playerView';
 import { createScene } from '../render/scene';
+import { PostFx } from '../render/post';
 import { Hud, MatchHud, type ShotReport, type ReturnReport, type PracticeStats } from './hud';
 import { Lobby } from './lobby';
 import { RallyRecorder, ReplayPlayer, type ViewFrame } from './replay';
@@ -94,6 +95,8 @@ type Phase = 'idle' | 'incoming' | 'returned' | 'done';
 
 export class Sandbox implements MenuHost {
   private renderer: THREE.WebGLRenderer;
+  /** Bloom at High quality. */
+  private post: PostFx;
   private scene: THREE.Scene;
   private camera: THREE.PerspectiveCamera;
   private controls: OrbitControls;
@@ -165,6 +168,7 @@ export class Sandbox implements MenuHost {
     autoReplay: loadPref('mem.autoReplay', '1') === '1',
     arcadeFx: loadPref('mem.arcadeFx', '1') === '1',
     shotDetails: loadPref('mem.shotDetails', '0') === '1',
+    bloom: loadPref('mem.bloom', '1') === '1',
   };
   /** Arcade effects: hit-stop, shake, comet tail, sparks (see render/juice). */
   private juice!: Juice;
@@ -234,6 +238,7 @@ export class Sandbox implements MenuHost {
 
     this.scene = createScene(this.renderer);
     this.camera = new THREE.PerspectiveCamera(50, 1, 0.01, 100);
+    this.post = new PostFx(this.renderer, this.scene, this.camera);
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
     this.setCamera('Player');
@@ -730,7 +735,7 @@ export class Sandbox implements MenuHost {
       this.camera.position.add(shake);
       this.setFov(this.playCam.fov + this.juice.fovOffset);
     }
-    this.renderer.render(this.scene, this.camera);
+    this.post.render();
     if (shake) this.camera.position.sub(shake);
   }
 
@@ -823,6 +828,8 @@ export class Sandbox implements MenuHost {
           this.sfx.point(e.result.winner === 'near', e.game);
           this.updateVenueScreen();
           this.career.recordPoint(e.result.winner === 'near', { ace: e.result.ace, rallyHits: match.referee?.hits });
+          this.playerView.react(e.result.winner === 'near' ? 'celebrate' : 'dismay');
+          this.aiView.react(e.result.winner === 'far' ? 'celebrate' : 'dismay');
           this.fxPoint(e.result.reason, match.referee?.hits ?? 0, e.result.winner === 'near', e.match);
           const m = pointMessage(e.result, names);
           if (e.match) this.hud.flash(e.result.winner === 'near' ? 'SHIPPED TO PROD' : 'INCIDENT REPORT', e.result.winner === 'near' ? 'You won the match!' : `${ai.displayName} won the match`);
@@ -1239,7 +1246,21 @@ export class Sandbox implements MenuHost {
       key.shadow.map?.dispose();
       key.shadow.map = null;
     }
+    this.applyBloom();
     this.resize();
+  }
+
+  /** Bloom only at High quality (and only if the player wants it). */
+  private applyBloom() {
+    this.post.enabled = this.look.bloom && this.qualityLevel === QUALITY_LEVELS.length - 1;
+    this.juice?.setGlow(this.post.enabled);
+  }
+
+  setBloom(on: boolean) {
+    this.look.bloom = on;
+    savePref('mem.bloom', on ? '1' : '0');
+    this.applyBloom();
+    this.gui?.controllersRecursive().forEach((c) => c.updateDisplay());
   }
 
   // ---------------------------------------------------------------- look, sound, replays
@@ -1567,6 +1588,8 @@ export class Sandbox implements MenuHost {
         this.sfx.point(e.result.winner === c.side, e.game);
         this.updateVenueScreen();
         if (c.seat) this.career.recordPoint(e.result.winner === c.side, { ace: e.result.ace, rallyHits: this.rallyHits });
+        this.playerView.react(e.result.winner === c.side ? 'celebrate' : 'dismay');
+        for (const [seat, view] of this.remoteViews) view.react(seatSide(seat) === e.result.winner ? 'celebrate' : 'dismay');
         this.fxPoint(e.result.reason, this.rallyHits, e.result.winner === c.side, e.match);
         const names = { near: this.teamName('near'), far: this.teamName('far') };
         const m = pointMessage(e.result, names);
@@ -1857,6 +1880,7 @@ export class Sandbox implements MenuHost {
     const w = this.container.clientWidth;
     const h = this.container.clientHeight;
     this.renderer.setSize(w, h);
+    this.post.setSize(w, h, this.renderer.getPixelRatio());
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
   }
@@ -1922,6 +1946,7 @@ export class Sandbox implements MenuHost {
     lf.add(this.quality, 'setting', { 'Auto (adapts to your device)': 'auto', High: 2, Medium: 1, Low: 0 })
       .name('Graphics quality')
       .onChange((v: QualitySetting) => this.setQuality(v));
+    lf.add(this.look, 'bloom').name('Glow (bloom, High quality)').onChange((b: boolean) => this.setBloom(b));
     lf.add(this.quality, 'showFps').name('Show FPS');
 
     const on = gui.addFolder('Online multiplayer');

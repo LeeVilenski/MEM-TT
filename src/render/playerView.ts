@@ -4,7 +4,7 @@ import type { Player } from '../game/player';
 import type { StrokeSide } from '../game/swing';
 import type { PaddlePose } from '../physics';
 import type { StyleId } from '../game/styles';
-import { Avatar } from './avatar';
+import { Avatar, type Reaction } from './avatar';
 
 const RED = 0xc8202a;
 /** The ring turns gold this long (s) before contact: flick now for a perfect stroke. */
@@ -96,6 +96,11 @@ export class PlayerView {
     this.avatar.setFirstPerson(this.firstPerson);
     this.body.add(this.avatar.group);
     this.body.getObjectByName('torso')!.visible = false;
+  }
+
+  /** A short body-language reaction to a point (no-op for the plain torso). */
+  react(kind: Reaction) {
+    this.avatar?.react(kind);
   }
 
   set visible(v: boolean) {

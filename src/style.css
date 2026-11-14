@@ -1872,3 +1872,308 @@ body.menu-open .mhud-meter {
     transform: none;
   }
 }
+
+/* ---------------------------------------------------------------- player chip and character select */
+
+.menu .menu-player {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 56px;
+  padding: 8px 14px 8px 8px;
+  text-align: left;
+  background: rgba(18, 20, 27, 0.75);
+  border: 2px solid #2c3140;
+  border-radius: 12px;
+  transition: border-color 0.12s, background 0.12s;
+}
+
+.menu .menu-player:hover {
+  border-color: var(--accent);
+  background: rgba(232, 86, 42, 0.12);
+}
+
+.mp-avatar {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #f26a3f, #b8401c);
+  color: #fff;
+  font-size: 19px;
+  font-weight: 900;
+}
+
+.mp-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  line-height: 1.2;
+}
+
+.mp-text b {
+  font-size: 18px;
+}
+
+.mp-text small {
+  font-size: 13px;
+  color: #b7bfcf;
+  font-weight: 500;
+}
+
+.mp-change {
+  font-size: 14px;
+  font-weight: 700;
+  color: #ffb08f;
+}
+
+.menu[data-screen='characters'] .menu-card {
+  width: 920px;
+}
+
+.cs-layout {
+  display: grid;
+  grid-template-columns: 1fr 1.05fr;
+  gap: 20px;
+  min-height: 0;
+}
+
+.cs-stage {
+  position: relative;
+  min-height: 380px;
+  border-radius: 12px;
+  background: radial-gradient(ellipse at 50% 70%, rgba(232, 86, 42, 0.22) 0%, rgba(18, 20, 27, 0) 65%), #14161c;
+  overflow: hidden;
+}
+
+.cs3d {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  touch-action: none;
+}
+
+.cs3d:active {
+  cursor: grabbing;
+}
+
+.cs-hint {
+  position: absolute;
+  top: 8px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 12px;
+  color: #8b93a5;
+  pointer-events: none;
+}
+
+.cs-info {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.cs-name {
+  font-size: 46px;
+  font-weight: 900;
+  line-height: 1;
+  color: #fff;
+}
+
+.cs-role {
+  font-size: 16px;
+  color: #ffb08f;
+}
+
+.cs-role b {
+  color: #fff;
+}
+
+.cs-desc {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.45;
+  color: #d4d9e3;
+}
+
+.cs-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.cs-stat {
+  display: grid;
+  grid-template-columns: 76px 1fr 96px;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+}
+
+.cs-stat > span:first-child {
+  color: #b7bfcf;
+  font-weight: 600;
+}
+
+.cs-stat b {
+  font-size: 13px;
+  text-align: right;
+}
+
+.cs-bar {
+  height: 10px;
+  border-radius: 5px;
+  background: #2c3140;
+  overflow: hidden;
+}
+
+.cs-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 5px;
+  background: linear-gradient(90deg, #b8401c, #ff8a5c);
+  transition: width 0.25s ease-out;
+}
+
+.cs-rubbers {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 12px;
+  font-size: 14px;
+}
+
+.cs-rubbers > span.k {
+  color: #b7bfcf;
+  font-weight: 600;
+}
+
+.cs-rubbers small {
+  color: #8b93a5;
+}
+
+.cs-info .menu-actions {
+  margin-top: auto;
+}
+
+.menu button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.cs-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.cs-pick {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 6px 10px 6px 6px;
+  background: rgba(30, 34, 44, 0.95);
+  border: 2px solid #2c3140;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.cs-pick .mp-avatar {
+  width: 36px;
+  height: 36px;
+  font-size: 16px;
+}
+
+.cs-pick.locked .mp-avatar {
+  background: #2c3140;
+}
+
+.cs-pick.locked {
+  color: #8b93a5;
+}
+
+.cs-pick i {
+  font-style: normal;
+  color: var(--good);
+}
+
+.cs-pick:hover {
+  border-color: #4a5268;
+}
+
+.cs-pick.on {
+  border-color: var(--accent);
+  background: rgba(232, 86, 42, 0.18);
+}
+
+@media (max-width: 700px) {
+  .cs-layout {
+    grid-template-columns: 1fr;
+  }
+  .cs-stage {
+    min-height: 260px;
+  }
+}
+
+@media (max-height: 500px) {
+  .menu[data-screen='characters'] .menu-card {
+    gap: 8px;
+  }
+  .cs-layout {
+    grid-template-columns: 0.8fr 1.2fr;
+    gap: 12px;
+  }
+  .cs-stage {
+    min-height: 0;
+    height: 220px;
+  }
+  .cs-name {
+    font-size: 30px;
+  }
+  .cs-desc {
+    font-size: 13px;
+  }
+  .cs-stat {
+    font-size: 12px;
+    grid-template-columns: 64px 1fr 80px;
+  }
+  .cs-rubbers {
+    display: none;
+  }
+  .cs-pick {
+    min-height: 40px;
+    font-size: 14px;
+  }
+  .menu[data-screen='characters'] .menu-card {
+    overflow: auto;
+  }
+  .cs-info .menu-actions button.big {
+    min-height: 44px;
+    font-size: 16px;
+    padding: 6px 14px;
+  }
+  .cs-pick .mp-avatar {
+    width: 28px;
+    height: 28px;
+  }
+  .menu .menu-player {
+    grid-column: 1 / -1;
+    min-height: 44px;
+    padding: 4px 10px 4px 4px;
+  }
+  .menu .menu-player .mp-avatar {
+    width: 32px;
+    height: 32px;
+  }
+  .mp-text small:first-child {
+    display: none;
+  }
+}
