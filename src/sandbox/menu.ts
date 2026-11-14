@@ -22,7 +22,7 @@ export interface MenuHost {
   matchSettings: { level: AiLevel; bestOf: number; aiStyle: StyleId | 'random' };
   onlineSettings: { name: string; code: string; mode: 'singles' | 'doubles'; bestOf: number };
   realism: { percent: number; style: StyleId };
-  look: { venue: VenueId; volume: number; muted: boolean; ambience: boolean; autoReplay: boolean; arcadeFx: boolean; bloom: boolean };
+  look: { venue: VenueId; volume: number; muted: boolean; ambience: boolean; autoReplay: boolean; arcadeFx: boolean; bloom: boolean; fullSpeedOut: boolean };
   quality: { setting: QualitySetting };
   devTools: boolean;
   /** null if unlocked, otherwise how to unlock it. */
@@ -51,6 +51,9 @@ export interface MenuHost {
   setArcadeFx(a: boolean): void;
   setQuality(q: QualitySetting): void;
   setBloom(on: boolean): void;
+  setFullSpeedOut(on: boolean): void;
+  camMode: 'classic' | 'close' | 'dynamic';
+  setCamMode(mode: 'classic' | 'close' | 'dynamic'): void;
   setDevTools(on: boolean): void;
 }
 
@@ -289,8 +292,10 @@ export class Menu {
         ${this.group(
           'Gameplay & effects',
           `${toggle('arcadeFx', 'Arcade effects', h.look.arcadeFx, 'Hit-stop, camera shake, sparks, crowd')}
+           ${toggle('fullSpeedOut', 'Your shots at full speed', h.look.fullSpeedOut, 'The game slows down only for balls coming at you (offline)')}
            ${toggle('autoReplay', 'Auto-replay long rallies', h.look.autoReplay)}`,
         )}
+        ${this.group('Camera', `<div class="menu-choices">${this.choice('cam', 'dynamic', 'Dynamic', h.camMode === 'dynamic', 'Follows the play (recommended)')}${this.choice('cam', 'close', 'Close', h.camMode === 'close', 'Behind you, more depth')}${this.choice('cam', 'classic', 'Classic', h.camMode === 'classic', 'High and steady, like TV')}</div>`)}
         ${this.group('Graphics quality', `<div class="menu-choices">${quality}</div>${toggle('bloom', 'Glow effects', h.look.bloom, 'Bloom on the ball trail, sparks and lights (High quality only)')}`)}
         ${this.group('Advanced', toggle('devTools', 'Developer tools', h.devTools, 'Physics tuning, ball machine and every assist. <kbd>`</kbd> toggles it too.'))}
       </div>`;
@@ -444,6 +449,9 @@ export class Menu {
       case 'venue':
         h.setVenue(v as VenueId);
         break;
+      case 'cam':
+        h.setCamMode(v as 'classic' | 'close' | 'dynamic');
+        break;
       case 'quality':
         h.setQuality(v === 'auto' ? 'auto' : (Number(v) as QualitySetting));
         break;
@@ -471,6 +479,7 @@ export class Menu {
       else if (k === 'arcadeFx') h.setArcadeFx(t.checked);
       else if (k === 'autoReplay') h.setAutoReplay(t.checked);
       else if (k === 'bloom') h.setBloom(t.checked);
+      else if (k === 'fullSpeedOut') h.setFullSpeedOut(t.checked);
       else if (k === 'devTools') h.setDevTools(t.checked);
     }
   }

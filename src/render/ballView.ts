@@ -50,6 +50,11 @@ export class BallView {
   private trailCount = 0;
   private tmpColor = new THREE.Color();
   showAxis = true;
+  /** Speed streak: a faint tapered smear behind a fast ball (arcade effects). */
+  private streak: THREE.Mesh;
+  streakEnabled = true;
+  /** Playback rate (slow motion), so the streak follows how fast the ball looks. */
+  playRate = 1;
 
   constructor(scene: THREE.Scene) {
     this.mesh = new THREE.Mesh(new THREE.SphereGeometry(BALL.radius, 32, 16), new THREE.MeshStandardMaterial({ map: ballTexture(), roughness: 0.35 }));
@@ -69,10 +74,20 @@ export class BallView {
     this.trail = new THREE.Line(g, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.9 }));
     this.trail.frustumCulled = false;
     scene.add(this.trail);
+
+    // Unit-length cone from the ball's centre backwards (−y), aligned to the velocity each frame.
+    this.streak = new THREE.Mesh(
+      new THREE.CylinderGeometry(BALL.radius * 0.9, 0.002, 1, 14, 1, true).translate(0, -0.5, 0),
+      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, side: THREE.DoubleSide }),
+    );
+    this.streak.visible = false;
+    this.streak.frustumCulled = false;
+    scene.add(this.streak);
   }
 
   set visible(v: boolean) {
     this.mesh.visible = v;
+    if (!v) this.streak.visible = false;
     this.axis.visible = v && this.showAxis;
   }
 
@@ -103,6 +118,17 @@ export class BallView {
   update(pos: Vec3, state: BallState) {
     this.last = { pos, state };
     this.mesh.position.set(pos.x, pos.y, pos.z);
+
+    // Speed streak: from ~10 m/s as seen, longer and brighter with speed.
+    const v = length(state.vel);
+    const k = Math.max(0, Math.min(1, (v * this.playRate - 10) / 18));
+    this.streak.visible = this.streakEnabled && this.mesh.visible && k > 0 && v > 1e-3;
+    if (this.streak.visible) {
+      this.streak.position.set(pos.x, pos.y, pos.z);
+      this.streak.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(state.vel.x / v, state.vel.y / v, state.vel.z / v));
+      this.streak.scale.set(1, 0.06 + 0.32 * k, 1);
+      (this.streak.material as THREE.MeshBasicMaterial).opacity = 0.12 + 0.3 * k;
+    }
 
     const w = length(state.spin);
     this.axis.visible = this.mesh.visible && this.showAxis && w > 30;

@@ -113,6 +113,37 @@ export class Sfx {
     }
   }
 
+  /**
+   * Air whoosh of a fast ball going past (speed in m/s as seen, after slow motion):
+   * swelling, band-passed noise whose pitch sweeps down like a fly-by. Faster = louder,
+   * brighter and shorter. `toward`: coming at the listener (sweeps from higher).
+   */
+  whoosh(speed: number, x: number, toward: boolean) {
+    const ctx = this.ready();
+    if (!ctx) return;
+    const k = Math.max(0, Math.min(1, (speed - 9) / 18));
+    if (k <= 0) return;
+    const t = ctx.currentTime;
+    const dur = 0.32 - 0.12 * k;
+    const out = ctx.createStereoPanner();
+    out.pan.value = panFor(x);
+    out.connect(this.master!);
+    const src = ctx.createBufferSource();
+    src.buffer = this.noise;
+    const f = ctx.createBiquadFilter();
+    f.type = 'bandpass';
+    f.Q.value = 1.6;
+    const top = 1400 + 2600 * k;
+    f.frequency.setValueAtTime(toward ? top : top * 0.6, t);
+    f.frequency.exponentialRampToValueAtTime(toward ? top * 0.35 : top * 0.25, t + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.06 + 0.22 * k, t + dur * 0.45);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(f).connect(g).connect(out);
+    src.start(t, Math.random() * 0.5, dur + 0.02);
+  }
+
   /** A bright two-note chime for a perfectly timed stroke. */
   perfect() {
     const ctx = this.ready();

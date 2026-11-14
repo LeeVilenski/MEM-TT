@@ -238,6 +238,15 @@ Play against the ball machine with a mouse-driven paddle. Click **▶ Play**: th
   - Simulation (0%) turns all of this off.
 - **Physics:** the gesture becomes a real paddle velocity and face angle, and the physics below decides the shot.
 
+**Camera** (Settings → Camera):
+- **Dynamic** (default): nearer and lower than before with a wider lens, following your footwork; its aim drifts toward the ball, it eases in as a ball arrives and lifts briefly after your shot.
+- **Close:** right behind you, the most depth and sense of speed.
+- **Classic:** the original high, far, telephoto view: the most readable.
+
+**Sense of speed** (offline):
+- **Your shots at full speed** (Settings → Gameplay, on by default): the realism slider's slow motion now applies only while the ball is coming at you; once it leaves your bat it plays at real speed.
+- With arcade effects: a speed streak behind fast balls, a whoosh as they cross the net, and a speed call-out on big hits ("92 km/h").
+
 **Serving:**
 - Choose a serve before you toss: **Free** (your swing decides), **Backspin**, **Sidespin**, **Topspin**, **Fast long** or **No-spin**. Keys **1–6** or **Q/E**; on touch, tap one of the serve buttons.
 - The type sets the face angle and the brush; the swipe's speed sets the spin (a hard backspin serve is nearly 5,000 rpm), and for sidespin its direction sets the curve. The assist finds a version that lands without taking the spin out.

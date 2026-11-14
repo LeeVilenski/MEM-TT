@@ -228,6 +228,21 @@ export class Hud {
     this.perfectEl.classList.add('show');
   }
 
+  private speedEl: HTMLDivElement | null = null;
+
+  /** A speed call-out for a fast shot ("92 km/h"). */
+  speedPop(kmh: number, mine: boolean) {
+    if (!this.speedEl) {
+      this.speedEl = el('div', 'hud-speed');
+      this.perfectEl.parentElement!.append(this.speedEl);
+    }
+    this.speedEl.textContent = `${Math.round(kmh)} km/h`;
+    this.speedEl.classList.toggle('theirs', !mine);
+    this.speedEl.classList.remove('show');
+    void this.speedEl.offsetWidth;
+    this.speedEl.classList.add('show');
+  }
+
   setPaddle(pitch: number, wing: StrokeSide, locked: boolean, drive: boolean) {
     const p = Math.round(pitch);
     const face = p === 0 ? 'square' : p > 0 ? `${p}° open` : `${-p}° closed`;
