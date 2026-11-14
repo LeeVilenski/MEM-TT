@@ -118,16 +118,17 @@ Online, the whole room runs at the slider's game speed: the server and every cli
 | Character | Style | Stance | Rubbers (FH / BH) |
 |---|---|---|---|
 | Lee | All-rounder | mid | Standard Build / Standard Build |
-| Ryan | Looper | mid-deep, +10% power | Standard Build / Standard Build |
+| Ryan | Tactician | mid, +10% footwork | Standard Build / Standard Build |
 | Sysadmin | Chopper | deep, +12% reach | Standard Build / Legacy Code (long pips) |
-| Ed | Blocker ("The Firewall") | at the table | Standard Build / Hotfix (short pips) |
-| Will | Penhold hitter | close, +15% power and footwork | Hotfix / Standard Build |
+| Ed | Counter-attacker ("The Firewall") | deep, +10% reach | Standard Build / Standard Build |
+| Will | Spinner & slammer | close, +15% power | Standard Build / Standard Build |
 
-**AI per style:** an AI opponent is a style plus a level (Junior, Senior or Principal).
-- A **Sysadmin** AI chops from about 2.6 m back.
-- A **Ryan** AI loops.
-- An **Ed** AI blocks at the table.
-- A **Will** AI drives, flicks and smashes.
+**AI per character:** an AI opponent is a character plus a level (Junior, Senior or Principal). Each plays like the real person:
+- **Lee:** an all-rounder, but goes for smashes on balls that aren't really high enough, and misses some.
+- **Ryan:** moves you around with wide placement, switching sides, and only smashes a genuinely high ball.
+- **Ed:** defends deep, counter-loops topspin (including from below the table: he lets pushes drop and lifts them), and blocks smashes steadily. He returns about 70% of smashes and power loops, against roughly 25% for the others.
+- **Will:** heavy spin, especially on serve (mostly sidespin), and smashes often and wildly.
+- **Sysadmin:** chops from about 2.6 m back.
 
 You choose the AI's style in **Match vs AI** or in the online lobby (or leave it random).
 

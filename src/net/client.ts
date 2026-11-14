@@ -1,7 +1,7 @@
 import { BallSim, TABLE, TICK_DT, GRAVITY, v3, type BallEvent, type PaddleCollider, type PhysicsParams, type Vec3 } from '../physics';
 import { mapPose, mapState, mapVec, type SideId } from '../game/frame';
 import { IncomingPrediction } from '../game/intercept';
-import type { MoveInput, Player } from '../game/player';
+import { SERVE_TOSS_AHEAD, type MoveInput, type Player } from '../game/player';
 import type { PointResult } from '../game/rules';
 import { REACH, type SwingInput } from '../game/swing';
 import {
@@ -200,7 +200,7 @@ export class OnlineClient {
 
   /** Where the local player holds the ball to serve (view frame). */
   handView(): Vec3 {
-    return v3(this.player.swing.pose.pos.x, TABLE.height + 0.06, this.player.restZ);
+    return v3(this.player.swing.pose.pos.x, TABLE.height + 0.06, this.player.restZ - SERVE_TOSS_AHEAD);
   }
 
   /** The local player's intercept point and time (view frame), for the marker and bots. */

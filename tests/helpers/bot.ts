@@ -33,10 +33,12 @@ export function makeBot(c: OnlineClient) {
     }
     if (c.awaitingMyServeContact && c.flight) {
       const b = c.flight.sim.state;
-      if (b.vel.y < 0 && b.pos.y - p.swing.y < 0.2 && lastFlickFor !== tossedAt) {
+      // Swipe as the dropping ball reaches the bat: it first touches the top of the blade,
+      // ~13 cm above its centre, and a stroke only lasts ~0.15 s.
+      if (b.vel.y < 0 && b.pos.y - p.swing.y < 0.18 && lastFlickFor !== tossedAt) {
         lastFlickFor = tossedAt;
-        flick = 3;
-        flickDy = 25;
+        flick = 2;
+        flickDy = 18; // a gentle downward swipe (backspin serve) that keeps the bat up with the ball
       }
       return input;
     }

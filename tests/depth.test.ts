@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_PARAMS, RUBBERS, TABLE, launchState, solveAim, v3 } from '../src/physics';
+import { BallSim, DEFAULT_PARAMS, RUBBERS, TABLE, TICK_DT, launchState, solveAim, v3 } from '../src/physics';
+import { landingOutcome } from '../src/game/assist';
 import { AI_LEVELS, AiPlayer } from '../src/game/ai';
 import { Player } from '../src/game/player';
 import { DEFAULT_REALISM, REALISM_PRESETS, realismSettings } from '../src/game/realism';
@@ -10,18 +11,9 @@ import { OnlineClient } from '../src/net/client';
 import { LocalServer } from '../src/net/transport';
 import { PRESETS } from '../src/sandbox/presets';
 import { makeBot } from './helpers/bot';
+import { mulberry32 } from './helpers/rng';
 
 const P = DEFAULT_PARAMS;
-
-function mulberry32(seed: number) {
-  return () => {
-    seed |= 0;
-    seed = (seed + 0x6d2b79f5) | 0;
-    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
 
 describe('realism slider', () => {
   it('runs from pure simulation to full arcade', () => {
@@ -69,7 +61,7 @@ describe('player styles', () => {
     expect(p.swing.reachScale).toBeGreaterThan(1);
   });
 
-  it('a Network Engineer (penhold) hits harder and stands close', () => {
+  it('Will hits harder and stands close', () => {
     const p = new Player('p', P);
     p.applyStyle('penhold');
     expect(p.swing.params.swingGain).toBeCloseTo(DEFAULT_SWING.swingGain * 1.15, 6);
@@ -77,40 +69,108 @@ describe('player styles', () => {
   });
 });
 
+/** The ball state a machine preset launches. */
+function presetLaunch(pr: (typeof PRESETS)[number]) {
+  const origin = v3(pr.lateral, TABLE.height + pr.height, -TABLE.halfLength - pr.distanceBack);
+  const aim = solveAim(origin, pr.target, pr.speed, pr.spin, P, pr.highArc);
+  return launchState(origin, { speed: pr.speed, elevation: aim.elevation, azimuth: aim.azimuth, spin: pr.spin });
+}
+
 describe('AI per style', () => {
   /** Strokes an AI chooses for a spread of incoming machine shots. */
   function strokeMix(styleId: keyof typeof STYLES) {
     const counts: Record<string, number> = {};
     let distance = 0;
     let n = 0;
+    let wide = 0;
+    let loops = 0;
+    let loopVy = 0;
     for (let seed = 1; seed <= 6; seed++) {
       for (const pr of PRESETS) {
         const ai = new AiPlayer('near', AI_LEVELS.hard, P, mulberry32(seed * 100 + n));
         ai.setStyle(STYLES[styleId]);
-        const origin = v3(pr.lateral, TABLE.height + pr.height, -TABLE.halfLength - pr.distanceBack);
-        const aim = solveAim(origin, pr.target, pr.speed, pr.spin, P, pr.highArc);
-        const plan = ai.planReturn(launchState(origin, { speed: pr.speed, elevation: aim.elevation, azimuth: aim.azimuth, spin: pr.spin }), 0);
+        const plan = ai.planReturn(presetLaunch(pr), 0);
         if (!plan) continue;
         counts[plan.stroke] = (counts[plan.stroke] ?? 0) + 1;
         distance += plan.pos.z;
+        if (plan.aimX !== undefined && Math.abs(plan.aimX) > 0.4) wide++;
+        if (plan.stroke === 'loop') ((loops += 1), (loopVy += plan.vel.y));
         n++;
       }
     }
-    return { counts, distance: distance / n, n };
+    return { counts, distance: distance / n, n, wide: wide / n, loopVy: loopVy / Math.max(1, loops) };
   }
 
-  it('a Sysadmin AI chops from deep; a Full-Stack Dev AI loops; a Security Analyst AI blocks close', () => {
-    const chopper = strokeMix('chopper');
-    const looper = strokeMix('looper');
-    const blocker = strokeMix('blocker');
-    console.log('chopper', chopper.counts, chopper.distance.toFixed(2), '| looper', looper.counts, looper.distance.toFixed(2), '| blocker', blocker.counts, blocker.distance.toFixed(2));
-    const share = (m: typeof chopper, ...k: string[]) => k.reduce((a, s) => a + (m.counts[s] ?? 0), 0) / m.n;
-    expect(share(chopper, 'chop', 'push')).toBeGreaterThan(share(looper, 'chop', 'push') + 0.2);
-    expect(share(looper, 'loop')).toBeGreaterThan(share(chopper, 'loop') + 0.2);
-    expect(share(blocker, 'block')).toBeGreaterThan(share(looper, 'block') + 0.15);
-    expect(chopper.distance).toBeGreaterThan(looper.distance + 0.3);
-    expect(blocker.distance).toBeLessThan(looper.distance);
+  it('each character plays like the real person: Ed, Ryan, Will, Lee and the Sysadmin', () => {
+    const lee = strokeMix('allround');
+    const ryan = strokeMix('looper');
+    const ed = strokeMix('blocker');
+    const will = strokeMix('penhold');
+    const sys = strokeMix('chopper');
+    const share = (m: typeof lee, ...k: string[]) => k.reduce((a, s) => a + (m.counts[s] ?? 0), 0) / m.n;
+    console.log({ lee: lee.counts, ryan: ryan.counts, ed: ed.counts, will: will.counts, sys: sys.counts }, 'wide', lee.wide, ryan.wide, 'loopVy', lee.loopVy, will.loopVy);
+    // Sysadmin: chops from the deepest position.
+    expect(share(sys, 'chop', 'push')).toBeGreaterThan(share(lee, 'chop', 'push') + 0.2);
+    expect(sys.distance).toBeGreaterThan(Math.max(lee.distance, ryan.distance, will.distance));
+    // Ed: defends deep and counter-loops.
+    expect(ed.distance).toBeGreaterThan(lee.distance + 0.3);
+    expect(share(ed, 'loop')).toBeGreaterThan(share(lee, 'loop') + 0.15);
+    // Ryan: moves the ball around, and only smashes a real opening.
+    expect(ryan.wide).toBeGreaterThan(lee.wide + 0.25);
+    expect(share(ryan, 'smash')).toBeLessThan(share(lee, 'smash'));
+    // Will: the most smashes, and heavier topspin.
+    expect(share(will, 'smash')).toBeGreaterThan(Math.max(share(lee, 'smash'), share(ryan, 'smash'), share(ed, 'smash')));
+    expect(will.loopVy).toBeGreaterThan(lee.loopVy * 1.25);
   }, 60000);
+
+  it('Ed blocks slams well and topspins pushes from below the table', () => {
+    /** Share of smashes and power loops each style returns onto the table. */
+    const slamReturns = (id: keyof typeof STYLES) => {
+      let lands = 0;
+      let n = 0;
+      for (const name of ['Smash', 'Power loop']) {
+        const pr = PRESETS.find((p) => p.name === name)!;
+        for (let seed = 1; seed <= 20; seed++) {
+          const ai = new AiPlayer('near', AI_LEVELS.medium, P, mulberry32(seed));
+          ai.setStyle(STYLES[id]);
+          const start = presetLaunch(pr);
+          const plan = ai.planReturn(start, 0);
+          if (!plan) continue;
+          const sim = new BallSim(start, P);
+          while (sim.time < plan.t - 1e-6) sim.step(TICK_DT);
+          n++;
+          if (landingOutcome(sim.state, plan, plan.normal, ai.rubber, P).outcome === 'in') lands++;
+        }
+      }
+      return lands / n;
+    };
+    const ed = slamReturns('blocker');
+    const others = ['allround', 'looper', 'penhold'].map((id) => slamReturns(id as keyof typeof STYLES));
+    console.log('slam returns: Ed', ed.toFixed(2), 'Lee/Ryan/Will', others.map((x) => x.toFixed(2)).join(' '));
+    expect(ed).toBeGreaterThan(Math.max(...others) + 0.15);
+
+    // A long push taken late, below the height of the table, is looped.
+    const push = PRESETS.find((p) => p.name === 'Long push')!;
+    let lowLoops = 0;
+    for (let seed = 1; seed <= 10; seed++) {
+      const ai = new AiPlayer('near', AI_LEVELS.medium, P, mulberry32(seed + 50));
+      ai.setStyle(STYLES.blocker);
+      const plan = ai.planReturn(presetLaunch(push), 0);
+      if (plan && plan.stroke === 'loop' && plan.pos.y < TABLE.height) lowLoops++;
+    }
+    expect(lowLoops).toBeGreaterThanOrEqual(6);
+  }, 60000);
+
+  it('Will serves with spin: mostly sidespin', () => {
+    const kinds: Record<string, number> = {};
+    for (let i = 0; i < 30; i++) {
+      const ai = new AiPlayer('near', AI_LEVELS.hard, P, mulberry32(i + 7));
+      ai.setStyle(STYLES.penhold);
+      ai.planServe(0);
+      kinds[ai.plan!.stroke] = (kinds[ai.plan!.stroke] ?? 0) + 1;
+    }
+    expect(kinds['serve-side'] ?? 0).toBeGreaterThanOrEqual(18);
+  });
 
   it('a Chopper vs a Looper plays a complete game', () => {
     const rng = mulberry32(9);

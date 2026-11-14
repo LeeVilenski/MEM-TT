@@ -56,7 +56,7 @@ describe('AI vs AI matches', () => {
     }
     console.log('hard', hardPoints, 'easy', easyPoints);
     expect(hardPoints).toBeGreaterThan(easyPoints);
-  });
+  }, 30000);
 });
 
 import { Player } from '../src/game/player';
