@@ -401,6 +401,10 @@ export class MatchHud {
     this.over.querySelector('[data-a=exit]')!.addEventListener('click', () => this.onExit());
   }
 
+  get overVisible() {
+    return this.over.style.display === 'flex';
+  }
+
   hideOver() {
     this.over.style.display = 'none';
     this.overKey = '';

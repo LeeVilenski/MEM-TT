@@ -1,0 +1,429 @@
+import { STYLES, STYLE_IDS, type StyleId } from '../game/styles';
+import { AI_LEVELS, type AiLevel } from '../game/ai';
+import { REALISM_PRESETS } from '../game/realism';
+import { VENUES, type VenueId } from '../render/venues';
+import type { QualitySetting } from '../render/quality';
+import type { UnlockKind } from '../progress/unlocks';
+
+/** Which screen the menu shows (null: hidden). */
+export type MenuScreen = 'title' | 'pause' | 'vsai' | 'online' | 'settings';
+
+/** What the player was doing when the pause menu opened. */
+export interface PauseContext {
+  kind: 'match' | 'tournament' | 'drill' | 'practice' | 'online';
+  /** One line under "Paused", e.g. "vs Sysadmin · 4–7 · games 1–0". */
+  detail: string;
+}
+
+/** Everything the menus read and change; the Sandbox implements it. */
+export interface MenuHost {
+  readonly isTouch: boolean;
+  matchSettings: { level: AiLevel; bestOf: number; aiStyle: StyleId | 'random' };
+  onlineSettings: { name: string; code: string; mode: 'singles' | 'doubles'; bestOf: number };
+  realism: { percent: number; style: StyleId };
+  look: { venue: VenueId; volume: number; muted: boolean; ambience: boolean; autoReplay: boolean; arcadeFx: boolean };
+  quality: { setting: QualitySetting };
+  devTools: boolean;
+  /** null if unlocked, otherwise how to unlock it. */
+  lockReason(kind: UnlockKind, id: string): string | null;
+
+  startAiMatch(): void;
+  startPractice(): void;
+  openCareer(): void;
+  showHowTo(): void;
+  createOnline(): void;
+  joinOnline(code: string): void;
+  resume(): void;
+  restart(): void;
+  quitToTitle(): void;
+  /** Developer free camera. */
+  inspect(): void;
+
+  setRealismPercent(p: number): void;
+  setStyle(id: StyleId): void;
+  setVenue(id: VenueId): void;
+  setVolume(v: number): void;
+  setMuted(m: boolean): void;
+  setAmbience(a: boolean): void;
+  setAutoReplay(a: boolean): void;
+  setArcadeFx(a: boolean): void;
+  setQuality(q: QualitySetting): void;
+  setDevTools(on: boolean): void;
+}
+
+const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+
+const BEST_OF = [1, 3, 5, 7];
+
+/** "Helpdesk Hero · All-rounder" (the role only when it isn't the name). */
+const styleNote = (id: StyleId) => {
+  const st = STYLES[id];
+  return st.role !== st.character ? `${st.role} · ${st.label}` : st.label;
+};
+const QUALITY: [string, QualitySetting][] = [
+  ['Auto', 'auto'],
+  ['High', 2],
+  ['Medium', 1],
+  ['Low', 0],
+];
+
+/**
+ * The game's front end: a title screen, its sub-screens (match vs AI, online,
+ * settings) and the pause menu. Plain DOM, keyboard- and touch-friendly.
+ * The developer panel (lil-gui) stays available behind Settings → Developer tools.
+ */
+export class Menu {
+  private el: HTMLDivElement;
+  private card: HTMLDivElement;
+  screen: MenuScreen | null = null;
+  /** Where Back goes from a sub-screen: the title or the pause menu. */
+  private home: 'title' | 'pause' = 'title';
+  private pause: PauseContext = { kind: 'practice', detail: '' };
+  /** Called whenever the menu opens or closes (the Sandbox adjusts the camera and HUD). */
+  onChange: (screen: MenuScreen | null) => void = () => {};
+
+  constructor(
+    container: HTMLElement,
+    private host: MenuHost,
+  ) {
+    this.el = document.createElement('div');
+    this.el.className = 'menu';
+    this.el.setAttribute('role', 'dialog');
+    this.el.setAttribute('aria-modal', 'true');
+    this.card = document.createElement('div');
+    this.card.className = 'menu-card';
+    this.el.append(this.card);
+    this.el.style.display = 'none';
+    container.append(this.el);
+    this.el.addEventListener('click', (e) => this.onClick(e));
+    this.el.addEventListener('input', (e) => this.onInput(e));
+    this.el.addEventListener('change', (e) => this.onInput(e));
+    this.el.addEventListener('keydown', (e) => this.onKeyDown(e));
+  }
+
+  get visible() {
+    return this.screen !== null;
+  }
+
+  show(screen: MenuScreen, pause?: PauseContext) {
+    if (pause) this.pause = pause;
+    if (screen === 'title' || screen === 'pause') this.home = screen;
+    const changed = this.screen !== screen;
+    this.screen = screen;
+    this.render();
+    this.el.style.display = 'flex';
+    document.body.classList.add('menu-open');
+    if (changed) {
+      this.focusFirst();
+      this.onChange(screen);
+    }
+  }
+
+  hide() {
+    if (this.screen === null) return;
+    this.screen = null;
+    this.el.style.display = 'none';
+    document.body.classList.remove('menu-open');
+    this.onChange(null);
+  }
+
+  /**
+   * Back from a sub-screen. Esc on the pause menu itself does nothing: the Esc that
+   * released the mouse can arrive here too, and resuming would grab it straight back.
+   */
+  back() {
+    if (this.screen && this.screen !== 'title' && this.screen !== 'pause') this.show(this.home);
+  }
+
+  /** Re-render in place (e.g. after an unlock), keeping focus where it was. */
+  refresh() {
+    if (!this.screen) return;
+    const focused = (document.activeElement as HTMLElement | null)?.dataset;
+    const key = focused?.a ?? focused?.k;
+    this.render();
+    if (key) (this.card.querySelector(`[data-a="${key}"], [data-k="${key}"]`) as HTMLElement | null)?.focus();
+  }
+
+  // ------------------------------------------------------------- rendering
+
+  private render() {
+    const s = this.screen;
+    this.el.dataset.screen = s ?? '';
+    if (s === 'title') this.card.innerHTML = this.titleHtml();
+    else if (s === 'pause') this.card.innerHTML = this.pauseHtml();
+    else if (s === 'vsai') this.card.innerHTML = this.vsAiHtml();
+    else if (s === 'online') this.card.innerHTML = this.onlineHtml();
+    else if (s === 'settings') this.card.innerHTML = this.settingsHtml();
+    this.el.setAttribute('aria-label', this.card.querySelector('h1, h2')?.textContent ?? 'Menu');
+  }
+
+  private titleHtml() {
+    const h = this.host;
+    const st = STYLES[h.realism.style];
+    return `
+      <div class="menu-logo" aria-hidden="true"><span class="menu-ball"></span></div>
+      <h1 class="menu-title">MEM <span>Table Tennis</span></h1>
+      <p class="menu-tag">Spin, pace and office politics.</p>
+      <div class="menu-buttons">
+        <button data-a="quick" class="primary big">▶ Quick match <small>vs ${AI_LEVELS[h.matchSettings.level].name} AI · best of ${h.matchSettings.bestOf}</small></button>
+        <button data-a="go-vsai">Match vs AI <small>Choose opponent and format</small></button>
+        <button data-a="practice">Practice <small>Ball machine, no score</small></button>
+        <button data-a="career">Career <small>Drills, tournaments, stats</small></button>
+        <button data-a="go-online">Online <small>Play friends: singles or doubles</small></button>
+        <div class="menu-row">
+          <button data-a="howto" class="secondary">How to play</button>
+          <button data-a="go-settings" class="secondary">Settings</button>
+        </div>
+      </div>
+      ${h.devTools ? '<button data-a="inspect" class="link menu-dev">Developer: free camera</button>' : ''}
+      <p class="menu-foot">Playing as <b>${esc(st.character)}</b> · ${esc(this.realismName(h.realism.percent))} · <button data-a="go-settings" class="link">change</button></p>`;
+  }
+
+  private pauseHtml() {
+    const k = this.pause.kind;
+    const restart = k === 'match' ? 'Restart match' : k === 'drill' ? 'Restart drill' : null;
+    const quit = k === 'online' ? 'Leave room' : 'Quit to title';
+    return `
+      <h2 class="menu-title small">Paused</h2>
+      ${this.pause.detail ? `<p class="menu-tag">${this.pause.detail}</p>` : ''}
+      <div class="menu-buttons">
+        <button data-a="resume" class="primary big">▶ Resume</button>
+        ${restart ? `<button data-a="restart">${restart}</button>` : ''}
+        <button data-a="howto">How to play</button>
+        <button data-a="go-settings">Settings</button>
+        <button data-a="quit" class="secondary">${quit}</button>
+      </div>
+      ${this.host.devTools ? '<button data-a="inspect" class="link menu-dev">Developer: free camera</button>' : ''}
+      <p class="menu-foot">${this.host.isTouch ? 'Tap Resume to carry on.' : '<b>Resume</b> takes the mouse back. <kbd>Esc</kbd> during play pauses.'}</p>`;
+  }
+
+  private vsAiHtml() {
+    const m = this.host.matchSettings;
+    const levels = (Object.keys(AI_LEVELS) as AiLevel[])
+      .map((id, i) => this.choice('level', id, AI_LEVELS[id].name, m.level === id, ['Gentle, slow to react', 'Solid all round', 'Fast, precise, aggressive'][i]))
+      .join('');
+    const styles = [this.choice('aiStyle', 'random', 'Random', m.aiStyle === 'random', 'Surprise me')]
+      .concat(STYLE_IDS.map((id) => this.choice('aiStyle', id, STYLES[id].character, m.aiStyle === id, styleNote(id))))
+      .join('');
+    const formats = BEST_OF.map((n) => this.choice('bestOf', String(n), `Best of ${n}`, m.bestOf === n)).join('');
+    return `
+      ${this.header('Match vs AI')}
+      ${this.group('Opponent level', `<div class="menu-choices">${levels}</div>`)}
+      ${this.group('Opponent', `<div class="menu-choices wrap">${styles}</div>`)}
+      ${this.group('Format', `<div class="menu-choices">${formats}</div>`)}
+      <div class="menu-actions"><button data-a="start" class="primary big">▶ Start match</button></div>`;
+  }
+
+  private onlineHtml() {
+    const o = this.host.onlineSettings;
+    const modes = this.choice('mode', 'singles', 'Singles', o.mode === 'singles', '1 v 1') + this.choice('mode', 'doubles', 'Doubles', o.mode === 'doubles', '2 v 2');
+    const formats = BEST_OF.map((n) => this.choice('onlineBestOf', String(n), `Best of ${n}`, o.bestOf === n)).join('');
+    return `
+      ${this.header('Online')}
+      ${this.group('Your name', `<input data-k="name" type="text" maxlength="20" value="${esc(o.name)}" autocomplete="nickname" aria-label="Your name">`)}
+      <div class="menu-split">
+        <section>
+          <h3>Create a room</h3>
+          <div class="menu-choices">${modes}</div>
+          <div class="menu-choices">${formats}</div>
+          <button data-a="create" class="primary">➕ Create room</button>
+          <p class="menu-note">You get a 5-letter code to share. Empty seats can be filled by the AI.</p>
+        </section>
+        <section>
+          <h3>Join a room</h3>
+          <input data-k="code" type="text" maxlength="5" placeholder="CODE" value="${esc(o.code)}" class="menu-code" autocapitalize="characters" autocomplete="off" aria-label="Room code">
+          <button data-a="join" class="primary">→ Join room</button>
+        </section>
+      </div>`;
+  }
+
+  private settingsHtml() {
+    const h = this.host;
+    const realism = Object.entries(REALISM_PRESETS)
+      .map(([name, v]) => this.choice('realism', String(Math.round(v * 100)), name, h.realism.percent === Math.round(v * 100), ['Real physics, no help', 'Some help', 'Forgiving (default)', 'Slow and very forgiving'][Object.keys(REALISM_PRESETS).indexOf(name)]))
+      .join('');
+    const styles = STYLE_IDS.map((id) => this.choice('style', id, STYLES[id].character, h.realism.style === id, styleNote(id), h.lockReason('style', id))).join('');
+    const venues = (Object.keys(VENUES) as VenueId[]).map((id) => this.choice('venue', id, VENUES[id].name, h.look.venue === id, undefined, h.lockReason('venue', id))).join('');
+    const quality = QUALITY.map(([name, q]) => this.choice('quality', String(q), name, h.quality.setting === q)).join('');
+    const toggle = (k: string, label: string, on: boolean, note?: string) =>
+      `<label class="menu-toggle"><input type="checkbox" data-k="${k}" ${on ? 'checked' : ''}><span>${label}${note ? `<small>${note}</small>` : ''}</span></label>`;
+    const custom = !Object.values(REALISM_PRESETS).some((v) => Math.round(v * 100) === h.realism.percent);
+    return `
+      ${this.header('Settings')}
+      <div class="menu-scroll">
+        ${this.group('Difficulty (realism)', `<div class="menu-choices">${realism}</div>${custom ? `<p class="menu-note">Currently a custom ${h.realism.percent}%: pick a preset to change it.</p>` : ''}`)}
+        ${this.group('Your character', `<div class="menu-choices wrap">${styles}</div><p class="menu-note">${esc(STYLES[h.realism.style].description)}</p>`)}
+        ${this.group('Venue', `<div class="menu-choices wrap">${venues}</div>`)}
+        ${this.group(
+          'Sound',
+          `<label class="menu-slider"><span>Volume</span><input type="range" data-k="volume" min="0" max="1" step="0.05" value="${h.look.volume}" aria-label="Volume"><output>${Math.round(h.look.volume * 100)}%</output></label>
+           ${toggle('muted', 'Mute', h.look.muted)}
+           ${toggle('ambience', 'Venue ambience', h.look.ambience, 'Office hum, server fans, wind')}`,
+        )}
+        ${this.group(
+          'Gameplay & effects',
+          `${toggle('arcadeFx', 'Arcade effects', h.look.arcadeFx, 'Hit-stop, camera shake, sparks, crowd')}
+           ${toggle('autoReplay', 'Auto-replay long rallies', h.look.autoReplay)}`,
+        )}
+        ${this.group('Graphics quality', `<div class="menu-choices">${quality}</div>`)}
+        ${this.group('Advanced', toggle('devTools', 'Developer tools', h.devTools, 'Physics tuning, ball machine and every assist. <kbd>`</kbd> toggles it too.'))}
+      </div>`;
+  }
+
+  private header(title: string) {
+    return `<div class="menu-head"><button data-a="back" class="menu-back" aria-label="Back">←</button><h2 class="menu-title small">${title}</h2></div>`;
+  }
+
+  private group(label: string, body: string) {
+    return `<div class="menu-group" role="group" aria-label="${esc(label)}"><div class="menu-label">${label}</div>${body}</div>`;
+  }
+
+  /** A selectable option button: data-k is the setting, data-v its value. */
+  private choice(k: string, v: string, label: string, selected: boolean, note?: string, locked?: string | null) {
+    return `<button class="menu-choice${selected ? ' on' : ''}${locked ? ' locked' : ''}" data-k="${k}" data-v="${esc(v)}" aria-pressed="${selected}"${locked ? ` aria-disabled="true" title="${esc(locked)}"` : ''}>${locked ? '🔒 ' : ''}${esc(label)}${note || locked ? `<small>${esc(locked ? locked : note!)}</small>` : ''}</button>`;
+  }
+
+  private realismName(p: number) {
+    const hit = Object.entries(REALISM_PRESETS).find(([, v]) => Math.round(v * 100) === p);
+    return hit ? hit[0] : `${p}% arcade`;
+  }
+
+  // ------------------------------------------------------------- input
+
+  private onClick(e: MouseEvent) {
+    const t = (e.target as HTMLElement).closest('button') as HTMLButtonElement | null;
+    if (!t || !this.el.contains(t)) return;
+    const h = this.host;
+    const a = t.dataset.a;
+    if (a) {
+      if (a.startsWith('go-')) return this.show(a.slice(3) as MenuScreen);
+      switch (a) {
+        case 'back':
+          return this.back();
+        case 'quick':
+        case 'start':
+          return h.startAiMatch();
+        case 'practice':
+          return h.startPractice();
+        case 'career':
+          return h.openCareer();
+        case 'howto':
+          return h.showHowTo();
+        case 'create':
+          return h.createOnline();
+        case 'join':
+          return h.joinOnline(h.onlineSettings.code);
+        case 'resume':
+          return h.resume();
+        case 'restart':
+          return h.restart();
+        case 'quit':
+          return h.quitToTitle();
+        case 'inspect':
+          return h.inspect();
+      }
+      return;
+    }
+    const k = t.dataset.k;
+    const v = t.dataset.v;
+    if (!k || v === undefined) return;
+    if (t.getAttribute('aria-disabled') === 'true') {
+      t.classList.remove('shake');
+      void t.offsetWidth;
+      t.classList.add('shake');
+      return;
+    }
+    switch (k) {
+      case 'level':
+        h.matchSettings.level = v as AiLevel;
+        break;
+      case 'aiStyle':
+        h.matchSettings.aiStyle = v as StyleId | 'random';
+        break;
+      case 'bestOf':
+        h.matchSettings.bestOf = Number(v);
+        break;
+      case 'mode':
+        h.onlineSettings.mode = v as 'singles' | 'doubles';
+        break;
+      case 'onlineBestOf':
+        h.onlineSettings.bestOf = Number(v);
+        break;
+      case 'realism':
+        h.setRealismPercent(Number(v));
+        break;
+      case 'style':
+        h.setStyle(v as StyleId);
+        break;
+      case 'venue':
+        h.setVenue(v as VenueId);
+        break;
+      case 'quality':
+        h.setQuality(v === 'auto' ? 'auto' : (Number(v) as QualitySetting));
+        break;
+    }
+    this.refresh();
+  }
+
+  private onInput(e: Event) {
+    const t = e.target as HTMLInputElement;
+    const k = t.dataset.k;
+    if (!k) return;
+    const h = this.host;
+    if (k === 'name') h.onlineSettings.name = t.value;
+    else if (k === 'code') {
+      const up = t.value.toUpperCase().replace(/[^A-Z]/g, '');
+      if (up !== t.value) t.value = up;
+      h.onlineSettings.code = up;
+    } else if (k === 'volume') {
+      h.setVolume(Number(t.value));
+      const out = t.parentElement?.querySelector('output');
+      if (out) out.textContent = `${Math.round(Number(t.value) * 100)}%`;
+    } else if (e.type === 'change') {
+      if (k === 'muted') h.setMuted(t.checked);
+      else if (k === 'ambience') h.setAmbience(t.checked);
+      else if (k === 'arcadeFx') h.setArcadeFx(t.checked);
+      else if (k === 'autoReplay') h.setAutoReplay(t.checked);
+      else if (k === 'devTools') h.setDevTools(t.checked);
+    }
+  }
+
+  private onKeyDown(e: KeyboardEvent) {
+    // Keep game keys (Space fires the ball machine, digits switch cameras…) out of the menu;
+    // ` (developer tools) still goes through.
+    if (e.code !== 'Backquote') e.stopPropagation();
+    const target = e.target as HTMLElement;
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      this.back();
+      return;
+    }
+    if (target.tagName === 'INPUT' && (target as HTMLInputElement).type === 'text') {
+      if (e.key === 'Enter' && target.dataset.k === 'code') this.host.joinOnline(this.host.onlineSettings.code);
+      return;
+    }
+    // Arrow keys move between buttons, like a console menu.
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && target.tagName !== 'INPUT')) {
+      const items = [...this.card.querySelectorAll<HTMLElement>('button, input')].filter((x) => x.offsetParent !== null);
+      const i = items.indexOf(target);
+      const step = e.key === 'ArrowDown' || e.key === 'ArrowRight' ? 1 : -1;
+      const next = items[(i + step + items.length) % items.length];
+      if (next) {
+        e.preventDefault();
+        next.focus();
+      }
+    }
+  }
+
+  /** Esc from outside the menu (window listener in the Sandbox). */
+  handleEscape() {
+    this.back();
+  }
+
+  private focusFirst() {
+    // Don't pop the on-screen keyboard or a focus ring on touch devices.
+    if (this.host.isTouch) return;
+    const first = this.card.querySelector<HTMLElement>('button.primary, .menu-buttons button, button.menu-choice, button');
+    first?.focus({ preventScroll: true });
+  }
+}
