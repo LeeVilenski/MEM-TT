@@ -279,7 +279,9 @@ export class Sandbox implements MenuHost {
     container.appendChild(this.renderer.domElement);
 
     this.scene = createScene(this.renderer);
-    this.camera = new THREE.PerspectiveCamera(50, 1, 0.01, 100);
+    // Near plane 5 cm (nothing gets closer to the camera): 5× the depth precision of 1 cm,
+    // so distant surfaces close together (screens, boards on walls) don't flicker.
+    this.camera = new THREE.PerspectiveCamera(50, 1, 0.05, 100);
     this.post = new PostFx(this.renderer, this.scene, this.camera);
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
