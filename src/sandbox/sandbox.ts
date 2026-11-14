@@ -47,6 +47,8 @@ import { TOURNAMENTS, TournamentRun, tournamentUnlocked } from '../progress/tour
 import { isUnlocked, newlyUnlocked, unlockedKeys, UNLOCKS, type UnlockKind } from '../progress/unlocks';
 import { CareerScreen } from './career';
 import { HowToPlay } from './howto';
+import { Coach } from './coach';
+import { Tutorial, tutorialHint } from '../progress/tutorial';
 import { Menu, type MenuHost, type PauseContext } from './menu';
 import { VENUES, setVenue, type Venue, type VenueId } from '../render/venues';
 import { OnlineClient } from '../net/client';
@@ -193,6 +195,11 @@ export class Sandbox implements MenuHost {
   private inspecting = false;
   /** Free practice against the ball machine was started (so Esc pauses it rather than going to the title). */
   private practicing = false;
+  /** Interactive tutorial (a guided ball-machine session) and its coach card. */
+  private tutorial: Tutorial | null = null;
+  private coach!: Coach;
+  /** Extra pause before the next ball (s), e.g. after finishing a tutorial step. */
+  private extraDelay = 0;
   private rubberSel = { forehand: 'inverted', backhand: 'inverted' };
   private unlocked = new Set<string>();
   private drill: DrillSession | null = null;
@@ -316,6 +323,9 @@ export class Sandbox implements MenuHost {
     };
     this.hud.onCareer = () => this.openCareer();
     this.howTo = new HowToPlay(container, this.isTouch);
+    this.howTo.onTutorial = () => this.startTutorial();
+    this.coach = new Coach(container, this.isTouch);
+    this.coach.onFinish = (choice) => (choice === 'quick' ? this.startAiMatch() : choice === 'practice' ? this.startPractice() : this.quitToTitle());
     this.hud.onHowTo = () => this.howTo.show();
     this.career.on((e) => {
       if (e.type === 'level') {
@@ -415,7 +425,7 @@ export class Sandbox implements MenuHost {
     this.playing = on;
     if (on) {
       this.inspecting = false;
-      if (!this.match && !this.drill && !this.online) this.practicing = true;
+      if (!this.match && !this.drill && !this.online && !this.tutorial) this.practicing = true;
       this.menu.hide();
     }
     this.controls.enabled = !on;
@@ -479,6 +489,11 @@ export class Sandbox implements MenuHost {
       Object.assign(this.machine, this.settingsFromPreset(PRESETS.find((p) => p.name === name)!), { scatter: 0.12 });
       this.updateMachineVisuals();
       this.updateDrillHud();
+    } else if (this.tutorial) {
+      const name = this.tutorial.preset();
+      if (!name) return;
+      Object.assign(this.machine, this.settingsFromPreset(PRESETS.find((p) => p.name === name)!), { scatter: 0.06 });
+      this.updateMachineVisuals();
     } else if (this.playing && this.machine.mix) {
       const p = PRESETS[this.mixIndex++ % PRESETS.length];
       Object.assign(this.machine, this.settingsFromPreset(p));
@@ -633,6 +648,7 @@ export class Sandbox implements MenuHost {
     this.lastReturn.result = result;
     this.career.recordPractice(result === 'IN');
     this.drillRegister(result!, landing);
+    this.tutorialRegister(result!, landing);
     this.stats.attempts++;
     if (result === 'IN') {
       this.stats.made++;
@@ -655,6 +671,7 @@ export class Sandbox implements MenuHost {
     this.stats.streak = 0;
     this.career.recordPractice(false);
     this.drillRegister('MISSED');
+    this.tutorialRegister('MISSED');
     this.hud.flash('TIMEOUT', 'Request not handled');
     this.hud.setStats(this.stats);
     this.updateDrillHud();
@@ -664,7 +681,8 @@ export class Sandbox implements MenuHost {
   private resolve() {
     this.recorder.end(this.clock());
     this.phase = 'done';
-    this.sinceResolved = 0;
+    this.sinceResolved = -this.extraDelay;
+    this.extraDelay = 0;
     this.player.intercept = null;
   }
 
@@ -783,6 +801,7 @@ export class Sandbox implements MenuHost {
     this.stopDrill();
     this.careerScreen?.hide();
     this.practicing = false;
+    this.stopTutorial();
     this.matchRecorded = false;
     const ai = (this.ai = new AiPlayer('far', AI_LEVELS[this.matchSettings.level], this.params));
     const st = this.matchSettings.aiStyle === 'random' ? STYLE_IDS[Math.floor(Math.random() * STYLE_IDS.length)] : this.matchSettings.aiStyle;
@@ -980,6 +999,7 @@ export class Sandbox implements MenuHost {
     this.careerScreen.hide();
     this.drill = new DrillSession(DRILLS[idx]);
     this.practicing = false;
+    this.stopTutorial();
     this.machine.mix = false;
     this.clearMarkers();
     // Target zone, if the drill has one.
@@ -1088,8 +1108,76 @@ export class Sandbox implements MenuHost {
     this.endMatch();
     this.stopDrill();
     this.tournament = null;
+    this.stopTutorial();
     this.practicing = true;
     this.requestPlay();
+  }
+
+  // ---------------------------------------------------------------- interactive tutorial
+
+  startTutorial() {
+    this.leaveOnline();
+    this.endMatch();
+    this.stopDrill();
+    this.tournament = null;
+    this.practicing = false;
+    this.howTo.hide();
+    this.careerScreen.hide();
+    this.tutorial = new Tutorial();
+    this.machine.mix = false;
+    this.clearMarkers();
+    this.phase = 'done';
+    this.sinceResolved = -1.5; // a moment to read the first card
+    this.hud.setStatsText('');
+    this.coach.update(this.tutorial);
+    document.body.classList.add('tutorial');
+    savePref('mem.seenHowTo', '1'); // the coach explains as you go
+    this.requestPlay();
+  }
+
+  private stopTutorial() {
+    if (!this.tutorial) return;
+    this.tutorial = null;
+    this.coach.update(null);
+    document.body.classList.remove('tutorial');
+    this.hud.setStats(this.stats);
+  }
+
+  private tutorialRegister(result: NonNullable<ReturnReport['result']>, landing?: Vec3) {
+    const t = this.tutorial;
+    if (!t || !t.step) return;
+    const step = t.step;
+    const r = this.lastReturn;
+    const ret = { result, shot: r?.name ?? '-', top: r?.top ?? 0, speed: r?.speed ?? 0, landing: landing && { x: landing.x, z: landing.z } };
+    const out = t.register(ret);
+    if (out === 'miss') {
+      this.coach.update(t, tutorialHint(ret, step, this.isTouch));
+    } else if (out === 'ok') {
+      this.sfx.point(true);
+      this.coach.update(t);
+    } else if (out === 'step') {
+      this.sfx.point(true, true);
+      this.hud.flash('NICE!', `${step.title} ✓ · next: ${t.step!.title}`);
+      this.extraDelay = 1.2;
+      this.coach.update(t);
+    } else {
+      this.sfx.point(true, true);
+      this.hud.flash('NICE!', `${step.title} ✓`);
+      this.extraDelay = 99;
+      setTimeout(() => this.finishTutorial(), 1100);
+    }
+  }
+
+  private finishTutorial() {
+    if (!this.tutorial) return;
+    savePref('mem.tutorialDone', '1');
+    this.tutorial = null;
+    this.coach.update(null);
+    document.body.classList.remove('tutorial');
+    this.hud.setStats(this.stats);
+    if (document.pointerLockElement) document.exitPointerLock();
+    this.setPlaying(false);
+    this.coach.showFinish();
   }
 
   showHowTo() {
@@ -1101,7 +1189,8 @@ export class Sandbox implements MenuHost {
   }
 
   restart() {
-    if (this.drill) this.startDrill(this.drill.drill.id);
+    if (this.tutorial) this.startTutorial();
+    else if (this.drill) this.startDrill(this.drill.drill.id);
     else if (this.match && !this.tournament) this.startMatch();
     else this.resume();
   }
@@ -1113,6 +1202,7 @@ export class Sandbox implements MenuHost {
     this.endMatch();
     this.matchHud.hideOver();
     this.stopDrill();
+    this.stopTutorial();
     this.practicing = false;
     this.inspecting = false;
     this.phase = 'done';
@@ -1126,7 +1216,7 @@ export class Sandbox implements MenuHost {
   }
 
   private inSession() {
-    return !!(this.match || this.drill || this.online || this.practicing);
+    return !!(this.match || this.drill || this.online || this.practicing || this.tutorial);
   }
 
   private pauseContext(): PauseContext {
@@ -1138,6 +1228,7 @@ export class Sandbox implements MenuHost {
         detail: `${this.tournament ? `${this.tournament.tournament.name} · ` : ''}vs ${this.ai.displayName} · <b>${sc.points.near}–${sc.points.far}</b> · games ${sc.games.near}–${sc.games.far}`,
       };
     }
+    if (this.tutorial?.step) return { kind: 'tutorial', detail: `Tutorial · step ${this.tutorial.index + 1}: ${this.tutorial.step.title}` };
     if (this.drill) return { kind: 'drill', detail: `Drill: ${this.drill.drill.name} · ball ${Math.min(this.drill.fed, this.drill.drill.balls)}/${this.drill.drill.balls}` };
     return { kind: 'practice', detail: `Practice vs the ball machine · ${this.stats.made}/${this.stats.attempts} returned` };
   }
@@ -1145,7 +1236,7 @@ export class Sandbox implements MenuHost {
   /** Whenever nothing else is on screen and you're not playing, show the title or pause menu. */
   private syncMenu() {
     if (this.playing || this.menu.visible || this.inspecting) return;
-    if (this.careerScreen.visible || this.howTo.visible || this.lobby.visible || this.matchHud.overVisible) return;
+    if (this.careerScreen.visible || this.howTo.visible || this.lobby.visible || this.matchHud.overVisible || this.coach.finishVisible) return;
     if (this.inSession()) this.menu.show('pause', this.pauseContext());
     else this.menu.show('title');
   }
@@ -1479,6 +1570,7 @@ export class Sandbox implements MenuHost {
     this.lobby.show(client);
     this.menu.hide();
     this.practicing = false;
+    this.stopTutorial();
     this.practiceUi(false);
     client.on((e) => this.onOnlineEvent(e));
     if (document.pointerLockElement) document.exitPointerLock();

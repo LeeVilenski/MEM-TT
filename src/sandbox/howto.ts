@@ -2,6 +2,8 @@
 export class HowToPlay {
   private el: HTMLDivElement;
   onClose: () => void = () => {};
+  /** Start the interactive tutorial instead. */
+  onTutorial: () => void = () => {};
 
   constructor(
     container: HTMLElement,
@@ -13,7 +15,11 @@ export class HowToPlay {
     container.append(this.el);
     this.el.addEventListener('click', (e) => {
       const t = e.target as HTMLElement;
-      if (t === this.el || t.closest('[data-a=close]')) this.hide();
+      if (t.closest('[data-a=tutorial]')) {
+        this.el.style.display = 'none';
+        this.onClose = () => {};
+        this.onTutorial();
+      } else if (t === this.el || t.closest('[data-a=close]')) this.hide();
     });
   }
 
@@ -53,7 +59,7 @@ export class HowToPlay {
         <div class="ht-step"><div class="ht-n">4</div><div><b>Missing?</b> Into the net → open the face (${open}). Long → close it (${close}). The face angle is shown at the bottom of the screen.</div></div>
         <div class="ht-step"><div class="ht-n">5</div><div><b>Serving.</b> ${toss} (longer = higher toss), let go, then swing as the ball drops: gentle swing <b>down</b> = backspin serve, <b>sideways</b> = sidespin serve, ${drive} = fast long serve.</div></div>
         <div class="ht-tip">Still too hard? Open <b>Realism</b> in the panel: <b>Arcade</b> slows the game and helps even more. The <b>📈 Career → Training drills</b> teach each shot one at a time.</div>
-        <div class="cs-actions"><button data-a="close">Got it — let's play</button></div>
+        <div class="cs-actions"><button data-a="tutorial" class="secondary">Try the interactive tutorial</button><button data-a="close">Got it — let's play</button></div>
       </div>
     </div>`;
     this.el.style.display = 'flex';

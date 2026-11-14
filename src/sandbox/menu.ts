@@ -11,7 +11,7 @@ export type MenuScreen = 'title' | 'pause' | 'vsai' | 'online' | 'settings' | 'c
 
 /** What the player was doing when the pause menu opened. */
 export interface PauseContext {
-  kind: 'match' | 'tournament' | 'drill' | 'practice' | 'online';
+  kind: 'match' | 'tournament' | 'drill' | 'practice' | 'online' | 'tutorial';
   /** One line under "Paused", e.g. "vs Sysadmin · 4–7 · games 1–0". */
   detail: string;
 }
@@ -30,6 +30,7 @@ export interface MenuHost {
 
   startAiMatch(): void;
   startPractice(): void;
+  startTutorial(): void;
   openCareer(): void;
   showHowTo(): void;
   createOnline(): void;
@@ -195,7 +196,8 @@ export class Menu {
         <button data-a="practice">Practice <small>Ball machine, no score</small></button>
         <button data-a="career">Career <small>Drills, tournaments, stats</small></button>
         <button data-a="go-online">Online <small>Play friends: singles or doubles</small></button>
-        <div class="menu-row">
+        <div class="menu-row three">
+          <button data-a="tutorial" class="secondary">Tutorial</button>
           <button data-a="howto" class="secondary">How to play</button>
           <button data-a="go-settings" class="secondary">Settings</button>
         </div>
@@ -206,7 +208,7 @@ export class Menu {
 
   private pauseHtml() {
     const k = this.pause.kind;
-    const restart = k === 'match' ? 'Restart match' : k === 'drill' ? 'Restart drill' : null;
+    const restart = k === 'match' ? 'Restart match' : k === 'drill' ? 'Restart drill' : k === 'tutorial' ? 'Restart tutorial' : null;
     const quit = k === 'online' ? 'Leave room' : 'Quit to title';
     return `
       <h2 class="menu-title small">Paused</h2>
@@ -376,6 +378,8 @@ export class Menu {
           return h.startAiMatch();
         case 'practice':
           return h.startPractice();
+        case 'tutorial':
+          return h.startTutorial();
         case 'career':
           return h.openCareer();
         case 'howto':
