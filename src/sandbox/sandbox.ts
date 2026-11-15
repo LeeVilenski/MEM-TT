@@ -1546,7 +1546,7 @@ export class Sandbox implements MenuHost {
   setMusic(m: boolean) {
     this.look.music = m;
     this.sfx.musicOn = m;
-    this.sfx.setMusic(VENUES[this.look.venue].ambience);
+    this.sfx.setMusic(VENUES[this.look.venue].song);
     savePref('mem.music', m ? '1' : '0');
     this.gui.controllersRecursive().forEach((c) => c.updateDisplay());
   }
@@ -1644,7 +1644,7 @@ export class Sandbox implements MenuHost {
     this.look.venue = id;
     this.venue = setVenue(this.scene, id, this.venue);
     this.sfx.setAmbience(this.look.ambience ? VENUES[id].ambience : 'none');
-    this.sfx.setMusic(VENUES[id].ambience);
+    this.sfx.setMusic(VENUES[id].song);
     savePref('mem.venue', id);
     this.updateVenueScreen();
     this.gui?.controllersRecursive().forEach((c) => c.updateDisplay());

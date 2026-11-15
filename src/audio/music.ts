@@ -1,4 +1,4 @@
-import type { Ambience } from '../render/venues';
+import type { SongId } from '../render/venues';
 
 /**
  * Procedural background music (Web Audio, no audio files): one looping song per
@@ -33,7 +33,7 @@ const dom7 = [0, 4, 7, 10];
 const maj = [0, 4, 7, 12];
 const min = [0, 3, 7, 12];
 
-export const SONGS: Record<Exclude<Ambience, 'none'>, Song> = {
+export const SONGS: Record<Exclude<SongId, 'none'>, Song> = {
   // Lo-fi, mellow electric piano for the open-plan office.
   office: {
     name: 'Desk Plants',
@@ -57,8 +57,8 @@ export const SONGS: Record<Exclude<Ambience, 'none'>, Song> = {
     hat: [0, 2, 4, 6, 8, 10, 12, 14],
     cutoff: 1400,
   },
-  // Driving synthwave for the server rooms.
-  servers: {
+  // Driving synthwave for MEM.
+  mem: {
     name: 'Uptime',
     bpm: 112,
     swing: 0,
@@ -79,6 +79,29 @@ export const SONGS: Record<Exclude<Ambience, 'none'>, Song> = {
     snare: [4, 12],
     hat: [2, 6, 10, 14],
     cutoff: 1100,
+  },
+  // Slow, dark half-time dub for the server room: deep sub bass, sparse bleeps, lots of space.
+  servers: {
+    name: 'Cold Aisle',
+    bpm: 70,
+    swing: 0.12,
+    chords: [
+      { root: 50, tones: [0, 7, 10, 15] }, // D minor, open
+      { root: 50, tones: [0, 7, 10, 15] },
+      { root: 46, tones: [0, 7, 11, 14] }, // Bb, open
+      { root: 48, tones: [0, 7, 10, 14] }, // C sus
+    ],
+    bass: [0, null, null, null, null, null, null, 0, null, null, 1, null, null, null, null, null],
+    stabs: [6],
+    stabLen: 10,
+    lead: [null, null, null, 3, null, null, null, null, null, null, null, null, null, 2, null, 3],
+    leadWave: 'sine',
+    keysWave: 'sine',
+    bassWave: 'sine',
+    kick: [0, 10],
+    snare: [8],
+    hat: [3, 7, 11, 15],
+    cutoff: 700,
   },
   // Easy lounge jazz for the conference room.
   room: {
@@ -155,7 +178,7 @@ export class Music {
     this.out.connect(dest);
   }
 
-  play(kind: Ambience) {
+  play(kind: SongId) {
     this.stop();
     if (kind === 'none') return;
     this.song = SONGS[kind];

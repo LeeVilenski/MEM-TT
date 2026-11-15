@@ -17,14 +17,16 @@ function glow(color: number, strength = 2.2) {
  */
 export type VenueId = 'sandbox' | 'office' | 'mem' | 'server' | 'conference' | 'rooftop';
 export type Ambience = 'none' | 'office' | 'servers' | 'room' | 'wind';
+/** Background song per venue (see audio/music.ts). */
+export type SongId = 'none' | 'office' | 'mem' | 'servers' | 'room' | 'wind';
 
-export const VENUES: Record<VenueId, { name: string; ambience: Ambience }> = {
-  sandbox: { name: 'Sandbox', ambience: 'none' },
-  office: { name: 'Open-plan office', ambience: 'office' },
-  mem: { name: 'MEM', ambience: 'servers' },
-  server: { name: 'Server room', ambience: 'servers' },
-  conference: { name: 'Conference room', ambience: 'room' },
-  rooftop: { name: 'Rooftop (company offsite)', ambience: 'wind' },
+export const VENUES: Record<VenueId, { name: string; ambience: Ambience; song: SongId }> = {
+  sandbox: { name: 'Sandbox', ambience: 'none', song: 'none' },
+  office: { name: 'Open-plan office', ambience: 'office', song: 'office' },
+  mem: { name: 'MEM', ambience: 'servers', song: 'mem' },
+  server: { name: 'Server room', ambience: 'servers', song: 'servers' },
+  conference: { name: 'Conference room', ambience: 'room', song: 'room' },
+  rooftop: { name: 'Rooftop (company offsite)', ambience: 'wind', song: 'wind' },
 };
 
 export interface Venue {

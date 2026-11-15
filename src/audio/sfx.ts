@@ -1,4 +1,4 @@
-import type { Ambience } from '../render/venues';
+import type { Ambience, SongId } from '../render/venues';
 import { Music } from './music';
 
 /**
@@ -32,7 +32,7 @@ export class Sfx {
   private master: GainNode | null = null;
   private noise: AudioBuffer | null = null;
   private music: Music | null = null;
-  private musicKind: Ambience = 'none';
+  private musicKind: SongId = 'none';
   private amb: { stop: () => void } | null = null;
   musicOn = true;
   private ambKind: Ambience = 'none';
@@ -271,7 +271,7 @@ export class Sfx {
   }
 
   /** Background music for a venue (procedural songs; see music.ts). */
-  setMusic(kind: Ambience) {
+  setMusic(kind: SongId) {
     this.musicKind = kind;
     if (!this.ctx || !this.noise || !this.master) return;
     this.music ??= new Music(this.ctx, this.master, this.noise);
