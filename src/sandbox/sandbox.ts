@@ -515,7 +515,7 @@ export class Sandbox implements MenuHost {
     this.playerView.setStyle(this.player.style.id);
     // Restore the last player picked ("Playing as"), if still unlocked.
     const savedStyle = loadPref('mem.style', '');
-    if (savedStyle in STYLES && savedStyle !== this.realism.style && !this.lockReason('style', savedStyle)) this.setStyle(savedStyle as StyleId);
+    if (savedStyle in STYLES && savedStyle !== this.realism.style && !this.lockReason('style', savedStyle)) this.setStyle(savedStyle as StyleId, false);
     this.sfx.volume = this.look.volume;
     this.sfx.muted = this.look.muted;
     this.sfx.ambienceOn = this.look.ambience;
@@ -1540,7 +1540,8 @@ export class Sandbox implements MenuHost {
     this.applyRealism();
   }
 
-  setStyle(id: StyleId) {
+  /** `announce`: flash the character banner (not when restoring the saved player at startup). */
+  setStyle(id: StyleId, announce = true) {
     if (this.lockReason('style', id)) return;
     this.realism.style = id;
     savePref('mem.style', id);
@@ -1550,7 +1551,7 @@ export class Sandbox implements MenuHost {
     this.rubberSel.backhand = this.player.rubbers.backhand.id;
     this.online?.setStyle(id);
     this.gui.controllersRecursive().forEach((c) => c.updateDisplay());
-    if (!this.menu?.visible) this.hud.flash(STYLES[id].character.toUpperCase(), `${STYLES[id].role !== STYLES[id].character ? STYLES[id].role + ' · ' : ''}${STYLES[id].label}: ${STYLES[id].description}`);
+    if (announce && !this.menu?.visible) this.hud.flash(STYLES[id].character.toUpperCase(), `${STYLES[id].role !== STYLES[id].character ? STYLES[id].role + ' · ' : ''}${STYLES[id].label}: ${STYLES[id].description}`);
   }
 
   setVolume(v: number) {
