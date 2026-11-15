@@ -1,14 +1,20 @@
 import type { AiLevel } from '../game/ai';
-import type { StyleId } from '../game/styles';
+import { STYLES, type StyleId } from '../game/styles';
 import type { VenueId } from '../render/venues';
 
 /** Knockout tournaments against themed AI opponents. Lose once and you're out. */
 export interface Round {
+  /** The stage: "Round 1", "Quarter-final", "Semi-final", "Final". */
   name: string;
   level: AiLevel;
   style: StyleId;
   bestOf: number;
   venue: VenueId;
+}
+
+/** "Semi-final vs Ed": the stage and the opponent's character. */
+export function roundLabel(r: Round): string {
+  return `${r.name} vs ${STYLES[r.style].character}`;
 }
 
 export interface Tournament {
@@ -30,10 +36,10 @@ export const TOURNAMENTS: Tournament[] = [
     xp: 300,
     achievement: 'cup',
     rounds: [
-      { name: 'Round 1 vs IT Support', level: 'easy', style: 'allround', bestOf: 1, venue: 'office' },
-      { name: 'Quarter-final vs Security', level: 'easy', style: 'blocker', bestOf: 1, venue: 'server' },
-      { name: 'Semi-final vs Infrastructure', level: 'medium', style: 'chopper', bestOf: 1, venue: 'server' },
-      { name: 'Final vs Platform Team', level: 'medium', style: 'looper', bestOf: 3, venue: 'conference' },
+      { name: 'Round 1', level: 'easy', style: 'allround', bestOf: 1, venue: 'office' },
+      { name: 'Quarter-final', level: 'easy', style: 'blocker', bestOf: 1, venue: 'server' },
+      { name: 'Semi-final', level: 'medium', style: 'chopper', bestOf: 1, venue: 'server' },
+      { name: 'Final', level: 'medium', style: 'looper', bestOf: 3, venue: 'conference' },
     ],
   },
   {
@@ -44,10 +50,10 @@ export const TOURNAMENTS: Tournament[] = [
     achievement: 'championship',
     requires: 'department-cup',
     rounds: [
-      { name: 'Round 1 vs Networking', level: 'medium', style: 'penhold', bestOf: 3, venue: 'office' },
-      { name: 'Quarter-final vs SRE', level: 'medium', style: 'chopper', bestOf: 3, venue: 'server' },
-      { name: 'Semi-final vs Red Team', level: 'hard', style: 'blocker', bestOf: 3, venue: 'conference' },
-      { name: 'Final vs the CTO', level: 'expert', style: 'looper', bestOf: 5, venue: 'rooftop' },
+      { name: 'Round 1', level: 'medium', style: 'penhold', bestOf: 3, venue: 'office' },
+      { name: 'Quarter-final', level: 'medium', style: 'chopper', bestOf: 3, venue: 'server' },
+      { name: 'Semi-final', level: 'hard', style: 'blocker', bestOf: 3, venue: 'conference' },
+      { name: 'Final', level: 'expert', style: 'looper', bestOf: 5, venue: 'rooftop' },
     ],
   },
 ];
