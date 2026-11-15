@@ -28,7 +28,7 @@ export class CareerScreen {
     private career: Career,
   ) {
     this.el = document.createElement('div');
-    this.el.className = 'career';
+    this.el.className = 'career locker';
     this.el.style.display = 'none';
     container.append(this.el);
     this.el.addEventListener('click', (e) => this.onClick(e));

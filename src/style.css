@@ -3655,3 +3655,196 @@ body {
 .menu-coach b {
   color: var(--text);
 }
+
+/* ================================================================ sheets in the menu style
+   Locker, World Tour, How to play, the tutorial finish card, the online lobby and the
+   match-over card share the menus' card, type, buttons and colour strip, and fit the same
+   way: their sections never squash (that clipped the Locker's tabs on phones); the card
+   scrolls as a whole instead. */
+
+.career-card,
+.lobby-card,
+.mover-card {
+  background: #142033;
+  border: none;
+  border-top: 8px solid var(--sheet, var(--c-blue));
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+.career.locker { --sheet: var(--c-slate); }
+.career.tour { --sheet: var(--c-yellow); }
+.career.howto { --sheet: var(--c-blue); }
+.career.coach-finish { --sheet: var(--c-green); }
+.lobby { --sheet: var(--c-purple); }
+.mhud-over { --sheet: var(--c-orange); }
+
+/* Fit: nothing shrinks; the whole card scrolls. */
+.career-card {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.career-card > * {
+  flex-shrink: 0;
+}
+.career-card > .cs-body {
+  overflow: visible;
+}
+.mover-card {
+  max-height: calc(100% - 16px);
+  overflow-y: auto;
+}
+.mhud-over {
+  padding: 8px;
+}
+
+/* Type: rounded display headings, like the menus. */
+.cs-title,
+.lobby-title,
+.mover-title,
+.cs-item-title,
+.tr-num {
+  font-family: var(--display);
+}
+.cs-title,
+.lobby-title {
+  font-weight: 900;
+  color: #fff;
+}
+.lobby-title {
+  font-size: 26px;
+}
+.mover-title {
+  font-size: 34px;
+  letter-spacing: 0.01em;
+  text-shadow: 0 3px 0 rgba(0, 0, 0, 0.35);
+}
+.cs-h {
+  font-size: 13px;
+  color: #b4c3db;
+}
+
+/* Close (✕): the menus' back-button block. */
+.cs-close {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  display: grid !important;
+  place-items: center;
+  padding: 0 !important;
+  border-radius: 8px !important;
+  background: var(--c-slate) !important;
+  color: #fff !important;
+  font-size: 18px !important;
+  box-shadow: inset 0 -4px 0 rgba(0, 0, 0, 0.22);
+}
+.cs-close:hover {
+  filter: brightness(1.1);
+}
+
+/* Tabs: the menus' choice chips. */
+.cs-tabs {
+  gap: 6px;
+  padding: 2px 18px 12px;
+  border-bottom: none;
+}
+.cs-tabs button {
+  min-height: 40px;
+  padding: 6px 16px !important;
+  font-family: var(--display);
+  font-size: 15px !important;
+  color: #dfe6f2 !important;
+  background: rgba(22, 33, 52, 0.95) !important;
+  border: 2px solid #26354d !important;
+  border-radius: 9px !important;
+}
+.cs-tabs button.on {
+  color: #fff !important;
+  background: var(--c-blue) !important;
+  border-color: var(--c-blue) !important;
+}
+
+/* Buttons: flat colour blocks with a darker bottom lip. */
+.career button:not(.cs-close):not([data-tab]),
+.lobby button:not(.link),
+.mover-buttons button {
+  min-height: 42px;
+  padding: 8px 16px;
+  font-family: var(--display);
+  font-weight: 800;
+  border: none;
+  border-radius: 8px;
+  background: var(--c-blue);
+  color: #fff;
+  box-shadow: inset 0 -4px 0 rgba(0, 0, 0, 0.22);
+}
+.career button:not(.cs-close):not([data-tab]):hover,
+.lobby button:not(.link):hover,
+.mover-buttons button:hover {
+  filter: brightness(1.08);
+}
+.career button:not(.cs-close):not([data-tab]):active,
+.lobby button:not(.link):active,
+.mover-buttons button:active {
+  filter: brightness(0.92);
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.22);
+}
+/* (As specific as the base rule above, so these win.) */
+.career button.secondary:not(.cs-close):not([data-tab]),
+.lobby button.secondary:not(.link),
+.mover-buttons button.secondary {
+  background: #22324c;
+}
+.career button.danger:not(.cs-close):not([data-tab]) {
+  background: #b42318;
+}
+/* The main action, as on the menus' sub-screens. */
+.mover-buttons button:first-child:not(.secondary),
+.career .coach-actions button:first-child:not(.secondary):not(.cs-close):not([data-tab]),
+.career .cs-actions button[data-a='play']:not(.cs-close):not([data-tab]) {
+  background: var(--c-orange);
+}
+
+/* Lists: rows become the menus' cards (World Tour route, like the drill list). */
+.tr-route {
+  gap: 6px;
+}
+.tr-stop.cs-item {
+  padding: 8px 12px;
+  background: rgba(22, 33, 52, 0.95);
+  border: 2px solid #26354d;
+  border-radius: 9px;
+}
+.tr-stop.here {
+  border-color: var(--c-blue);
+}
+.cs-bracket {
+  background: #1b2a42;
+  border-radius: 10px;
+}
+.cs-banner {
+  margin: 0 18px 10px;
+}
+.mover-stats div {
+  background: rgba(22, 33, 52, 0.95);
+  border: 2px solid #26354d;
+  border-radius: 9px;
+}
+
+@media (max-width: 700px), (max-height: 500px) {
+  .cs-head {
+    padding: 12px 14px 8px;
+  }
+  .cs-tabs {
+    padding: 2px 14px 10px;
+  }
+  .cs-banner {
+    margin: 0 14px 8px;
+  }
+  .mover-title {
+    font-size: 26px;
+  }
+  .mover-card {
+    padding: 14px 18px;
+  }
+}

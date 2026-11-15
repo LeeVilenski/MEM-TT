@@ -68,6 +68,6 @@ export class Coach {
       </div>
     </div>`;
     this.finish.style.display = 'flex';
-    (this.finish.querySelector('button') as HTMLButtonElement | null)?.focus();
+    (this.finish.querySelector('button') as HTMLButtonElement | null)?.focus({ preventScroll: true });
   }
 }

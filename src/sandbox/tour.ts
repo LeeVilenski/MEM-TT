@@ -40,7 +40,7 @@ export class TourScreen {
     this.banner = banner;
     this.el.style.display = 'flex';
     this.render();
-    (this.el.querySelector('[data-a="play"], [data-a="enter"]') as HTMLElement | null)?.focus();
+    (this.el.querySelector('[data-a="play"], [data-a="enter"]') as HTMLElement | null)?.focus({ preventScroll: true });
   }
 
   hide() {
