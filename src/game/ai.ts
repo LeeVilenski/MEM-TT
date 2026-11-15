@@ -107,8 +107,12 @@ const ARM = 0.45;
 const REACH = 0.95;
 /** Paddle stroke velocity is applied within this window around the planned contact time. */
 const STROKE_WINDOW = 0.1;
-/** Nearest the net a contact can be (local z): the body can't go past the end line, plus a long lean. */
-const MIN_REACH_Z = TABLE.halfLength + 0.15 - REACH;
+/** Closest the body gets to the net: right up against the end line, to take short balls. */
+const MIN_BODY_Z = TABLE.halfLength + 0.04;
+/** Forward reach when leaning in over the table (more than sideways: the whole body tips in). */
+const OVER_REACH = 1.12;
+/** Nearest the net a contact can be (local z): body at the end line plus a long lean. */
+const MIN_REACH_Z = MIN_BODY_Z - OVER_REACH;
 /** During the stroke the bat stays this close to the body (m), and this far back from the net. */
 const STRIKE_REACH = REACH + 0.1;
 const NET_CLEARANCE_Z = 0.12;
@@ -192,7 +196,7 @@ export class AiPlayer {
     let ic = pred.interceptAt(planeZ, now, TABLE.height + 0.95);
     // Out of reach over the table (a short ball, or heavy backspin checking back toward the
     // net): take it at the highest point it can still be reached, or let it go.
-    if (ic && ic.pos.z < MIN_REACH_Z) {
+    if (!ic || ic.pos.z < MIN_REACH_Z) {
       const reachable = pred.playable().filter((p) => p.t >= now && p.pos.z >= MIN_REACH_Z && p.pos.y <= TABLE.height + 0.95);
       ic = reachable.length ? reachable.reduce((a, b) => (b.pos.y > a.pos.y ? b : a)) : null;
     }
@@ -364,7 +368,9 @@ export class AiPlayer {
     let target = this.ready;
     if (plan && now >= this.moveFrom) {
       const fh = plan.pos.x >= this.body.x - 0.1;
-      target = { x: plan.pos.x + (fh ? -0.4 : 0.3), z: Math.max(TABLE.halfLength + 0.15, plan.pos.z + ARM) };
+      // Over the table (a short ball) the body steps right in to the end line and leans.
+      const over = plan.pos.z < TABLE.halfLength;
+      target = { x: plan.pos.x + (fh ? -0.4 : 0.3) * (over ? 0.6 : 1), z: Math.max(over ? MIN_BODY_Z : TABLE.halfLength + 0.15, plan.pos.z + ARM) };
     }
     const move = (from: number, to: number) => from + Math.max(-p.moveSpeed * dt, Math.min(p.moveSpeed * dt, to - from));
     if (!plan || now >= this.moveFrom) {
@@ -386,7 +392,7 @@ export class AiPlayer {
     pos = v3(
       Math.max(this.body.x - REACH, Math.min(this.body.x + REACH, pos.x)),
       Math.max(TABLE.height - 0.3, Math.min(TABLE.height + 1.0, pos.y)),
-      Math.max(this.body.z - REACH, Math.min(this.body.z - 0.1, pos.z)),
+      Math.max(this.body.z - OVER_REACH, Math.min(this.body.z - 0.1, pos.z)),
     );
 
     // The stroke itself is kinematic: around contact the blade travels along its stroke
@@ -401,7 +407,7 @@ export class AiPlayer {
       pos = v3(
         Math.max(this.body.x - STRIKE_REACH, Math.min(this.body.x + STRIKE_REACH, pos.x)),
         pos.y,
-        Math.max(NET_CLEARANCE_Z, this.body.z - STRIKE_REACH, Math.min(this.body.z - 0.05, pos.z)),
+        Math.max(NET_CLEARANCE_Z, this.body.z - OVER_REACH - 0.03, Math.min(this.body.z - 0.05, pos.z)),
       );
     }
     this.pose = {
