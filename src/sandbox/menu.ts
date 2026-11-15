@@ -307,7 +307,7 @@ export class Menu {
     return `
       ${this.header('Settings')}
       <div class="menu-scroll">
-        ${this.group('Difficulty (realism)', `<div class="menu-choices">${realism}</div>${custom ? `<p class="menu-note">Currently a custom ${h.realism.percent}%: pick a preset to change it.</p>` : ''}`)}
+        ${this.group('Difficulty (realism)', `<div class="menu-choices">${realism}</div>${custom ? `<p class="menu-note">Custom setting (${h.realism.percent}%): pick a preset to change it.</p>` : ''}`)}
         ${this.group('Your character', `<button data-a="go-characters" class="menu-player compact"><span class="mp-avatar" aria-hidden="true">${esc(STYLES[h.realism.style].character[0])}</span><span class="mp-text"><b>${esc(STYLES[h.realism.style].character)}</b><small>${esc(styleNote(h.realism.style))}</small></span><span class="mp-change">Change ›</span></button>`)}
         ${this.group('Venue', `<div class="menu-choices wrap">${venues}</div>`)}
         ${this.group(
@@ -392,7 +392,7 @@ export class Menu {
 
   private realismName(p: number) {
     const hit = Object.entries(REALISM_PRESETS).find(([, v]) => Math.round(v * 100) === p);
-    return hit ? hit[0] : `${p}% arcade`;
+    return hit ? hit[0] : `Custom (${p}%)`;
   }
 
   // ------------------------------------------------------------- input

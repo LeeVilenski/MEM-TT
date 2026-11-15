@@ -263,7 +263,7 @@ export class Sandbox implements MenuHost {
     }
   }
   /** Realism slider (0 = simulation, 100 = arcade), for offline play and new rooms. */
-  realism = { percent: Math.round(DEFAULT_REALISM * 100), style: 'allround' as StyleId };
+  realism = { percent: Number(loadPref('mem.realism', String(Math.round(DEFAULT_REALISM * 100)))) || Math.round(DEFAULT_REALISM * 100), style: 'allround' as StyleId };
   /** Game speed from the realism slider (offline). */
   private gameSpeed = realismSettings(DEFAULT_REALISM).gameSpeed;
   /**
@@ -465,8 +465,6 @@ export class Sandbox implements MenuHost {
     this.autoQuality = new AutoQuality(this.isTouch ? 1 : 2);
     if (this.isTouch) {
       document.body.classList.add('touch');
-      // A bit more forgiving on a phone.
-      this.realism.percent = 85;
     }
 
     // Career: toasts for XP / promotions / achievements / unlocks.
@@ -1453,6 +1451,7 @@ export class Sandbox implements MenuHost {
 
   setRealismPercent(p: number) {
     this.realism.percent = p;
+    savePref('mem.realism', String(p));
     this.applyRealism();
   }
 

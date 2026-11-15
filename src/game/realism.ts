@@ -27,7 +27,7 @@ export interface RealismSettings {
   autoFace: number;
 }
 
-export const REALISM_PRESETS = { Simulation: 0, Balanced: 0.55, Assisted: 0.75, Arcade: 1 } as const;
+export const REALISM_PRESETS = { Simulation: 0, Balanced: 0.55, Assisted: 0.85, Arcade: 1 } as const;
 export const DEFAULT_REALISM = REALISM_PRESETS.Assisted;
 
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
