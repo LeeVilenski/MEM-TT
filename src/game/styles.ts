@@ -141,3 +141,6 @@ export const STYLES: Record<StyleId, PlayStyle> = {
 };
 
 export const STYLE_IDS = Object.keys(STYLES) as StyleId[];
+
+/** Characters offered in the "Your character" chooser (the Sysadmin stays an opponent only). */
+export const PLAYABLE_STYLE_IDS: StyleId[] = STYLE_IDS.filter((id) => id !== 'chopper');
