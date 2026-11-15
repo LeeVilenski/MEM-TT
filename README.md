@@ -2,17 +2,18 @@
 
 | Category | Drill | Goal |
 |---|---|---|
-| Fundamentals | Onboarding · Push back · Open up against backspin · The Firewall · On-call defence | Keep it on, backspin, topspin, block loops, chop loops |
-| Placement | Ship it to the corner | Land in a marked target zone |
+| Fundamentals | Warm-up · Push back · Open up against backspin · Block the loop · Chop defence | Keep it on, backspin, topspin, block loops, chop loops |
+| Placement | Hit the corner | Land in a marked target zone |
 | Placement | Call your shot | A side is called before each ball (and lit up): land it there |
 | Footwork | Falkenberg | Backhand corner, backhand corner, wide forehand, repeat |
 | Footwork | Random corners | Wide balls to either corner at random |
 | Reading spin | Chop or float? | Heavy chops and no-spin floats that look the same |
 | Reading spin | Sidespin and gyro | Hook loops, corkscrews and banana flicks |
-| Consistency | On-call shift | 25 balls, multi-ball pace |
+| Reading spin | Read the serve | Machine serves: heavy backspin and no-spin (identical apart from the spin), side-back and fast long. The coach report breaks your returns down by serve and coaches the one you struggled with |
+| Consistency | Multi-ball marathon | 25 balls, multi-ball pace |
 | Timing | Timing trainer | Only clean (GOOD or PERFECT) contacts count |
 
-The fundamentals unlock in order; each other category opens with a star in Onboarding, then unlocks in order.
+The fundamentals unlock in order; each other category opens with a star in Warm-up, then unlocks in order.
 
 # MEM Table Tennis
 
@@ -32,6 +33,13 @@ The game opens on a **title screen** over a slowly orbiting view of the venue: *
 
 **Characters move:** side-step shuffles when moving, a bouncy ready stance, the upper body turning into strokes and leaning for low balls, and after each point a hop and fist pump or a slump.
 
+**Spin colours:** the ball's trail (now a thick line), comet tail, sparks and bounce marks are coloured by the ball's predominant spin: **red topspin, green backspin, yellow sidespin** (side or corkscrew outweighing top/back), white for no spin. Light spin is a little paler.
+
+**Accessibility** (Settings → Accessibility):
+- **Colour-blind safe colours:** orange topspin, blue backspin, yellow sidespin (the Okabe–Ito palette; the three also differ in brightness).
+- **Spin label:** a tag on the ball coming at you names its spin (▲ TOPSPIN, ▼ BACKSPIN, ↻ SIDESPIN, • NO SPIN), so you don't need the colours at all.
+- **Reduce motion:** no camera shake, zoom kick, post-shot camera lift, hit-stop or screen flash. On by default if your system asks for reduced motion.
+
 **Glow (bloom)** at High quality: lamps, LEDs, string lights, the ball's comet tail and sparks glow softly; lit surfaces don't. Toggle under Settings → Graphics quality.
 
 The old tuning panel is now **Developer tools**: off by default, toggled with <kbd>`</kbd> or **Settings → Advanced**. With it on, the menus also offer a free camera (the inspect view with the ball-machine controls below).
@@ -40,41 +48,44 @@ Progression lives in three places on the title screen: **World Tour** (the caree
 
 **Career and stats**
 - **XP** comes from points, matches (more against Hard and Expert AI, and online), practice returns, drills, tournaments and achievements.
-- **Career ladder:** Intern → Junior → Mid-level → Senior → Staff → Principal → CTO.
+- **Career ladder:** Beginner → Club Player → League Player → County Player → Regional Player → National Player → World Class.
 - **Lifetime stats:** matches and points won, aces, longest rally, fastest shot, most spin, practice return rate, AI levels beaten and favourite shots.
 
 **Training drills:** 10-ball sessions on the ball machine, each with a goal and 1–3 stars. Each drill unlocks the next.
 
 | Drill | Goal |
 |---|---|
-| Onboarding | Keep it on the table |
+| Warm-up | Keep it on the table |
 | Push back | Return with backspin |
 | Open up against backspin | Return with topspin |
-| The Firewall | Block power loops |
-| Ship it to the corner | Land in a marked target zone |
-| On-call defence | Chop loops back |
+| Block the loop | Block power loops |
+| Hit the corner | Land in a marked target zone |
+| Chop defence | Chop loops back |
 
 **World Tour** (`src/progress/tour.ts`): a route of seven stops, each at its own venue. Win a stop to travel on to the next.
 - **Knockouts:** lose once and you're out.
 - **Round-robin groups:** you and three opponents each play everyone once (the matches you aren't in are simulated by level); the top two meet in a final.
+- **Scouting report:** before each match the stop shows a card on your next opponent: how they play, a game plan to beat them, what their level means, and your best match grade against them (`src/game/scouting.ts`).
 
 | # | Stop | Venue | Event |
 |---|---|---|---|
 | 1 | MEM HQ: Department Cup | MEM | Knockout, final best of 3 |
-| 2 | Sprint League | Open-plan office | Group, final best of 3 |
+| 2 | Office League | Open-plan office | Group, final best of 3 |
 | 3 | Data Centre Knockout | Server room | Knockout, final best of 3 |
 | 4 | Park Open | **City Park** (new, outdoors) | Group, final best of 3 |
 | 5 | Boardroom Showdown | Conference room | Knockout, all best of 3 |
 | 6 | Beach Classic | **Offsite beach** (new, outdoors) | Group best of 3, final best of 5 |
-| 7 | Company Championship | Rooftop | Knockout, final best of 5 vs an Expert CTO |
+| 7 | Company Championship | Rooftop | Knockout, final best of 5 vs an Expert opponent |
 
 **Unlocks**
-- **Venues:** Server room (Junior), Conference room (Mid-level), Rooftop (win the Cup), City Park (win the Data Centre Knockout), Offsite beach (win the Boardroom Showdown). Tour stops are always played at their own venue.
+- **Venues:** Server room (Club Player), Conference room (League Player), Rooftop (win the Cup), City Park (win the Data Centre Knockout), Offsite beach (win the Boardroom Showdown). Tour stops are always played at their own venue.
 - **Styles:** Lee, Ryan, Ed and Will from the start; the Sysadmin appears only as a tournament opponent (including World Tour stops).
-- **Rubbers:** Hotfix (Junior), Legacy Code (On-call defence), Air Gap (win the Championship).
+- **Rubbers:** Rapid (Club Player), Twister (Chop defence), Deadener (win the Championship).
 - **Unlock everything** (Unlocks tab) switches gating off for free play. Online lobbies aren't gated.
 
-**Achievements:** 14 badges, including Global Rollout (win every World Tour stop), Clean Code (10 clean contacts in a row), Social Engineering (win a point off a serve the AI misread), Hello World (first win), Zero-day (ace), Marathon Standup (15-hit rally), Low Latency (90 km/h shot), Spin Doctor (7,000 rpm), Skip-level (beat a Hard or Expert AI), Full Stack (win with every style) and IPO (win the Championship).
+**Match grade** (`src/game/matchGrade.ts`): every match against the AI or online ends with a grade on the match card (S, A, B or C) from your clean contacts (50%), PERFECT contacts (15%) and points won (35%); S also needs a win. Your best grade against each opponent is kept and shown in the Locker and on World Tour scouting reports.
+
+**Achievements:** 17 badges, including Top Marks (an S grade), Class Act (A or better against a Hard or Expert AI), Serve Reader (3 stars in Read the serve), World Tour Champion (win every World Tour stop), Clean Hitter (10 clean contacts in a row), Mind Games (win a point off a serve the AI misread), First Win, Ace, Marathon Rally (15-hit rally), Speed Demon (90 km/h shot), Spin Doctor (7,000 rpm), Giant Killer (beat a Hard or Expert AI), All-Rounder (win with every style), Online Debut, Training Complete (3 stars on every drill), Cup Winner and Champion (win the Championship).
 
 ### Milestone 7 — mobile
 
@@ -164,13 +175,13 @@ Online, the whole room runs at the slider's game speed: the server and every cli
 
 | Character | Style | Stance | Rubbers (FH / BH) |
 |---|---|---|---|
-| Lee | All-rounder | mid | Standard Build / Standard Build |
-| Ryan | Tactician | mid, +10% footwork | Standard Build / Standard Build |
-| Sysadmin | Chopper | deep, +12% reach | Standard Build / Legacy Code (long pips) |
-| Paul | Patient flat hitter | mid, +5% reach | Hotfix / Hotfix (short pips) |
-| Bryony | Wheelchair counter-hitter | tight to the table, +5% reach, 30% less sideways movement | Standard Build / Standard Build |
-| Ed | Counter-attacker ("The Firewall") | deep, +10% reach | Standard Build / Standard Build |
-| Will | Spinner & slammer | close, +15% power | Standard Build / Standard Build |
+| Lee | All-rounder | mid | Classic / Classic |
+| Ryan | Tactician | mid, +10% footwork | Classic / Classic |
+| Sysadmin | Chopper | deep, +12% reach | Classic / Twister (long pips) |
+| Paul | Patient flat hitter | mid, +5% reach | Rapid / Rapid (short pips) |
+| Bryony | Wheelchair counter-hitter | tight to the table, +5% reach, 30% less sideways movement | Classic / Classic |
+| Ed | Counter-attacker | deep, +10% reach | Classic / Classic |
+| Will | Spinner & slammer | close, +15% power | Classic / Classic |
 
 **AI per character:** an AI opponent is a character plus a level (Easy, Medium, Hard or Expert). Each plays like the real person:
 - **Lee:** an all-rounder, but goes for smashes on balls that aren't really high enough, and misses some.
@@ -198,7 +209,7 @@ You choose the AI's style in **Match vs AI** or in the online lobby (or leave it
 
 Open **Match vs AI** in the panel, choose an opponent and a format, and press **▶ Start match**.
 
-- **Opponents:** Intern (easy), Sysadmin (medium) and Principal Engineer (hard).
+- **Opponents:** Easy, Medium, Hard and Expert, each played by one of the characters.
 - **Formats:** best of 1, 3, 5 or 7 games.
 
 **Serving**
@@ -227,16 +238,16 @@ Open **Match vs AI** in the panel, choose an opponent and a format, and press **
 
 | Event | Call-out |
 |---|---|
-| Into the net | PACKET LOSS |
-| Off the table | 404 |
-| Bounced on own side | SEGFAULT |
-| Not returned | TIMEOUT |
-| Illegal serve | SYNTAX ERROR |
-| Ace | ZERO-DAY |
-| Let | RETRY |
-| Deuce | RACE CONDITION |
-| Game won / lost | DEPLOYED / ROLLBACK |
-| Match won / lost | SHIPPED TO PROD / INCIDENT REPORT |
+| Into the net | NET |
+| Off the table | OUT |
+| Bounced on own side | OWN SIDE |
+| Not returned | NOT RETURNED / MISSED |
+| Illegal serve | FAULT |
+| Ace | ACE! |
+| Let | LET |
+| Deuce | DEUCE |
+| Game won / lost | GAME WON / GAME LOST |
+| Match won / lost | YOU WIN! / MATCH LOST |
 
 Practice against the ball machine (Milestone 2) is still there: **▶ Play** without starting a match.
 
@@ -323,10 +334,10 @@ Play against the ball machine with a mouse-driven paddle. Click **▶ Play**: th
 - The paddle is a real collider. It's swept between frames, so fast swings can't pass through the ball.
 - The impulse model includes the rubber's restitution and grip and a sponge "catapult". Spin, pace and direction come from the paddle's velocity and face angle; nothing is scripted per shot.
 - Rubbers:
-  - **Standard Build** (inverted)
-  - **Hotfix** (short pips)
-  - **Legacy Code** (long pips): returns topspin as backspin
-  - **Air Gap** (anti-spin)
+  - **Classic** (inverted)
+  - **Rapid** (short pips)
+  - **Twister** (long pips): returns topspin as backspin
+  - **Deadener** (anti-spin)
 - Shots are named from what actually happened: loop, counter-loop, drive, flick, push, chop, smash, lob, block, hook loop and so on.
 
 **Assists** (all adjustable in the Player panel, and will feed the arcade/realism slider)

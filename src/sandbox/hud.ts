@@ -100,6 +100,34 @@ export class Hud {
     this.fpsEl.textContent = text;
   }
 
+  private spinTagEl: HTMLDivElement | null = null;
+  private spinTagKind = '';
+
+  /**
+   * A label on the incoming ball naming its spin (▲ TOPSPIN, ▼ BACKSPIN, ↻ SIDESPIN,
+   * • NO SPIN), so the spin can be read without the colours. `x`, `y`: the ball on screen
+   * (CSS pixels). null hides it.
+   */
+  spinTag(tag: { kind: 'top' | 'back' | 'side' | 'none'; color: string; x: number; y: number } | null) {
+    if (!tag) {
+      if (this.spinTagEl) this.spinTagEl.style.display = 'none';
+      return;
+    }
+    if (!this.spinTagEl) {
+      this.spinTagEl = el('div', 'hud-spintag');
+      this.spinTagEl.setAttribute('aria-hidden', 'true');
+      this.replayEl.parentElement!.append(this.spinTagEl);
+    }
+    const t = this.spinTagEl;
+    if (this.spinTagKind !== tag.kind) {
+      this.spinTagKind = tag.kind;
+      t.textContent = { top: '▲ TOPSPIN', back: '▼ BACKSPIN', side: '↻ SIDESPIN', none: '• NO SPIN' }[tag.kind];
+    }
+    t.style.display = 'block';
+    t.style.setProperty('--c', tag.color);
+    t.style.transform = `translate(${Math.round(tag.x)}px, ${Math.round(tag.y)}px) translate(-50%, -100%) translateY(-18px)`;
+  }
+
   onReplaySpeed: (speed: number) => void = () => {};
   onReplaySkip: () => void = () => {};
   private replayCaption: HTMLDivElement | null = null;
@@ -345,7 +373,7 @@ export class Hud {
     });
 
     if (ret === undefined) {
-      if (r.result) rows.push(`<div class="hud-result ${r.result.toLowerCase()}">${r.result === 'IN' ? 'IN' : r.result === 'OUT' ? 'OUT · 404' : 'FAULT'}</div>`);
+      if (r.result) rows.push(`<div class="hud-result ${r.result.toLowerCase()}">${r.result === 'IN' ? 'IN' : r.result === 'OUT' ? 'OUT' : 'FAULT'}</div>`);
     } else if (ret === null) {
       rows.push(`<div class="hud-section">Your return</div><div class="hud-muted">Waiting… move the paddle to the ring and flick.</div>`);
     } else {
@@ -396,6 +424,16 @@ export interface ShotLine {
 }
 
 /** Scoreboard, serve prompt, toss meter, compact shot log and match-over screen. */
+/** The match grade on the end-of-match card. */
+export interface OverGrade {
+  grade: 'S' | 'A' | 'B' | 'C';
+  /** The verdict, e.g. "Outstanding". */
+  text: string;
+  /** e.g. "New best vs Ed (was B)". */
+  note: string;
+  best: boolean;
+}
+
 export class MatchHud {
   private board: HTMLDivElement;
   private prompt: HTMLDivElement;
@@ -593,12 +631,15 @@ export class MatchHud {
 
   private overKey = '';
 
-  showOver(title: string, sub: string, games: string, rematch: string | null = 'Rematch', exit = 'Back to practice', stats: [string, string][] = []) {
+  showOver(title: string, sub: string, games: string, rematch: string | null = 'Rematch', exit = 'Back to practice', stats: [string, string][] = [], grade: OverGrade | null = null) {
     // Called every frame while the match is over: only rebuild when something changed.
-    const key = [title, sub, games, rematch, exit, JSON.stringify(stats)].join('|');
+    const key = [title, sub, games, rematch, exit, JSON.stringify(stats), JSON.stringify(grade)].join('|');
     if (this.overKey === key && this.over.style.display === 'flex') return;
     this.overKey = key;
-    this.over.innerHTML = `<div class="mover-card"><div class="mover-title">${title}</div><div class="mover-sub">${sub}</div><div class="mover-games">${games}</div>${stats.length ? `<div class="mover-stats">${stats.map(([k, v]) => `<div><b>${v}</b><span>${k}</span></div>`).join('')}</div>` : ''}
+    const gradeHtml = grade
+      ? `<div class="mover-grade"><div class="grade-letter g-${grade.grade}" aria-label="Match grade ${grade.grade}">${grade.grade}</div><div class="grade-words"><b>${grade.text}</b><span${grade.best ? ' class="best"' : ''}>${grade.note}</span></div></div>`
+      : '';
+    this.over.innerHTML = `<div class="mover-card"><div class="mover-title">${title}</div><div class="mover-sub">${sub}</div><div class="mover-games">${games}</div>${gradeHtml}${stats.length ? `<div class="mover-stats">${stats.map(([k, v]) => `<div><b>${v}</b><span>${k}</span></div>`).join('')}</div>` : ''}
       <div class="mover-buttons">${rematch ? `<button type="button" data-a="rematch">${rematch}</button>` : ''}<button type="button" data-a="exit" class="secondary">${exit}</button></div></div>`;
     this.over.style.display = 'flex';
     this.over.querySelector('[data-a=rematch]')?.addEventListener('click', () => this.onRematch());

@@ -40,6 +40,8 @@ export class Juice {
   }
   /** Hit-stop needs a pausable clock: off in online rooms. */
   allowHitStop = true;
+  /** Reduce motion: no hit-stop, camera shake or zoom kick (sparks and the tail stay). */
+  reduceMotion = false;
 
   private hitStopLeft = 0;
   private shakeAmp = 0;
@@ -101,9 +103,9 @@ export class Juice {
   hit(pos: Vec3, velOut: Vec3, spinOut: Vec3, opts: { perfect?: boolean; serve?: boolean } = {}) {
     if (!this.enabled) return;
     const power = opts.serve ? hitPower(length(velOut)) * 0.4 : hitPower(length(velOut));
-    if (this.allowHitStop && power > 0.35) this.hitStopLeft = Math.max(this.hitStopLeft, 0.025 + 0.05 * power);
+    if (this.allowHitStop && !this.reduceMotion && power > 0.35) this.hitStopLeft = Math.max(this.hitStopLeft, 0.025 + 0.05 * power);
     if (power > 0.3) this.kick(0.003 + 0.016 * power * power);
-    if (power > 0.6) this.fovKick = Math.min(this.fovKick + 3.5 * power, 5);
+    if (power > 0.6 && !this.reduceMotion) this.fovKick = Math.min(this.fovKick + 3.5 * power, 5);
     const base = opts.perfect ? new THREE.Color(1, 0.8, 0.25) : spinColor(velOut, spinOut, new THREE.Color());
     const n = Math.round((opts.perfect ? 26 : 8) + 46 * power);
     const dir = new THREE.Vector3(velOut.x, velOut.y, velOut.z).normalize();
@@ -129,7 +131,7 @@ export class Juice {
 
   /** Add camera shake (metres of amplitude). */
   kick(amp: number) {
-    if (!this.enabled) return;
+    if (!this.enabled || this.reduceMotion) return;
     this.shakeAmp = Math.min(0.03, Math.max(this.shakeAmp, amp));
   }
 

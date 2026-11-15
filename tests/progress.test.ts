@@ -19,11 +19,11 @@ describe('career profile', () => {
     const c = new Career(store);
     const events: string[] = [];
     c.on((e) => events.push(e.type === 'level' ? `level:${e.title}` : e.type));
-    expect(c.title).toBe('Intern');
+    expect(c.title).toBe('Beginner');
     c.recordMatch(true, { aiLevel: 'medium', style: 'looper' });
     for (let i = 0; i < 20; i++) c.recordPoint(true, { rallyHits: 4 });
     expect(c.data.xp).toBeGreaterThanOrEqual(CAREER_LEVELS[1].xp);
-    expect(events).toContain('level:Junior');
+    expect(events).toContain('level:Club Player');
     expect(c.has('first-win')).toBe(true);
     // Reload from storage.
     const again = new Career(store);

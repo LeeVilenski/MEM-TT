@@ -3,6 +3,7 @@ import { roundLabel } from '../progress/tournament';
 import { TOUR_STOPS, stopUnlocked, stopsWon, type TourRun, type TourStop } from '../progress/tour';
 import { AI_LEVELS, type AiLevel } from '../game/ai';
 import { STYLES, type StyleId } from '../game/styles';
+import { scoutReport } from '../game/scouting';
 import type { VenueId } from '../render/venues';
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
@@ -140,6 +141,19 @@ export class TourScreen {
       ${final}${results ? `<div class="tw-results">${results}</div>` : ''}`;
   }
 
+  /** The scouting report on your next opponent, with your best grade against them. */
+  private scoutHtml(style: StyleId, level: AiLevel) {
+    const r = scoutReport(style, level);
+    const best = this.career.data.bestGrades[style];
+    return `<div class="tw-scout" style="--l:${LEVEL_COLOR[level]}">
+      <div class="tw-scout-head"><span class="tw-ava" aria-hidden="true">${esc(STYLES[style].character[0])}</span><div><div class="tw-sub">Scouting report</div><b>${esc(r.title)}</b></div>${best ? `<span class="tw-scout-best" title="Your best match grade against ${esc(STYLES[style].character)}">Your best <span class="grade-chip g-${best}">${best}</span></span>` : ''}</div>
+      <p class="tw-scout-line">${esc(r.headline)}</p>
+      <ul>${r.traits.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>
+      <p class="tw-scout-plan"><b>Game plan:</b> ${esc(r.plan)}</p>
+      <p class="tw-scout-level">${esc(r.level)}</p>
+    </div>`;
+  }
+
   private stopHtml(i: number) {
     const s = TOUR_STOPS[i];
     const v = venueStyle(s.venue);
@@ -179,6 +193,7 @@ export class TourScreen {
         ${here && this.banner ? `<div class="tw-news">${this.banner}</div>` : ''}
         ${here ? '' : `<p class="tw-blurb">${esc(s.blurb)}</p>`}
         ${here ? this.progressHtml(here) : this.lineupHtml(s)}
+        ${here && here.state === 'playing' && here.current ? this.scoutHtml(here.current.style, here.current.level) : ''}
         <div class="tw-actions">${actions}</div>
       </div>
     </section>`;

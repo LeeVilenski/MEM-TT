@@ -4,14 +4,16 @@
  * fully testable; the game calls the record* methods as things happen.
  */
 
+import { betterGrade, type MatchGrade } from '../game/matchGrade';
+
 export const CAREER_LEVELS = [
-  { title: 'Intern', xp: 0 },
-  { title: 'Junior', xp: 150 },
-  { title: 'Mid-level', xp: 450 },
-  { title: 'Senior', xp: 1000 },
-  { title: 'Staff', xp: 2000 },
-  { title: 'Principal', xp: 3500 },
-  { title: 'CTO', xp: 6000 },
+  { title: 'Beginner', xp: 0 },
+  { title: 'Club Player', xp: 150 },
+  { title: 'League Player', xp: 450 },
+  { title: 'County Player', xp: 1000 },
+  { title: 'Regional Player', xp: 2000 },
+  { title: 'National Player', xp: 3500 },
+  { title: 'World Class', xp: 6000 },
 ] as const;
 
 export interface Stats {
@@ -44,6 +46,8 @@ export interface ProfileData {
   drillScores: Record<string, number>;
   /** Tournament ids won (and how many times). */
   tournaments: Record<string, number>;
+  /** Best match grade per AI opponent (style id), and 'online'. */
+  bestGrades: Record<string, MatchGrade>;
   unlockAll: boolean;
 }
 
@@ -55,20 +59,23 @@ export interface Achievement {
 }
 
 export const ACHIEVEMENTS: Achievement[] = [
-  { id: 'first-win', name: 'Hello, World', description: 'Win your first match', xp: 50 },
-  { id: 'ace', name: 'Zero-day', description: 'Serve an ace', xp: 30 },
-  { id: 'marathon', name: 'Marathon Standup', description: 'Play a rally of 15+ hits', xp: 60 },
-  { id: 'speed', name: 'Low Latency', description: 'Hit a shot faster than 25 m/s (90 km/h)', xp: 40 },
+  { id: 'first-win', name: 'First Win', description: 'Win your first match', xp: 50 },
+  { id: 'ace', name: 'Ace', description: 'Serve an ace', xp: 30 },
+  { id: 'marathon', name: 'Marathon Rally', description: 'Play a rally of 15+ hits', xp: 60 },
+  { id: 'speed', name: 'Speed Demon', description: 'Hit a shot faster than 25 m/s (90 km/h)', xp: 40 },
   { id: 'spin', name: 'Spin Doctor', description: 'Put 7,000+ rpm on the ball', xp: 40 },
-  { id: 'principal', name: 'Skip-level', description: 'Beat a Hard or Expert AI', xp: 120 },
-  { id: 'full-stack', name: 'Full Stack', description: 'Win a match with every player style', xp: 150 },
-  { id: 'online', name: 'Distributed System', description: 'Finish an online match', xp: 40 },
-  { id: 'drills', name: 'Continuous Integration', description: 'Earn 3 stars on every drill', xp: 200 },
-  { id: 'cup', name: 'Promotion Packet', description: 'Win the Department Cup', xp: 0 },
-  { id: 'championship', name: 'IPO', description: 'Win the Company Championship', xp: 0 },
-  { id: 'world-tour', name: 'Global Rollout', description: 'Win every stop of the World Tour', xp: 300 },
-  { id: 'clean-code', name: 'Clean Code', description: '10 clean contacts in a row', xp: 40 },
-  { id: 'social-engineering', name: 'Social Engineering', description: 'Win a point with a serve the AI misread', xp: 40 },
+  { id: 'principal', name: 'Giant Killer', description: 'Beat a Hard or Expert AI', xp: 120 },
+  { id: 'full-stack', name: 'All-Rounder', description: 'Win a match with every player style', xp: 150 },
+  { id: 'online', name: 'Online Debut', description: 'Finish an online match', xp: 40 },
+  { id: 'drills', name: 'Training Complete', description: 'Earn 3 stars on every drill', xp: 200 },
+  { id: 'cup', name: 'Cup Winner', description: 'Win the Department Cup', xp: 0 },
+  { id: 'championship', name: 'Champion', description: 'Win the Company Championship', xp: 0 },
+  { id: 'world-tour', name: 'World Tour Champion', description: 'Win every stop of the World Tour', xp: 300 },
+  { id: 'clean-code', name: 'Clean Hitter', description: '10 clean contacts in a row', xp: 40 },
+  { id: 'social-engineering', name: 'Mind Games', description: 'Win a point with a serve the AI misread', xp: 40 },
+  { id: 'grade-s', name: 'Top Marks', description: 'Earn an S grade in a match', xp: 80 },
+  { id: 'grade-a-hard', name: 'Class Act', description: 'Earn an A or better against a Hard or Expert AI', xp: 60 },
+  { id: 'serve-reader', name: 'Serve Reader', description: 'Earn 3 stars in Read the serve', xp: 40 },
 ];
 
 export interface Storage {
@@ -119,6 +126,7 @@ function fresh(): ProfileData {
     drills: {},
     drillScores: {},
     tournaments: {},
+    bestGrades: {},
     unlockAll: false,
   };
 }
@@ -257,6 +265,19 @@ export class Career {
     }
   }
 
+  /**
+   * A match grade against `opponent` (an AI style id, or 'online'). Returns true if it
+   * beats your previous best against them.
+   */
+  recordGrade(opponent: string, grade: MatchGrade, ctx: { aiLevel?: string } = {}): boolean {
+    const best = betterGrade(grade, this.data.bestGrades[opponent]);
+    if (best) this.data.bestGrades[opponent] = grade;
+    if (grade === 'S') this.award('grade-s');
+    if ((grade === 'S' || grade === 'A') && (ctx.aiLevel === 'hard' || ctx.aiLevel === 'expert')) this.award('grade-a-hard');
+    this.save();
+    return best;
+  }
+
   recordPractice(made: boolean) {
     const s = this.data.stats;
     s.practiceAttempts++;
@@ -274,6 +295,7 @@ export class Career {
       this.addXp((stars - prev) * 40, 'Drill');
     }
     if (allDrillIds.every((d) => (this.data.drills[d] ?? 0) >= 3)) this.award('drills');
+    if (id === 'serve-read' && stars >= 3) this.award('serve-reader');
     this.save();
   }
 

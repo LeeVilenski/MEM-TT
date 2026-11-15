@@ -79,7 +79,8 @@ export class CareerScreen {
         ${row('Practice returns', `${s.practiceReturns} / ${s.practiceAttempts} (${pct(s.practiceReturns, s.practiceAttempts)})`)}
         ${row('AI beaten', Object.entries(s.aiWins).map(([k, v]) => `${AI_LEVELS[k as keyof typeof AI_LEVELS]?.name ?? k} ×${v}`).join(', ') || '—')}
         ${row('Favourite shots', fav || '—')}</div>
-      </div>`;
+      </div>
+      ${this.gradesHtml()}`;
     } else {
       const unl = UNLOCKS.map((u) => {
         const ok = p.unlockAll || u.test(p, lvl);
@@ -95,13 +96,26 @@ export class CareerScreen {
     this.el.innerHTML = `<div class="career-card">
       <div class="cs-head">
         <div><div class="cs-sub">Locker · career level</div><div class="cs-title">${esc(c.title)}</div></div>
-        <div class="cs-xp"><div class="cs-sub">${p.xp.toLocaleString()} XP${next ? ` · ${next.xp - p.xp} to ${next.title}` : ' · top of the org chart'}</div><div class="cs-bar"><div style="width:${Math.round(c.levelProgress * 100)}%"></div></div></div>
+        <div class="cs-xp"><div class="cs-sub">${p.xp.toLocaleString()} XP${next ? ` · ${next.xp - p.xp} to ${next.title}` : ' · top of the rankings'}</div><div class="cs-bar"><div style="width:${Math.round(c.levelProgress * 100)}%"></div></div></div>
         <button data-a="close" class="cs-close" aria-label="Close">✕</button>
       </div>
       ${this.banner ? `<div class="cs-banner">${this.banner}</div>` : ''}
       <div class="cs-tabs">${tabs.map(([t, l]) => `<button data-tab="${t}" class="${t === this.tab ? 'on' : ''}">${l}</button>`).join('')}</div>
       <div class="cs-body">${body}</div>
     </div>`;
+  }
+
+  /** Best match grade per opponent. */
+  private gradesHtml(): string {
+    const g = this.career.data.bestGrades;
+    const ids = Object.keys(g);
+    if (!ids.length) return `<div class="cs-h">Best match grades</div><div class="cs-note">Finish a match to get your first grade (S, A, B or C, from clean contacts and points won).</div>`;
+    const name = (id: string) => (id === 'online' ? 'Online' : id === 'doubles' ? 'Doubles vs AI' : (STYLES[id as keyof typeof STYLES]?.character ?? id));
+    const chips = ids
+      .sort((a, b) => name(a).localeCompare(name(b)))
+      .map((id) => `<div class="cs-grade"><span class="grade-chip g-${g[id]}">${g[id]}</span> ${esc(name(id))}</div>`)
+      .join('');
+    return `<div class="cs-h">Best match grades</div><div class="cs-grades">${chips}</div>`;
   }
 
   private onClick(e: Event) {

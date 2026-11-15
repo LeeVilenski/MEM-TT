@@ -22,14 +22,14 @@ const stop = (id: string, name: string) => ({ requirement: `World Tour: win the 
 
 export const UNLOCKS: UnlockRule[] = [
   // Venues (the sandbox and the office are always available).
-  { kind: 'venue', id: 'server', ...level(1, 'Junior') },
-  { kind: 'venue', id: 'conference', ...level(2, 'Mid-level') },
+  { kind: 'venue', id: 'server', ...level(1, 'Club Player') },
+  { kind: 'venue', id: 'conference', ...level(2, 'League Player') },
   { kind: 'venue', id: 'rooftop', ...cup('department-cup', 'Department Cup') },
   { kind: 'venue', id: 'park', ...stop('datacentre-knockout', 'Data Centre Knockout') },
   { kind: 'venue', id: 'beach', ...stop('board-showdown', 'Boardroom Showdown') },
   // Rubbers (Standard Build from the start).
-  { kind: 'rubber', id: 'shortPips', ...level(1, 'Junior') },
-  { kind: 'rubber', id: 'longPips', ...drill('defence', 'On-call defence') },
+  { kind: 'rubber', id: 'shortPips', ...level(1, 'Club Player') },
+  { kind: 'rubber', id: 'longPips', ...drill('defence', 'Chop defence') },
   { kind: 'rubber', id: 'anti', ...cup('championship', 'Company Championship') },
 ];
 

@@ -17,6 +17,7 @@ import {
   lerp,
   radToRpm,
   solveAim,
+  solveServeAim,
   spinComponents,
   length,
   v3,
@@ -34,7 +35,7 @@ import { Match } from '../game/match';
 import { LET_MESSAGE, pointMessage } from '../game/messages';
 import { classifyShot } from '../game/shots';
 import { NO_INPUT, type SwingInput } from '../game/swing';
-import { BallView, spinColor } from '../render/ballView';
+import { BallView, SPIN_PALETTES, setSpinPalette, spinColor, spinKind, type SpinPalette } from '../render/ballView';
 import { Juice, hitPower } from '../render/juice';
 import { PlayerView } from '../render/playerView';
 import { createScene } from '../render/scene';
@@ -49,6 +50,8 @@ import { AutoQuality, QUALITY_LEVELS, type QualitySetting } from '../render/qual
 import { Career } from '../progress/profile';
 import { DRILLS, DrillSession, drillUnlocked, type TargetZone } from '../progress/drills';
 import { GRADE_TEXT } from '../game/contact';
+import { GRADE_TEXT as MATCH_GRADE_TEXT, matchGrade, type MatchGrade } from '../game/matchGrade';
+import type { OverGrade } from './hud';
 import { TOUR_STOPS, TourRun, stopUnlocked, stopsWon } from '../progress/tour';
 import { TourScreen } from './tour';
 import { isUnlocked, newlyUnlocked, unlockedKeys, UNLOCKS, type UnlockKind } from '../progress/unlocks';
@@ -94,6 +97,8 @@ interface MachineSettings {
   targetX: number;
   targetZ: number;
   highArc: boolean;
+  /** Serve: bounce on the machine's half first, then on the target. */
+  serve: boolean;
   autoFire: boolean;
   interval: number;
   scatter: number;
@@ -325,10 +330,16 @@ export class Sandbox implements MenuHost {
     shotDetails: loadPref('mem.shotDetails', '0') === '1',
     bloom: loadPref('mem.bloom', '1') === '1',
     fullSpeedOut: loadPref('mem.fullSpeedOut', '1') === '1',
-    /** The IT-joke call-out after each point / practice return (404, PACKET LOSS…). Off by default. */
+    /** The call-out after each point / practice return (NET, OUT…). Off by default. */
     callouts: loadPref('mem.callouts', '0') === '1',
     /** MJ mode: a falsetto pop-star yelp on each of your smashes. Off by default. */
     mjMode: loadPref('mem.mjMode', '0') === '1',
+    /** Spin colours on the trail, comet tail and sparks. */
+    spinPalette: (loadPref('mem.spinPalette', 'standard') === 'colourblind' ? 'colourblind' : 'standard') as SpinPalette,
+    /** A label naming the spin of the ball coming at you. Off by default. */
+    spinLabel: loadPref('mem.spinLabel', '0') === '1',
+    /** No camera shake, zoom kick, hit-stop or screen flash. Defaults to the system setting. */
+    reduceMotion: loadPref('mem.reduceMotion', typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches ? '1' : '0') === '1',
   };
   /** Arcade effects: hit-stop, shake, comet tail, sparks (see render/juice). */
   private juice!: Juice;
@@ -370,6 +381,8 @@ export class Sandbox implements MenuHost {
   /** This match so far, for the end-of-match card. */
   private mstats = { won: 0, played: 0, longest: 0, fastest: 0, aces: 0, perfect: 0, clean: 0, strokes: 0 };
   private lastPhase = '';
+  /** The grade of the match that just ended (null until one does). */
+  private lastGrade: OverGrade | null = null;
   /** Doubles: the ball on our side is my partner's to play (the hit zone turns blue). */
   private partnerTurn = false;
 
@@ -422,6 +435,8 @@ export class Sandbox implements MenuHost {
     this.ball = new BallView(this.scene);
     this.ball.visible = false;
     this.juice = new Juice(this.scene);
+    this.juice.reduceMotion = this.look.reduceMotion;
+    setSpinPalette(this.look.spinPalette);
     this.juice.enabled = this.look.arcadeFx;
     this.sfx.heavyHits = this.look.arcadeFx;
     this.sfx.wantGrunts = this.look.mjMode;
@@ -647,6 +662,7 @@ export class Sandbox implements MenuHost {
       targetX: p.target.x,
       targetZ: p.target.z,
       highArc: !!p.highArc,
+      serve: !!p.serve,
       autoFire: this.machine?.autoFire ?? false,
       interval: this.machine?.interval ?? 2.5,
       scatter: this.machine?.scatter ?? 0.15,
@@ -698,7 +714,7 @@ export class Sandbox implements MenuHost {
       z: THREE.MathUtils.clamp(m.targetZ + jitter(), 0.1, TABLE.halfLength - 0.05),
     };
     const origin = this.origin();
-    const aim = solveAim(origin, target, m.speed, this.spin(), this.params, m.highArc);
+    const aim = this.solveMachineAim(origin, target);
     const shot = { speed: m.speed, elevation: aim.elevation, azimuth: aim.azimuth, spin: this.spin() };
     const start = launchState(origin, shot);
 
@@ -734,6 +750,12 @@ export class Sandbox implements MenuHost {
     this.predictionLine.visible = this.settings.showPrediction;
   }
 
+  /** The machine's launch angles for its current settings (a serve bounces on its own half first). */
+  private solveMachineAim(origin: Vec3, target: { x: number; z: number }) {
+    const m = this.machine;
+    return m.serve ? solveServeAim(origin, target, m.speed, this.spin(), this.params) : solveAim(origin, target, m.speed, this.spin(), this.params, m.highArc);
+  }
+
   private aimMachine(elevation: number, azimuth: number) {
     const dir = launchDirection(elevation, azimuth);
     const barrel = this.machineMesh.getObjectByName('barrel')!;
@@ -744,7 +766,7 @@ export class Sandbox implements MenuHost {
     const o = this.origin();
     this.machineMesh.position.set(o.x, o.y, o.z);
     this.targetRing.position.set(this.machine.targetX, TABLE.height + 0.002, this.machine.targetZ);
-    const aim = solveAim(o, { x: this.machine.targetX, z: this.machine.targetZ }, this.machine.speed, this.spin(), this.params, this.machine.highArc);
+    const aim = this.solveMachineAim(o, { x: this.machine.targetX, z: this.machine.targetZ });
     this.aimMachine(aim.elevation, aim.azimuth);
     (this.targetRing.material as THREE.MeshBasicMaterial).color.set(aim.ok ? 0xffd34d : 0xff4d4d);
     this.hud.setAimWarning(aim.ok ? null : 'Target not reachable with this speed/spin — the shot will miss.');
@@ -774,7 +796,7 @@ export class Sandbox implements MenuHost {
         break;
       case 'net':
         if (!returned) r.netTouches = (r.netTouches ?? 0) + 1;
-        this.callout(e.part === 'tape' ? 'NET CORD' : 'PACKET LOSS', e.part === 'tape' ? 'Clipped the tape' : 'Into the net');
+        this.callout(e.part === 'tape' ? 'NET CORD' : 'NET', e.part === 'tape' ? 'Clipped the tape' : 'Into the net');
         break;
       case 'table': {
         this.recorder.keyframe(this.clock(), { pos: e.pos, vel: e.velOut, spin: e.spinOut });
@@ -796,7 +818,8 @@ export class Sandbox implements MenuHost {
         });
         if (r.result === undefined) {
           if (e.side === 'near') r.result = 'IN';
-          else if (r.bounces.length === 1 && e.pos.z < 0) r.result = 'FAULT';
+          // (A machine serve bounces on its own half first: that's the serve, not a fault.)
+          else if (r.bounces.length === 1 && e.pos.z < 0 && !this.machine.serve) r.result = 'FAULT';
         }
         // A second bounce on the near half before the player hit it: missed.
         if (this.playing && this.phase === 'incoming' && e.side === 'near' && r.bounces.filter((b) => b.side === 'near').length >= 2) this.resolveMiss();
@@ -808,7 +831,7 @@ export class Sandbox implements MenuHost {
         } else {
           if (r.result === undefined) {
             r.result = 'OUT';
-            this.callout('404', 'Ball not found (on the table)');
+            this.callout('OUT', 'Missed the table');
           }
           if (this.playing && this.phase === 'incoming') {
             if (r.result === 'IN') this.resolveMiss();
@@ -851,8 +874,8 @@ export class Sandbox implements MenuHost {
       if (this.look.arcadeFx && this.stats.streak % 5 === 0) this.sfx.crowd(this.stats.streak % 10 === 0 ? 'cheer' : 'applause', Math.min(1, this.stats.streak / 20));
     } else {
       this.stats.streak = 0;
-      if (result === 'OUT') this.callout('404', 'Ball not found (on the table)');
-      if (result === 'OWN SIDE') this.callout('SEGFAULT', 'Bounced on your own side');
+      if (result === 'OUT') this.callout('OUT', 'Missed the table');
+      if (result === 'OWN SIDE') this.callout('OWN SIDE', 'Bounced on your own side');
     }
     this.hud.setStats(this.stats);
     this.updateDrillHud();
@@ -866,7 +889,7 @@ export class Sandbox implements MenuHost {
     this.career.recordPractice(false);
     this.drillRegister('MISSED');
     this.tutorialRegister('MISSED');
-    this.callout('TIMEOUT', 'Request not handled');
+    this.callout('MISSED', 'Not returned');
     this.hud.setStats(this.stats);
     this.updateDrillHud();
     this.resolve();
@@ -970,6 +993,7 @@ export class Sandbox implements MenuHost {
     this.controls.update();
     const b = this.ball.last;
     this.juice.update(realDt, this.ball.isVisible && b ? { pos: b.pos, state: b.state, visible: true } : null);
+    this.updateSpinTag();
     // Shake and zoom kick are applied for this render only.
     const shake = this.playing && !this.replay ? this.juice.cameraOffset : null;
     if (shake) {
@@ -1094,8 +1118,8 @@ export class Sandbox implements MenuHost {
           if (e.result.winner === 'near' && match.referee?.server === 'near' && (match.referee?.hits ?? 9) <= 3 && read && Math.abs(read.seenTop - read.top) > Math.max(15, 0.35 * Math.abs(read.top))) this.career.award('social-engineering');
           this.fxPoint(e.result.reason, match.referee?.hits ?? 0, e.result.winner === 'near', e.match);
           const m = pointMessage(e.result, names);
-          if (e.match) this.hud.flash(e.result.winner === 'near' ? 'SHIPPED TO PROD' : 'INCIDENT REPORT', e.result.winner === 'near' ? 'You won the match!' : `${ai.displayName} won the match`);
-          else if (e.game) this.hud.flash(e.result.winner === 'near' ? 'DEPLOYED' : 'ROLLBACK', `Game to ${names[e.result.winner]}${this.look.callouts ? ` — ${m.title}: ${m.sub}` : ''}`);
+          if (e.match) this.hud.flash(e.result.winner === 'near' ? 'YOU WIN!' : 'MATCH LOST', e.result.winner === 'near' ? 'You won the match!' : `${ai.displayName} won the match`);
+          else if (e.game) this.hud.flash(e.result.winner === 'near' ? 'GAME WON' : 'GAME LOST', `Game to ${names[e.result.winner]}${this.look.callouts ? ` — ${m.title}: ${m.sub}` : ''}`);
           else this.callout(m.title, m.sub);
           break;
         }
@@ -1162,7 +1186,7 @@ export class Sandbox implements MenuHost {
     const sc = match.score;
     const gp = sc.gamePoint();
     const mp = sc.matchPoint();
-    const badge = sc.deuce ? 'DEUCE · RACE CONDITION' : mp ? `MATCH POINT · ${mp === 'near' ? 'You' : ai.displayName}` : gp ? `GAME POINT · ${gp === 'near' ? 'You' : ai.displayName}` : null;
+    const badge = sc.deuce ? 'DEUCE' : mp ? `MATCH POINT · ${mp === 'near' ? 'You' : ai.displayName}` : gp ? `GAME POINT · ${gp === 'near' ? 'You' : ai.displayName}` : null;
     this.matchHud.setScore({
       you: 'You',
       them: 'Opponent',
@@ -1178,6 +1202,7 @@ export class Sandbox implements MenuHost {
       const won = sc.winner === 'near';
       if (!this.matchRecorded) {
         this.matchRecorded = true;
+        this.gradeMatch(won, ai.style.id, ai.displayName, this.matchSettings.level);
         this.career.recordMatch(won, { aiLevel: this.matchSettings.level, style: this.player.style.id });
         if (this.tournament) return this.reportTournamentMatch(sc.games.near, sc.games.far);
       }
@@ -1185,7 +1210,7 @@ export class Sandbox implements MenuHost {
       const games = sc.history.map((g) => `${g.near}–${g.far}`).join('  ·  ');
       this.matchHud.setPrompt(null);
       this.matchHud.setMeter(null);
-      this.matchHud.showOver(won ? 'SHIPPED TO PROD' : 'INCIDENT REPORT', won ? `You beat ${ai.displayName} ${sc.games.near}–${sc.games.far}` : `${ai.displayName} won ${sc.games.far}–${sc.games.near}`, games, 'Rematch', 'Back to practice', this.matchStatsList());
+      this.matchHud.showOver(won ? 'YOU WIN!' : 'MATCH LOST', won ? `You beat ${ai.displayName} ${sc.games.near}–${sc.games.far}` : `${ai.displayName} won ${sc.games.far}–${sc.games.near}`, games, 'Rematch', 'Back to practice', this.matchStatsList(), this.lastGrade);
       if (document.pointerLockElement) document.exitPointerLock();
       return;
     }
@@ -1340,7 +1365,7 @@ export class Sandbox implements MenuHost {
     const rep = d.report();
     const faults = [rep.early && `${rep.early} early`, rep.edge && `${rep.edge} off-centre`, rep.overhit && `${rep.overhit} over-hit`, rep.missed && `${rep.missed} missed`].filter(Boolean).join(', ');
     this.menu.banner = `<b>${d.drill.name}</b>: ${d.successes}/${d.drill.balls} <span class="stars">${st}</span> · <b>${d.score.toLocaleString()}</b> pts${d.score > prevBest ? ' <b>(new best!)</b>' : ''} · best combo ×${d.bestCombo}${d.stars === 0 ? ` — need ${d.drill.stars[0]} for a star.` : ''}
-      <div class="menu-coach"><b>Coach:</b> ${rep.clean} clean contact${rep.clean === 1 ? '' : 's'}${faults ? ` · ${faults}` : ''}. ${rep.tip}</div>`;
+      <div class="menu-coach"><b>Coach:</b> ${rep.clean} clean contact${rep.clean === 1 ? '' : 's'}${faults ? ` · ${faults}` : ''}.${rep.breakdown ? ` Returned: ${rep.breakdown}.` : ''} ${rep.tip}</div>`;
     this.menu.show('training');
   }
 
@@ -1397,6 +1422,8 @@ export class Sandbox implements MenuHost {
     if (document.pointerLockElement) document.exitPointerLock();
     const stop = run.stop;
     const score = `${mine}–${theirs}`;
+    const g = this.lastGrade;
+    const gradeLine = g ? ` <span class="grade-chip g-${g.grade}">${g.grade}</span> ${g.text}${g.best ? ' <b>(new best!)</b>' : ''}` : '';
     let banner: string;
     if (state === 'won') {
       this.career.recordTournament(stop.id, stop.xp, stop.achievement);
@@ -1411,6 +1438,7 @@ export class Sandbox implements MenuHost {
       const toFinal = run.group?.phase === 'final' && !played.label.startsWith('Final');
       banner = `${mine > theirs ? '✓' : '✗'} ${played.label}: ${score}.${toFinal ? ' <b>Through to the final!</b>' : ''} Next: <b>${next.label}</b>.`;
     }
+    if (gradeLine) banner += `<div class="tour-grade">Match grade:${gradeLine}</div>`;
     this.endMatch();
     this.openTour(banner);
   }
@@ -1735,6 +1763,37 @@ export class Sandbox implements MenuHost {
     if (this.look.callouts) this.hud.flash(title, sub);
   }
 
+  /** The spin label on the incoming ball (while playing, not in replays). */
+  private updateSpinTag() {
+    const b = this.ball.last;
+    // Render coordinates always put you at the near (+z) end: incoming = moving toward +z.
+    if (!this.look.spinLabel || !this.playing || this.replay || !b || !this.ball.isVisible || b.state.vel.z <= 0.5 || this.menu.screen) return this.hud.spinTag(null);
+    const p = new THREE.Vector3(b.pos.x, b.pos.y, b.pos.z).project(this.camera);
+    if (p.z > 1 || Math.abs(p.x) > 1.1 || Math.abs(p.y) > 1.1) return this.hud.spinTag(null);
+    const { kind } = spinKind(b.state.vel, b.state.spin);
+    const w = this.container.clientWidth;
+    const h = this.container.clientHeight;
+    this.hud.spinTag({ kind, color: SPIN_PALETTES[this.look.spinPalette][kind], x: ((p.x + 1) / 2) * w, y: ((1 - p.y) / 2) * h });
+  }
+
+  setSpinPalette(p: SpinPalette) {
+    this.look.spinPalette = p;
+    savePref('mem.spinPalette', p);
+    setSpinPalette(p);
+    this.ball.clearTrail();
+  }
+
+  setSpinLabel(on: boolean) {
+    this.look.spinLabel = on;
+    savePref('mem.spinLabel', on ? '1' : '0');
+  }
+
+  setReduceMotion(on: boolean) {
+    this.look.reduceMotion = on;
+    savePref('mem.reduceMotion', on ? '1' : '0');
+    this.juice.reduceMotion = on;
+  }
+
   setMjMode(on: boolean) {
     this.look.mjMode = on;
     savePref('mem.mjMode', on ? '1' : '0');
@@ -1807,6 +1866,7 @@ export class Sandbox implements MenuHost {
   private resetMatchStats() {
     this.mstats = { won: 0, played: 0, longest: 0, fastest: 0, aces: 0, perfect: 0, clean: 0, strokes: 0 };
     this.lastPhase = '';
+    this.lastGrade = null;
   }
 
   private noteMyShot(speed: number, serve: boolean) {
@@ -1839,6 +1899,19 @@ export class Sandbox implements MenuHost {
     m.longest = Math.max(m.longest, hits);
   }
 
+  /**
+   * The S/A/B/C grade for the match just finished; records it (best per opponent,
+   * grade badges) and keeps it for the end-of-match card.
+   */
+  private gradeMatch(won: boolean, opponent: string, opponentName: string, aiLevel?: AiLevel) {
+    const m = this.mstats;
+    const { grade } = matchGrade({ strokes: m.strokes, clean: m.clean, perfect: m.perfect, pointsWon: m.won, pointsPlayed: m.played, won });
+    const prev: MatchGrade | undefined = this.career.data.bestGrades[opponent];
+    const best = this.career.recordGrade(opponent, grade, { aiLevel });
+    const note = best ? (prev ? `New best vs ${opponentName} (was ${prev})` : `First grade vs ${opponentName}`) : `Best vs ${opponentName}: ${prev}`;
+    this.lastGrade = { grade, text: MATCH_GRADE_TEXT[grade], note, best };
+  }
+
   /** Label/value pairs for the end-of-match card. */
   private matchStatsList(): [string, string][] {
     const m = this.mstats;
@@ -1850,7 +1923,7 @@ export class Sandbox implements MenuHost {
     ];
   }
 
-  /** Clean contacts in a row (any mode), for the Clean Code badge. */
+  /** Clean contacts in a row (any mode), for the Clean Hitter badge. */
   private cleanStreak = 0;
 
   /** Arcade effects for a paddle hit (render coordinates). `mine` = the local player. */
@@ -1862,7 +1935,7 @@ export class Sandbox implements MenuHost {
     // Speed call-out on a fast shot (its real speed).
     const kmh = length(velOut) * 3.6;
     if (this.look.arcadeFx && !serve && kmh >= 65) this.hud.speedPop(kmh, mine);
-    if (this.look.arcadeFx && mine && !serve && kmh >= 45) this.matchHud.impact(Math.min(1, (kmh - 45) / 50));
+    if (this.look.arcadeFx && !this.look.reduceMotion && mine && !serve && kmh >= 45) this.matchHud.impact(Math.min(1, (kmh - 45) / 50));
     // Contact grade: PERFECT (with the chime and sparks under arcade effects) or a mishit.
     const g = mine && !serve ? this.player.lastContact?.grade : undefined;
     if (g) {
@@ -2207,13 +2280,17 @@ export class Sandbox implements MenuHost {
         const names = { near: this.teamName('near'), far: this.teamName('far') };
         const m = pointMessage(e.result, names);
         const mine = e.result.winner === c.side;
-        if (e.match) this.hud.flash(mine ? 'SHIPPED TO PROD' : 'INCIDENT REPORT', `${names[e.result.winner]} won the match`);
-        else if (e.game) this.hud.flash(mine ? 'DEPLOYED' : 'ROLLBACK', `Game to ${names[e.result.winner]}${this.look.callouts ? ` — ${m.title}: ${m.sub}` : ''}`);
+        if (e.match) this.hud.flash(mine ? 'YOU WIN!' : 'MATCH LOST', `${names[e.result.winner]} won the match`);
+        else if (e.game) this.hud.flash(mine ? 'GAME WON' : 'GAME LOST', `Game to ${names[e.result.winner]}${this.look.callouts ? ` — ${m.title}: ${m.sub}` : ''}`);
         else this.callout(m.title, m.sub);
         break;
       }
       case 'over':
-        if (c.seat && c.score) this.career.recordMatch(c.score.winner === c.side, { online: true, style: this.player.style.id });
+        if (c.seat && c.score) {
+          const won = c.score.winner === c.side;
+          this.gradeMatch(won, this.offlineDoubles ? 'doubles' : 'online', this.offlineDoubles ? 'Doubles' : 'Online', this.offlineDoubles ? this.matchSettings.level : undefined);
+          this.career.recordMatch(won, { online: true, style: this.player.style.id });
+        }
         break;
     }
   }
@@ -2286,7 +2363,7 @@ export class Sandbox implements MenuHost {
     const sc = c.score;
     if (sc && c.phase !== 'lobby') {
       const them: SideId = side === 'near' ? 'far' : 'near';
-      const badge = sc.deuce ? 'DEUCE · RACE CONDITION' : sc.matchPoint ? `MATCH POINT · ${this.teamName(sc.matchPoint)}` : sc.gamePoint ? `GAME POINT · ${this.teamName(sc.gamePoint)}` : null;
+      const badge = sc.deuce ? 'DEUCE' : sc.matchPoint ? `MATCH POINT · ${this.teamName(sc.matchPoint)}` : sc.gamePoint ? `GAME POINT · ${this.teamName(sc.gamePoint)}` : null;
       this.matchHud.setScore({
         you: 'You',
         them: 'Opponent',
@@ -2304,12 +2381,13 @@ export class Sandbox implements MenuHost {
       const them: SideId = side === 'near' ? 'far' : 'near';
       if (!this.lobby.visible) {
         this.matchHud.showOver(
-          won ? 'SHIPPED TO PROD' : 'INCIDENT REPORT',
+          won ? 'YOU WIN!' : 'MATCH LOST',
           `${this.teamName(sc.winner!)} won ${sc.games[sc.winner!]}–${sc.games[sc.winner === 'near' ? 'far' : 'near']}`,
           sc.history.map((g) => `${g[side]}–${g[them]}`).join('  ·  '),
           c.isHost ? 'Rematch' : null,
           this.offlineDoubles ? 'Back to the title' : 'Back to lobby',
           this.matchStatsList(),
+          c.seat ? this.lastGrade : null,
         );
         if (document.pointerLockElement) document.exitPointerLock();
       }
@@ -2359,7 +2437,7 @@ export class Sandbox implements MenuHost {
 
   /** Called when the local player strikes the ball (dynamic camera reacts). */
   private camOnHit(speed: number) {
-    this.camKick = Math.min(1, speed / 25);
+    this.camKick = this.look.reduceMotion ? 0 : Math.min(1, speed / 25);
   }
 
   private updatePlayCamera(dt: number) {
@@ -2586,6 +2664,7 @@ export class Sandbox implements MenuHost {
     const h = this.container.clientHeight;
     this.renderer.setSize(w, h);
     this.post.setSize(w, h, this.renderer.getPixelRatio());
+    this.ball.setResolution(w, h);
     this.camera.aspect = w / h;
     this.frameAroundMenu();
   }
@@ -2740,6 +2819,7 @@ export class Sandbox implements MenuHost {
     sf.add(this.machine, 'sidespin', -100, 100, 1).name('Sidespin rps').onChange(onMachine);
     sf.add(this.machine, 'corkscrew', -100, 100, 1).name('Corkscrew rps').onChange(onMachine);
     sf.add(this.machine, 'highArc').name('High arc (lob)').onChange(onMachine);
+    sf.add(this.machine, 'serve').name('Serve (bounce own half first)').onChange(onMachine);
     sf.close();
 
     const pf = mf.addFolder('Position & target');

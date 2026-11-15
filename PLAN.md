@@ -58,6 +58,8 @@ There are no hard-coded shots. They come out of how the paddle meets the ball, a
 
 ## Theme: IT professionals
 
+> **Update:** the IT-jargon wording below (call-outs, rubber names, results) has since been replaced in the game by plain table tennis terms; the characters and venues keep the office setting. See the README for the current names.
+
 **Player styles**
 
 | Style | Character | Play |

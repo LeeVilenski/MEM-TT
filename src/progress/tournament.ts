@@ -45,7 +45,7 @@ export const TOURNAMENTS: Tournament[] = [
   {
     id: 'championship',
     name: 'Company Championship',
-    description: 'Every department sends its best. Hard opponents, and an Expert CTO; the final is best of 5.',
+    description: 'Every department sends its best. Hard opponents, and an Expert in the final, which is best of 5.',
     xp: 800,
     achievement: 'championship',
     requires: 'department-cup',
