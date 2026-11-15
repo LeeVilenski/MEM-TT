@@ -22,18 +22,13 @@ export const isStandalone = () =>
   matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches ||
   (navigator as Navigator & { standalone?: boolean }).standalone === true;
 
-export const isIos = () =>
-  /iphone|ipad|ipod/i.test(navigator.userAgent) ||
-  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-
-/** True when there's something useful to show: a native prompt, or iOS instructions. */
-export const canInstall = () => !isStandalone() && (deferred !== null || isIos());
+/** True when the browser offers a native install prompt (Android / desktop Chrome, Edge). */
+export const canInstall = () => !isStandalone() && deferred !== null;
 
 export const onInstallChange = (f: () => void) => listeners.add(f);
 
-/** Returns 'ios' when the caller should show manual steps instead. */
-export async function install(): Promise<'done' | 'dismissed' | 'ios'> {
-  if (!deferred) return 'ios';
+export async function install(): Promise<'done' | 'dismissed' | 'unavailable'> {
+  if (!deferred) return 'unavailable';
   const ev = deferred;
   deferred = null;
   await ev.prompt();

@@ -124,10 +124,8 @@ export class Menu {
     this.el.addEventListener('input', (e) => this.onInput(e));
     this.el.addEventListener('change', (e) => this.onInput(e));
     this.el.addEventListener('keydown', (e) => this.onKeyDown(e));
-    onInstallChange(() => this.screen === 'title' && this.refresh());
+    onInstallChange(() => this.screen === 'settings' && this.refresh());
   }
-
-  private installHelp = false;
 
   get visible() {
     return this.screen !== null;
@@ -224,8 +222,6 @@ export class Menu {
           <button data-a="go-settings" class="secondary">Settings</button>
         </div>
       </div>
-      ${canInstall() ? '<button data-a="install" class="link menu-install">📲 Install app</button>' : ''}
-      ${this.installHelp ? '<p class="menu-install-help">On iPhone/iPad: tap <b>Share</b> <span aria-hidden="true">⬆︎</span> in Safari, then <b>Add to Home Screen</b>.</p>' : ''}
       ${h.devTools ? '<button data-a="inspect" class="link menu-dev">Developer: free camera</button>' : ''}
       <p class="menu-foot">Difficulty: ${esc(this.realismName(h.realism.percent))}</p>`;
   }
@@ -342,6 +338,7 @@ export class Menu {
         )}
         ${this.group('Camera', `<div class="menu-choices">${this.choice('cam', 'dynamic', 'Dynamic', h.camMode === 'dynamic', 'Follows the play (recommended)')}${this.choice('cam', 'close', 'Close', h.camMode === 'close', 'Behind you, more depth')}${this.choice('cam', 'classic', 'Classic', h.camMode === 'classic', 'High and steady, like TV')}</div>`)}
         ${this.group('Graphics quality', `<div class="menu-choices">${quality}</div>${toggle('bloom', 'Glow effects', h.look.bloom, 'Bloom on the ball trail, sparks and lights (High quality only)')}`)}
+        ${canInstall() ? this.group('App', '<div class="menu-choices"><button data-a="install" class="menu-choice">Install app</button></div>') : ''}
         ${this.group('Advanced', toggle('devTools', 'Developer tools', h.devTools, 'Physics tuning, ball machine and every assist. <kbd>`</kbd> toggles it too.'))}
       </div>`;
   }
@@ -427,10 +424,7 @@ export class Menu {
         case 'quick':
           return h.startAiMatch();
         case 'install':
-          void install().then((r) => {
-            this.installHelp = r === 'ios';
-            this.refresh();
-          });
+          void install();
           return;
         case 'start':
           return h.matchSettings.doubles ? h.startDoubles() : h.startAiMatch();
