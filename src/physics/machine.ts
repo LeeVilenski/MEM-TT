@@ -109,3 +109,50 @@ export function solveAim(
   }
   return { elevation: best.elevation, azimuth, ok: best.err < 0.08, landing: best.landing };
 }
+
+/**
+ * A serve's two bounces (the server's half, then the receiver's), or null if it hits the
+ * net, misses either half or never gets there.
+ */
+export function serveBounces(origin: Vec3, shot: Shot, params: PhysicsParams): { first: Vec3; second: Vec3 } | null {
+  const { events } = predict(launchState(origin, shot), params, {
+    maxTime: 3,
+    stop: (e) => e.type === 'floor' || e.type === 'net' || (e.type === 'table' && e.pos.z > 0),
+  });
+  if (events.some((e) => e.type === 'net' || e.type === 'floor')) return null;
+  const tables = events.filter((e): e is Extract<BallEvent, { type: 'table' }> => e.type === 'table');
+  if (tables.length < 2 || tables[0].pos.z >= 0 || tables[1].pos.z <= 0) return null;
+  return { first: tables[0].pos, second: tables[1].pos };
+}
+
+/**
+ * Aim a machine *serve*: launched from behind the far end line, it bounces on the far
+ * half first and then lands on `target` on the near half, as a real serve does. Solves
+ * for the (downward) elevation at the given speed and spin, correcting the azimuth for
+ * sidespin curve. `landing` is the second (receiver's) bounce.
+ */
+export function solveServeAim(origin: Vec3, target: { x: number; z: number }, speed: number, spin: SpinComponents, params: PhysicsParams): AimResult {
+  let azimuth = (Math.atan2(target.x - origin.x, target.z - origin.z) * 180) / Math.PI;
+  let best: { err: number; elevation: number; azimuth: number; landing?: Vec3 } = { err: Infinity, elevation: -12, azimuth };
+  for (let iter = 0; iter < 4; iter++) {
+    let found: { err: number; elevation: number; landing?: Vec3 } = { err: Infinity, elevation: best.elevation };
+    const tryAt = (el: number) => {
+      const b = serveBounces(origin, { speed, elevation: el, azimuth, spin }, params);
+      if (!b) return;
+      const err = Math.abs(b.second.z - target.z);
+      if (err < found.err) found = { err, elevation: el, landing: b.second };
+    };
+    // Coarse scan, then a fine one around the best elevation.
+    for (let el = -50; el <= 20; el += 2) tryAt(el);
+    if (!found.landing) break;
+    const c = found.elevation;
+    for (let el = c - 2; el <= c + 2; el += 0.1) tryAt(el);
+    const landing = found.landing!;
+    const err = Math.hypot(landing.x - target.x, landing.z - target.z);
+    if (err < best.err) best = { err, elevation: found.elevation, azimuth, landing };
+    if (err < 0.02) break;
+    const dist = Math.hypot(target.x - origin.x, target.z - origin.z);
+    azimuth -= ((landing.x - target.x) / dist) * (180 / Math.PI);
+  }
+  return { elevation: best.elevation, azimuth: best.azimuth, ok: best.err < 0.12, landing: best.landing };
+}

@@ -17,6 +17,7 @@ import {
   lerp,
   radToRpm,
   solveAim,
+  solveServeAim,
   spinComponents,
   length,
   v3,
@@ -49,6 +50,8 @@ import { AutoQuality, QUALITY_LEVELS, type QualitySetting } from '../render/qual
 import { Career } from '../progress/profile';
 import { DRILLS, DrillSession, drillUnlocked, type TargetZone } from '../progress/drills';
 import { GRADE_TEXT } from '../game/contact';
+import { GRADE_TEXT as MATCH_GRADE_TEXT, matchGrade, type MatchGrade } from '../game/matchGrade';
+import type { OverGrade } from './hud';
 import { TOUR_STOPS, TourRun, stopUnlocked, stopsWon } from '../progress/tour';
 import { TourScreen } from './tour';
 import { isUnlocked, newlyUnlocked, unlockedKeys, UNLOCKS, type UnlockKind } from '../progress/unlocks';
@@ -94,6 +97,8 @@ interface MachineSettings {
   targetX: number;
   targetZ: number;
   highArc: boolean;
+  /** Serve: bounce on the machine's half first, then on the target. */
+  serve: boolean;
   autoFire: boolean;
   interval: number;
   scatter: number;
@@ -370,6 +375,8 @@ export class Sandbox implements MenuHost {
   /** This match so far, for the end-of-match card. */
   private mstats = { won: 0, played: 0, longest: 0, fastest: 0, aces: 0, perfect: 0, clean: 0, strokes: 0 };
   private lastPhase = '';
+  /** The grade of the match that just ended (null until one does). */
+  private lastGrade: OverGrade | null = null;
   /** Doubles: the ball on our side is my partner's to play (the hit zone turns blue). */
   private partnerTurn = false;
 
@@ -647,6 +654,7 @@ export class Sandbox implements MenuHost {
       targetX: p.target.x,
       targetZ: p.target.z,
       highArc: !!p.highArc,
+      serve: !!p.serve,
       autoFire: this.machine?.autoFire ?? false,
       interval: this.machine?.interval ?? 2.5,
       scatter: this.machine?.scatter ?? 0.15,
@@ -698,7 +706,7 @@ export class Sandbox implements MenuHost {
       z: THREE.MathUtils.clamp(m.targetZ + jitter(), 0.1, TABLE.halfLength - 0.05),
     };
     const origin = this.origin();
-    const aim = solveAim(origin, target, m.speed, this.spin(), this.params, m.highArc);
+    const aim = this.solveMachineAim(origin, target);
     const shot = { speed: m.speed, elevation: aim.elevation, azimuth: aim.azimuth, spin: this.spin() };
     const start = launchState(origin, shot);
 
@@ -734,6 +742,12 @@ export class Sandbox implements MenuHost {
     this.predictionLine.visible = this.settings.showPrediction;
   }
 
+  /** The machine's launch angles for its current settings (a serve bounces on its own half first). */
+  private solveMachineAim(origin: Vec3, target: { x: number; z: number }) {
+    const m = this.machine;
+    return m.serve ? solveServeAim(origin, target, m.speed, this.spin(), this.params) : solveAim(origin, target, m.speed, this.spin(), this.params, m.highArc);
+  }
+
   private aimMachine(elevation: number, azimuth: number) {
     const dir = launchDirection(elevation, azimuth);
     const barrel = this.machineMesh.getObjectByName('barrel')!;
@@ -744,7 +758,7 @@ export class Sandbox implements MenuHost {
     const o = this.origin();
     this.machineMesh.position.set(o.x, o.y, o.z);
     this.targetRing.position.set(this.machine.targetX, TABLE.height + 0.002, this.machine.targetZ);
-    const aim = solveAim(o, { x: this.machine.targetX, z: this.machine.targetZ }, this.machine.speed, this.spin(), this.params, this.machine.highArc);
+    const aim = this.solveMachineAim(o, { x: this.machine.targetX, z: this.machine.targetZ });
     this.aimMachine(aim.elevation, aim.azimuth);
     (this.targetRing.material as THREE.MeshBasicMaterial).color.set(aim.ok ? 0xffd34d : 0xff4d4d);
     this.hud.setAimWarning(aim.ok ? null : 'Target not reachable with this speed/spin — the shot will miss.');
@@ -796,7 +810,8 @@ export class Sandbox implements MenuHost {
         });
         if (r.result === undefined) {
           if (e.side === 'near') r.result = 'IN';
-          else if (r.bounces.length === 1 && e.pos.z < 0) r.result = 'FAULT';
+          // (A machine serve bounces on its own half first: that's the serve, not a fault.)
+          else if (r.bounces.length === 1 && e.pos.z < 0 && !this.machine.serve) r.result = 'FAULT';
         }
         // A second bounce on the near half before the player hit it: missed.
         if (this.playing && this.phase === 'incoming' && e.side === 'near' && r.bounces.filter((b) => b.side === 'near').length >= 2) this.resolveMiss();
@@ -1178,6 +1193,7 @@ export class Sandbox implements MenuHost {
       const won = sc.winner === 'near';
       if (!this.matchRecorded) {
         this.matchRecorded = true;
+        this.gradeMatch(won, ai.style.id, ai.displayName, this.matchSettings.level);
         this.career.recordMatch(won, { aiLevel: this.matchSettings.level, style: this.player.style.id });
         if (this.tournament) return this.reportTournamentMatch(sc.games.near, sc.games.far);
       }
@@ -1185,7 +1201,7 @@ export class Sandbox implements MenuHost {
       const games = sc.history.map((g) => `${g.near}–${g.far}`).join('  ·  ');
       this.matchHud.setPrompt(null);
       this.matchHud.setMeter(null);
-      this.matchHud.showOver(won ? 'SHIPPED TO PROD' : 'INCIDENT REPORT', won ? `You beat ${ai.displayName} ${sc.games.near}–${sc.games.far}` : `${ai.displayName} won ${sc.games.far}–${sc.games.near}`, games, 'Rematch', 'Back to practice', this.matchStatsList());
+      this.matchHud.showOver(won ? 'SHIPPED TO PROD' : 'INCIDENT REPORT', won ? `You beat ${ai.displayName} ${sc.games.near}–${sc.games.far}` : `${ai.displayName} won ${sc.games.far}–${sc.games.near}`, games, 'Rematch', 'Back to practice', this.matchStatsList(), this.lastGrade);
       if (document.pointerLockElement) document.exitPointerLock();
       return;
     }
@@ -1340,7 +1356,7 @@ export class Sandbox implements MenuHost {
     const rep = d.report();
     const faults = [rep.early && `${rep.early} early`, rep.edge && `${rep.edge} off-centre`, rep.overhit && `${rep.overhit} over-hit`, rep.missed && `${rep.missed} missed`].filter(Boolean).join(', ');
     this.menu.banner = `<b>${d.drill.name}</b>: ${d.successes}/${d.drill.balls} <span class="stars">${st}</span> · <b>${d.score.toLocaleString()}</b> pts${d.score > prevBest ? ' <b>(new best!)</b>' : ''} · best combo ×${d.bestCombo}${d.stars === 0 ? ` — need ${d.drill.stars[0]} for a star.` : ''}
-      <div class="menu-coach"><b>Coach:</b> ${rep.clean} clean contact${rep.clean === 1 ? '' : 's'}${faults ? ` · ${faults}` : ''}. ${rep.tip}</div>`;
+      <div class="menu-coach"><b>Coach:</b> ${rep.clean} clean contact${rep.clean === 1 ? '' : 's'}${faults ? ` · ${faults}` : ''}.${rep.breakdown ? ` Returned: ${rep.breakdown}.` : ''} ${rep.tip}</div>`;
     this.menu.show('training');
   }
 
@@ -1397,6 +1413,8 @@ export class Sandbox implements MenuHost {
     if (document.pointerLockElement) document.exitPointerLock();
     const stop = run.stop;
     const score = `${mine}–${theirs}`;
+    const g = this.lastGrade;
+    const gradeLine = g ? ` <span class="grade-chip g-${g.grade}">${g.grade}</span> ${g.text}${g.best ? ' <b>(new best!)</b>' : ''}` : '';
     let banner: string;
     if (state === 'won') {
       this.career.recordTournament(stop.id, stop.xp, stop.achievement);
@@ -1411,6 +1429,7 @@ export class Sandbox implements MenuHost {
       const toFinal = run.group?.phase === 'final' && !played.label.startsWith('Final');
       banner = `${mine > theirs ? '✓' : '✗'} ${played.label}: ${score}.${toFinal ? ' <b>Through to the final!</b>' : ''} Next: <b>${next.label}</b>.`;
     }
+    if (gradeLine) banner += `<div class="tour-grade">Match grade:${gradeLine}</div>`;
     this.endMatch();
     this.openTour(banner);
   }
@@ -1807,6 +1826,7 @@ export class Sandbox implements MenuHost {
   private resetMatchStats() {
     this.mstats = { won: 0, played: 0, longest: 0, fastest: 0, aces: 0, perfect: 0, clean: 0, strokes: 0 };
     this.lastPhase = '';
+    this.lastGrade = null;
   }
 
   private noteMyShot(speed: number, serve: boolean) {
@@ -1837,6 +1857,19 @@ export class Sandbox implements MenuHost {
     if (mine) m.won++;
     if (mine && ace) m.aces++;
     m.longest = Math.max(m.longest, hits);
+  }
+
+  /**
+   * The S/A/B/C grade for the match just finished; records it (best per opponent,
+   * grade badges) and keeps it for the end-of-match card.
+   */
+  private gradeMatch(won: boolean, opponent: string, opponentName: string, aiLevel?: AiLevel) {
+    const m = this.mstats;
+    const { grade } = matchGrade({ strokes: m.strokes, clean: m.clean, perfect: m.perfect, pointsWon: m.won, pointsPlayed: m.played, won });
+    const prev: MatchGrade | undefined = this.career.data.bestGrades[opponent];
+    const best = this.career.recordGrade(opponent, grade, { aiLevel });
+    const note = best ? (prev ? `New best vs ${opponentName} (was ${prev})` : `First grade vs ${opponentName}`) : `Best vs ${opponentName}: ${prev}`;
+    this.lastGrade = { grade, text: MATCH_GRADE_TEXT[grade], note, best };
   }
 
   /** Label/value pairs for the end-of-match card. */
@@ -2213,7 +2246,11 @@ export class Sandbox implements MenuHost {
         break;
       }
       case 'over':
-        if (c.seat && c.score) this.career.recordMatch(c.score.winner === c.side, { online: true, style: this.player.style.id });
+        if (c.seat && c.score) {
+          const won = c.score.winner === c.side;
+          this.gradeMatch(won, this.offlineDoubles ? 'doubles' : 'online', this.offlineDoubles ? 'Doubles' : 'Online', this.offlineDoubles ? this.matchSettings.level : undefined);
+          this.career.recordMatch(won, { online: true, style: this.player.style.id });
+        }
         break;
     }
   }
@@ -2310,6 +2347,7 @@ export class Sandbox implements MenuHost {
           c.isHost ? 'Rematch' : null,
           this.offlineDoubles ? 'Back to the title' : 'Back to lobby',
           this.matchStatsList(),
+          c.seat ? this.lastGrade : null,
         );
         if (document.pointerLockElement) document.exitPointerLock();
       }
@@ -2740,6 +2778,7 @@ export class Sandbox implements MenuHost {
     sf.add(this.machine, 'sidespin', -100, 100, 1).name('Sidespin rps').onChange(onMachine);
     sf.add(this.machine, 'corkscrew', -100, 100, 1).name('Corkscrew rps').onChange(onMachine);
     sf.add(this.machine, 'highArc').name('High arc (lob)').onChange(onMachine);
+    sf.add(this.machine, 'serve').name('Serve (bounce own half first)').onChange(onMachine);
     sf.close();
 
     const pf = mf.addFolder('Position & target');

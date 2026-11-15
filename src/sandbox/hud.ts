@@ -396,6 +396,16 @@ export interface ShotLine {
 }
 
 /** Scoreboard, serve prompt, toss meter, compact shot log and match-over screen. */
+/** The match grade on the end-of-match card. */
+export interface OverGrade {
+  grade: 'S' | 'A' | 'B' | 'C';
+  /** The verdict, e.g. "Production ready". */
+  text: string;
+  /** e.g. "New best vs Ed (was B)". */
+  note: string;
+  best: boolean;
+}
+
 export class MatchHud {
   private board: HTMLDivElement;
   private prompt: HTMLDivElement;
@@ -593,12 +603,15 @@ export class MatchHud {
 
   private overKey = '';
 
-  showOver(title: string, sub: string, games: string, rematch: string | null = 'Rematch', exit = 'Back to practice', stats: [string, string][] = []) {
+  showOver(title: string, sub: string, games: string, rematch: string | null = 'Rematch', exit = 'Back to practice', stats: [string, string][] = [], grade: OverGrade | null = null) {
     // Called every frame while the match is over: only rebuild when something changed.
-    const key = [title, sub, games, rematch, exit, JSON.stringify(stats)].join('|');
+    const key = [title, sub, games, rematch, exit, JSON.stringify(stats), JSON.stringify(grade)].join('|');
     if (this.overKey === key && this.over.style.display === 'flex') return;
     this.overKey = key;
-    this.over.innerHTML = `<div class="mover-card"><div class="mover-title">${title}</div><div class="mover-sub">${sub}</div><div class="mover-games">${games}</div>${stats.length ? `<div class="mover-stats">${stats.map(([k, v]) => `<div><b>${v}</b><span>${k}</span></div>`).join('')}</div>` : ''}
+    const gradeHtml = grade
+      ? `<div class="mover-grade"><div class="grade-letter g-${grade.grade}" aria-label="Match grade ${grade.grade}">${grade.grade}</div><div class="grade-words"><b>${grade.text}</b><span${grade.best ? ' class="best"' : ''}>${grade.note}</span></div></div>`
+      : '';
+    this.over.innerHTML = `<div class="mover-card"><div class="mover-title">${title}</div><div class="mover-sub">${sub}</div><div class="mover-games">${games}</div>${gradeHtml}${stats.length ? `<div class="mover-stats">${stats.map(([k, v]) => `<div><b>${v}</b><span>${k}</span></div>`).join('')}</div>` : ''}
       <div class="mover-buttons">${rematch ? `<button type="button" data-a="rematch">${rematch}</button>` : ''}<button type="button" data-a="exit" class="secondary">${exit}</button></div></div>`;
     this.over.style.display = 'flex';
     this.over.querySelector('[data-a=rematch]')?.addEventListener('click', () => this.onRematch());

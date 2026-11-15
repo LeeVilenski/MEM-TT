@@ -22,6 +22,8 @@ export interface Preset {
   target: { x: number; z: number };
   /** Use the high arc (lobs). */
   highArc?: boolean;
+  /** A serve: bounces on the machine's half first, then lands on `target`. */
+  serve?: boolean;
 }
 
 const s = (top: number, side = 0, cork = 0): SpinComponents => ({ top, side, cork });
@@ -39,5 +41,11 @@ export const PRESETS: Preset[] = [
   { name: 'Banana flick', description: 'Over-the-table flick with side-top', speed: 8.5, spin: s(70, 0, 45), distanceBack: -0.35, height: 0.14, lateral: 0.1, target: { x: 0.4, z: 1.0 } },
   { name: 'Smash', description: 'Kill shot off a high ball', speed: 30, spin: s(15), distanceBack: 0.4, height: 0.75, lateral: 0, target: { x: 0.45, z: 0.95 } },
   { name: 'Lob', description: 'High, deep defensive topspin', speed: 13, spin: s(100, 15), distanceBack: 3.5, height: 0.6, lateral: -0.4, target: { x: 0.1, z: 1.2 }, highArc: true },
+  // Machine serves (struck just behind the far end line, low): the backspin and no-spin
+  // pair are identical apart from the spin, so only the ball itself gives them away.
+  { name: 'Backspin serve', description: 'Short, low, heavy backspin serve', speed: 7, spin: s(-55), distanceBack: 0.15, height: 0.2, lateral: 0.3, target: { x: -0.1, z: 0.42 }, serve: true },
+  { name: 'No-spin serve', description: 'Looks like the backspin serve: no spin at all', speed: 7, spin: s(0), distanceBack: 0.15, height: 0.2, lateral: 0.3, target: { x: -0.1, z: 0.42 }, serve: true },
+  { name: 'Side-back serve', description: 'Short sidespin-backspin serve that kicks sideways', speed: 7, spin: s(-25, 45), distanceBack: 0.15, height: 0.2, lateral: 0.3, target: { x: 0.2, z: 0.45 }, serve: true },
+  { name: 'Fast long serve', description: 'Long, fast topspin serve to the backhand corner', speed: 8, spin: s(45), distanceBack: 0.15, height: 0.2, lateral: 0.3, target: { x: -0.5, z: 1.15 }, serve: true },
   { name: 'Corkscrew', description: 'Gyro spin that kicks sideways on the bounce', speed: 10, spin: s(20, 0, 80), distanceBack: 1.0, height: 0.25, lateral: 0, target: { x: 0.0, z: 1.0 } },
 ];

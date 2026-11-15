@@ -2858,6 +2858,70 @@ body.menu-open .mhud-impact { display: none; }
   letter-spacing: 0.06em;
 }
 
+/* Match grade (S/A/B/C) on the end-of-match card and in tour results. */
+.mover-grade {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin: 14px 0 2px;
+  text-align: left;
+}
+.grade-letter {
+  width: 58px;
+  height: 58px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  font-family: var(--mono);
+  font-weight: 800;
+  font-size: 34px;
+  color: #10141b;
+  animation: grade-in 0.45s cubic-bezier(0.2, 1.6, 0.4, 1) both;
+}
+.grade-words {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.grade-words b {
+  color: #fff;
+  font-size: 16px;
+}
+.grade-words span {
+  font-size: 12px;
+  color: var(--muted);
+}
+.grade-words span.best {
+  color: #ffd166;
+  font-weight: 700;
+}
+.g-S { background: linear-gradient(135deg, #ffe08a, #f5b62e); box-shadow: 0 0 18px rgba(255, 200, 70, 0.55); }
+.g-A { background: #6ee7a8; }
+.g-B { background: #7cc4ff; }
+.g-C { background: #b6bfcc; }
+.grade-chip {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.6em;
+  padding: 0 4px;
+  border-radius: 5px;
+  font-family: var(--mono);
+  font-weight: 800;
+  color: #10141b;
+}
+.tour-grade {
+  margin-top: 6px;
+}
+@keyframes grade-in {
+  0% { transform: scale(0.3); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .grade-letter { animation: none; }
+}
+
 /* ================================================================ theme: cool blue, friendly type */
 
 :root {
@@ -4148,4 +4212,75 @@ body {
   .tw-blurb {
     font-size: 14px;
   }
+}
+
+/* Locker: best match grades. */
+.cs-grades {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.cs-grade {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 4px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+}
+.cs-note {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* World Tour: scouting report on the next opponent. */
+.tw-scout {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(22, 33, 52, 0.95);
+  border: 2px solid #26354d;
+  border-left: 4px solid var(--l);
+  text-align: left;
+}
+.tw-scout-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.tw-scout-head .tw-sub {
+  margin: 0;
+}
+.tw-scout-head b {
+  color: #fff;
+}
+.tw-scout-best {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.tw-scout p {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.tw-scout-line {
+  color: var(--text);
+}
+.tw-scout ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.tw-scout-plan b {
+  color: #ffd166;
+}
+.tw-scout-level {
+  color: var(--muted);
+  font-size: 12px !important;
 }

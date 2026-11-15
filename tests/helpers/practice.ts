@@ -1,4 +1,4 @@
-import { BallSim, DEFAULT_PARAMS, TABLE, TICK_DT, launchState, solveAim, v3, type BallEvent } from '../../src/physics';
+import { BallSim, DEFAULT_PARAMS, TABLE, TICK_DT, launchState, solveAim, solveServeAim, v3, type BallEvent } from '../../src/physics';
 import { IncomingPrediction } from '../../src/game/intercept';
 import { Player } from '../../src/game/player';
 import { classifyShot } from '../../src/game/shots';
@@ -22,7 +22,7 @@ export function playBall(presetName: string, angleAssist: number, flickLead = 2 
   const P = DEFAULT_PARAMS;
   const pr = PRESETS.find((p) => p.name === presetName)!;
   const origin = v3(pr.lateral, TABLE.height + pr.height, -TABLE.halfLength - pr.distanceBack);
-  const aim = solveAim(origin, pr.target, pr.speed, pr.spin, P, pr.highArc);
+  const aim = pr.serve ? solveServeAim(origin, pr.target, pr.speed, pr.spin, P) : solveAim(origin, pr.target, pr.speed, pr.spin, P, pr.highArc);
   const start = launchState(origin, { speed: pr.speed, elevation: aim.elevation, azimuth: aim.azimuth, spin: pr.spin });
   const sim = new BallSim(start, P);
   const pred = new IncomingPrediction(start, P);

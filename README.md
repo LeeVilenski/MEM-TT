@@ -9,6 +9,7 @@
 | Footwork | Random corners | Wide balls to either corner at random |
 | Reading spin | Chop or float? | Heavy chops and no-spin floats that look the same |
 | Reading spin | Sidespin and gyro | Hook loops, corkscrews and banana flicks |
+| Reading spin | Read the serve | Machine serves: heavy backspin and no-spin (identical apart from the spin), side-back and fast long. The coach report breaks your returns down by serve and coaches the one you struggled with |
 | Consistency | On-call shift | 25 balls, multi-ball pace |
 | Timing | Timing trainer | Only clean (GOOD or PERFECT) contacts count |
 
@@ -57,6 +58,7 @@ Progression lives in three places on the title screen: **World Tour** (the caree
 **World Tour** (`src/progress/tour.ts`): a route of seven stops, each at its own venue. Win a stop to travel on to the next.
 - **Knockouts:** lose once and you're out.
 - **Round-robin groups:** you and three opponents each play everyone once (the matches you aren't in are simulated by level); the top two meet in a final.
+- **Scouting report:** before each match the stop shows a card on your next opponent: how they play, a game plan to beat them, what their level means, and your best match grade against them (`src/game/scouting.ts`).
 
 | # | Stop | Venue | Event |
 |---|---|---|---|
@@ -74,7 +76,9 @@ Progression lives in three places on the title screen: **World Tour** (the caree
 - **Rubbers:** Hotfix (Junior), Legacy Code (On-call defence), Air Gap (win the Championship).
 - **Unlock everything** (Unlocks tab) switches gating off for free play. Online lobbies aren't gated.
 
-**Achievements:** 14 badges, including Global Rollout (win every World Tour stop), Clean Code (10 clean contacts in a row), Social Engineering (win a point off a serve the AI misread), Hello World (first win), Zero-day (ace), Marathon Standup (15-hit rally), Low Latency (90 km/h shot), Spin Doctor (7,000 rpm), Skip-level (beat a Hard or Expert AI), Full Stack (win with every style) and IPO (win the Championship).
+**Match grade** (`src/game/matchGrade.ts`): every match against the AI or online ends with a grade on the match card (S, A, B or C) from your clean contacts (50%), PERFECT contacts (15%) and points won (35%); S also needs a win. Your best grade against each opponent is kept and shown in the Locker and on World Tour scouting reports.
+
+**Achievements:** 17 badges, including Production Ready (an S grade), Code Review Passed (A or better against a Hard or Expert AI), Packet Inspector (3 stars in Read the serve), Global Rollout (win every World Tour stop), Clean Code (10 clean contacts in a row), Social Engineering (win a point off a serve the AI misread), Hello World (first win), Zero-day (ace), Marathon Standup (15-hit rally), Low Latency (90 km/h shot), Spin Doctor (7,000 rpm), Skip-level (beat a Hard or Expert AI), Full Stack (win with every style) and IPO (win the Championship).
 
 ### Milestone 7 — mobile
 

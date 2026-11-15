@@ -4,6 +4,8 @@
  * fully testable; the game calls the record* methods as things happen.
  */
 
+import { betterGrade, type MatchGrade } from '../game/matchGrade';
+
 export const CAREER_LEVELS = [
   { title: 'Intern', xp: 0 },
   { title: 'Junior', xp: 150 },
@@ -44,6 +46,8 @@ export interface ProfileData {
   drillScores: Record<string, number>;
   /** Tournament ids won (and how many times). */
   tournaments: Record<string, number>;
+  /** Best match grade per AI opponent (style id), and 'online'. */
+  bestGrades: Record<string, MatchGrade>;
   unlockAll: boolean;
 }
 
@@ -69,6 +73,9 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'world-tour', name: 'Global Rollout', description: 'Win every stop of the World Tour', xp: 300 },
   { id: 'clean-code', name: 'Clean Code', description: '10 clean contacts in a row', xp: 40 },
   { id: 'social-engineering', name: 'Social Engineering', description: 'Win a point with a serve the AI misread', xp: 40 },
+  { id: 'grade-s', name: 'Production Ready', description: 'Earn an S grade in a match', xp: 80 },
+  { id: 'grade-a-hard', name: 'Code Review Passed', description: 'Earn an A or better against a Hard or Expert AI', xp: 60 },
+  { id: 'serve-reader', name: 'Packet Inspector', description: 'Earn 3 stars in Read the serve', xp: 40 },
 ];
 
 export interface Storage {
@@ -119,6 +126,7 @@ function fresh(): ProfileData {
     drills: {},
     drillScores: {},
     tournaments: {},
+    bestGrades: {},
     unlockAll: false,
   };
 }
@@ -257,6 +265,19 @@ export class Career {
     }
   }
 
+  /**
+   * A match grade against `opponent` (an AI style id, or 'online'). Returns true if it
+   * beats your previous best against them.
+   */
+  recordGrade(opponent: string, grade: MatchGrade, ctx: { aiLevel?: string } = {}): boolean {
+    const best = betterGrade(grade, this.data.bestGrades[opponent]);
+    if (best) this.data.bestGrades[opponent] = grade;
+    if (grade === 'S') this.award('grade-s');
+    if ((grade === 'S' || grade === 'A') && (ctx.aiLevel === 'hard' || ctx.aiLevel === 'expert')) this.award('grade-a-hard');
+    this.save();
+    return best;
+  }
+
   recordPractice(made: boolean) {
     const s = this.data.stats;
     s.practiceAttempts++;
@@ -274,6 +295,7 @@ export class Career {
       this.addXp((stars - prev) * 40, 'Drill');
     }
     if (allDrillIds.every((d) => (this.data.drills[d] ?? 0) >= 3)) this.award('drills');
+    if (id === 'serve-read' && stars >= 3) this.award('serve-reader');
     this.save();
   }
 

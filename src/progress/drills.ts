@@ -66,6 +66,11 @@ export interface Drill {
   target?: TargetZone;
   /** Successes needed for 1, 2 and 3 stars. */
   stars: [number, number, number];
+  /**
+   * Per-preset coaching: the coach report breaks the results down by preset and gives
+   * the tip for the one you struggled with most.
+   */
+  presetTips?: Record<string, string>;
 }
 
 const isTopspin = (r: DrillReturn) => r.top > 15;
@@ -193,6 +198,26 @@ export const DRILLS: Drill[] = [
     stars: [4, 6, 8],
   },
   {
+    id: 'serve-read',
+    name: 'Read the serve',
+    category: 'Reading spin',
+    requires: 'read-spin',
+    description:
+      "The machine serves: heavy backspin and no-spin (they come out looking the same), side-back and the odd fast long one. Watch the ball's logo and how it comes off the first bounce, then return it onto the table.",
+    presets: ['Backspin serve', 'No-spin serve', 'Backspin serve', 'Side-back serve', 'No-spin serve', 'Fast long serve'],
+    feed: 'random',
+    feedDelay: 1.1,
+    balls: 12,
+    goal: 'Return the serve onto the table',
+    stars: [5, 8, 10],
+    presetTips: {
+      'Backspin serve': 'Heavy backspin drags the ball down: open the face and push under it, or lift it with an upward brush.',
+      'No-spin serve': "The no-spin serve floats: if you push it like backspin it pops up or goes long. Keep the face flatter and just guide it back.",
+      'Side-back serve': 'The side-back serve kicks sideways off the bounce: aim against the curve (the other way) and keep the face a little open.',
+      'Fast long serve': 'The fast long serve rushes you: step back, start the swing early and block or drive it with a closed face.',
+    },
+  },
+  {
     id: 'call-shot',
     name: 'Call your shot',
     category: 'Placement',
@@ -247,6 +272,8 @@ export interface CoachReport {
   /** Balls not touched at all. */
   missed: number;
   tip: string;
+  /** Per-preset results, e.g. "Backspin 3/4 · No-spin 1/3" (drills with presetTips). */
+  breakdown?: string;
 }
 
 export class DrillSession {
@@ -261,6 +288,8 @@ export class DrillSession {
   /** The ball in play (its called side, for the check). */
   ball: DrillBall | null = null;
   private grades: (ContactGrade | 'MISSED')[] = [];
+  /** Preset and outcome of each resolved ball, for the per-preset breakdown. */
+  private results: { preset: string; ok: boolean }[] = [];
 
   constructor(
     readonly drill: Drill,
@@ -293,6 +322,7 @@ export class DrillSession {
     if (this.done) return false;
     const ok = r.result === 'IN' && (this.drill.check ? this.drill.check(r, this.ball ?? { preset: '' }) : true);
     this.log.push(ok);
+    this.results.push({ preset: this.ball?.preset ?? '', ok });
     this.grades.push(r.result === 'MISSED' && !r.grade ? 'MISSED' : (r.grade ?? 'GOOD'));
     if (ok) {
       this.successes++;
@@ -314,7 +344,25 @@ export class DrillSession {
     else if (worst === r.early) tip = "You're swinging early: start the swipe as the ball reaches the ring, not before.";
     else if (worst === r.edge) tip = 'Line the bat up first: put it on the ring, then swipe through the ball.';
     else tip = 'Ease off: a swipe much harder than needed adds risk, not pace.';
-    return { ...r, tip };
+    const per = this.presetResults();
+    if (!per) return { ...r, tip };
+    const breakdown = per.map((p) => `${p.preset.replace(/ serve$/, '')} ${p.made}/${p.fed}`).join(' · ');
+    // The kind you returned least often (with at least one miss) gets the tip.
+    const weakest = per.filter((p) => p.made < p.fed).sort((a, b) => a.made / a.fed - b.made / b.fed || b.fed - a.fed)[0];
+    const presetTip = weakest && this.drill.presetTips?.[weakest.preset];
+    return { ...r, tip: presetTip ?? tip, breakdown };
+  }
+
+  /** Successes per preset, in the drill's preset order (null for drills without presetTips). */
+  presetResults(): { preset: string; made: number; fed: number }[] | null {
+    if (!this.drill.presetTips) return null;
+    const order = [...new Set(this.drill.presets)];
+    return order
+      .map((preset) => {
+        const rs = this.results.filter((x) => x.preset === preset);
+        return { preset, made: rs.filter((x) => x.ok).length, fed: rs.length };
+      })
+      .filter((p) => p.fed > 0);
   }
 
   get stars(): number {

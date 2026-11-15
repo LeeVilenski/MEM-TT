@@ -79,7 +79,8 @@ export class CareerScreen {
         ${row('Practice returns', `${s.practiceReturns} / ${s.practiceAttempts} (${pct(s.practiceReturns, s.practiceAttempts)})`)}
         ${row('AI beaten', Object.entries(s.aiWins).map(([k, v]) => `${AI_LEVELS[k as keyof typeof AI_LEVELS]?.name ?? k} ×${v}`).join(', ') || '—')}
         ${row('Favourite shots', fav || '—')}</div>
-      </div>`;
+      </div>
+      ${this.gradesHtml()}`;
     } else {
       const unl = UNLOCKS.map((u) => {
         const ok = p.unlockAll || u.test(p, lvl);
@@ -102,6 +103,19 @@ export class CareerScreen {
       <div class="cs-tabs">${tabs.map(([t, l]) => `<button data-tab="${t}" class="${t === this.tab ? 'on' : ''}">${l}</button>`).join('')}</div>
       <div class="cs-body">${body}</div>
     </div>`;
+  }
+
+  /** Best match grade per opponent. */
+  private gradesHtml(): string {
+    const g = this.career.data.bestGrades;
+    const ids = Object.keys(g);
+    if (!ids.length) return `<div class="cs-h">Best match grades</div><div class="cs-note">Finish a match to get your first grade (S, A, B or C, from clean contacts and points won).</div>`;
+    const name = (id: string) => (id === 'online' ? 'Online' : id === 'doubles' ? 'Doubles vs AI' : (STYLES[id as keyof typeof STYLES]?.character ?? id));
+    const chips = ids
+      .sort((a, b) => name(a).localeCompare(name(b)))
+      .map((id) => `<div class="cs-grade"><span class="grade-chip g-${g[id]}">${g[id]}</span> ${esc(name(id))}</div>`)
+      .join('');
+    return `<div class="cs-h">Best match grades</div><div class="cs-grades">${chips}</div>`;
   }
 
   private onClick(e: Event) {
