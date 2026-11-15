@@ -302,7 +302,7 @@ export class AiPlayer {
   planServe(now: number): { hand: Vec3; tossVy: number } {
     this.body = { ...READY, z: TABLE.halfLength + 0.65 };
     // Doubles: serve from the right half (+x locally) so the ball can go diagonally.
-    const handX = this.doubles ? 0.25 + this.rng() * 0.3 : this.body.x + 0.3 + (this.rng() - 0.5) * 0.3;
+    const handX = this.doubles ? 0.25 + this.rng() * 0.3 : this.body.x + this.hand * 0.3 + (this.rng() - 0.5) * 0.3;
     const hand = v3(handX, TABLE.height + 0.06, TABLE.halfLength + 0.15);
     const tossHeight = 0.3 + this.rng() * 0.35;
     const tossVy = Math.sqrt(2 * GRAVITY * tossHeight);
@@ -445,10 +445,10 @@ export class AiPlayer {
     // Footwork toward a position where the contact point is at a comfortable offset.
     let target = this.ready;
     if (plan && now >= this.moveFrom) {
-      const fh = plan.pos.x >= this.body.x - 0.1;
+      const fh = (plan.pos.x - this.body.x) * this.hand >= -0.1;
       // Over the table (a short ball) the body steps right in to the end line and leans.
       const over = plan.pos.z < TABLE.halfLength;
-      target = { x: plan.pos.x + (fh ? -0.4 : 0.3) * (over ? 0.6 : 1), z: Math.max(over ? MIN_BODY_Z : TABLE.halfLength + 0.15, plan.pos.z + ARM) };
+      target = { x: plan.pos.x + this.hand * (fh ? -0.4 : 0.3) * (over ? 0.6 : 1), z: Math.max(over ? MIN_BODY_Z : TABLE.halfLength + 0.15, plan.pos.z + ARM) };
     }
     const step = p.moveSpeed * (this.style.personality?.mobility ?? 1) * dt;
     const move = (from: number, to: number) => from + Math.max(-step, Math.min(step, to - from));
@@ -462,7 +462,7 @@ export class AiPlayer {
     const goal =
       plan && now >= this.moveFrom
         ? v3(plan.pos.x - plan.vel.x * SWING_TIME, plan.pos.y - plan.vel.y * SWING_TIME, plan.pos.z - plan.vel.z * SWING_TIME)
-        : v3(this.body.x + 0.3, TABLE.height + 0.25, this.body.z - ARM);
+        : v3(this.body.x + this.hand * 0.3, TABLE.height + 0.25, this.body.z - ARM);
     const cur = this.pose.pos;
     const d = v3(goal.x - cur.x, goal.y - cur.y, goal.z - cur.z);
     const dist = length(d);
@@ -510,6 +510,16 @@ export class AiPlayer {
         return mapPose(this.side, { pos: lerp(a.pos, b.pos, t), normal: normalize(lerp(a.normal, b.normal, t)), vel: b.vel });
       },
     };
+  }
+
+  /** Bat hand in its own frame: +1 right-handed (forehand at +x), −1 left-handed. */
+  private get hand() {
+    return this.style.leftHanded ? -1 : 1;
+  }
+
+  /** Which wing the bat is on: forehand on the bat-hand side of the body. */
+  get wing(): 'forehand' | 'backhand' {
+    return (this.pose.pos.x - this.body.x) * this.hand >= 0 ? 'forehand' : 'backhand';
   }
 
   /** World-frame pose and body, for rendering. */

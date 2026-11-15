@@ -58,6 +58,8 @@ export interface PlayStyle {
   ai: Partial<Record<StyleStroke, number>>;
   /** AI: playing personality. */
   personality?: Personality;
+  /** Holds the bat in the left hand (forehand on their left). */
+  leftHanded?: boolean;
 }
 
 export const STYLES: Record<StyleId, PlayStyle> = {
@@ -169,6 +171,7 @@ export const STYLES: Record<StyleId, PlayStyle> = {
     reach: 1.05,
     footwork: 0.75,
     distance: 0.3,
+    leftHanded: true,
     rubbers: { forehand: RUBBERS.inverted, backhand: RUBBERS.inverted },
     ai: { block: 2, drive: 1.8, flick: 1.6, push: 1.2, loop: 0.8, smash: 0.8, chop: 0.05, 'serve-short': 2, 'serve-side': 1.5, 'serve-long': 0.8 },
     // Close to the table she takes the ball early and works the angles; in the chair she

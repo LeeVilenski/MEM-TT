@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { StyleId } from '../game/styles';
+import { STYLES, type StyleId } from '../game/styles';
 
 /**
  * Characters built from smooth primitives: a tapered torso, jointed arms and legs,
@@ -421,6 +421,8 @@ export class Avatar {
   private firstPerson = false;
   /** Seated in a wheelchair (lower body, legs on the footplate, wheels that roll). */
   private seated = false;
+  /** Bat hand: +1 right (local +x), −1 left. */
+  private batHand: 1 | -1 = 1;
   /** Chair, legs and hips: turns (yaws) as she wheels about, under the upper body. */
   private chair = new THREE.Group();
   /** Rear wheels, left then right: spin group (rolls) and camber group (the push rim's frame). */
@@ -438,6 +440,7 @@ export class Avatar {
 
   constructor(style: StyleId, opacity = 1) {
     const look = LOOKS[style];
+    this.batHand = STYLES[style].leftHanded ? -1 : 1;
     const solid = opacity >= 1;
     const cache = new Map<number, THREE.MeshStandardMaterial>();
     const mat = (c: number) => {
@@ -749,7 +752,9 @@ export class Avatar {
     this.group.position.set(body.x, 0, body.z);
     this.group.updateMatrixWorld();
     const local = this.group.worldToLocal(hand.clone());
-    const side = local.x >= 0 ? 1 : -1;
+    // The bat stays in one hand (right is +x: the character faces local −z): backhands
+    // are played across the body rather than swapping the bat to the other hand.
+    const side = this.batHand;
     this.lastFreeSide = -side;
     this.animate(dt, now, body, local, side);
     this.group.updateMatrixWorld(true);
@@ -809,8 +814,11 @@ export class Avatar {
     const l1 = UPPER * stretch;
     const l2 = FORE * stretch;
     const dd = Math.min(dist, l1 + l2 - 1e-4);
-    // Elbow bends outward, down and a little back.
-    const pole = new THREE.Vector3(side * 0.7, -1, 0.35);
+    // Elbow bends outward, down and a little back; reaching across the body for a
+    // backhand, it comes round in front of the chest instead.
+    const across = clamp((side * (shoulderLocal.x - t.x) - 0.05) / 0.35, 0, 1);
+    const ac = across * across * (3 - 2 * across);
+    const pole = new THREE.Vector3(side * (0.7 - 0.4 * ac), -1 + 0.5 * ac, 0.35 - 1.35 * ac);
     pole.addScaledVector(dir, -pole.dot(dir));
     if (pole.lengthSq() < 1e-6) pole.set(side, 0, 0);
     pole.normalize();
@@ -855,6 +863,28 @@ export class Avatar {
   private reachLean = 0;
   private swingVel = 0;
   private reaction: { kind: Reaction; t: number } | null = null;
+  /** Velocities for the critically damped springs below, by name. */
+  private springVel: Record<string, number> = {};
+
+  /**
+   * Critically damped spring toward `target` (natural frequency `w`, rad/s): eases in
+   * and out instead of snapping off at full speed the moment the target moves.
+   */
+  private spring(key: 'twist' | 'lean' | 'sideLean' | 'reachLean' | 'chairYaw', target: number, w: number, dt: number) {
+    const x = this[key];
+    let v = this.springVel[key] ?? 0;
+    if (dt <= 0) return x;
+    // Sub-step so a long frame stays stable.
+    const n = Math.ceil(dt / (1 / 120));
+    const h = dt / n;
+    let y = x;
+    for (let i = 0; i < n; i++) {
+      v += (w * w * (target - y) - 2 * w * v) * h;
+      y += v * h;
+    }
+    this.springVel[key] = v;
+    return y;
+  }
 
   /** Play a short reaction to a point: a jump and fist pump, or a slump. */
   react(kind: Reaction) {
@@ -886,18 +916,19 @@ export class Avatar {
     this.lastHand = hand.clone();
 
     // Turn toward the paddle side and into the swing; lean over low or far-forward balls.
-    const twistTarget = clamp(-hand.x * 0.55 - this.swingVel * 0.06, -0.7, 0.7);
-    this.twist = approach(this.twist, twistTarget, 10, dt);
+    // Backhands (bat across the body) turn the bat shoulder further round.
+    const twistTarget = clamp(-hand.x * (hand.x * side < 0 ? 0.85 : 0.55) - this.swingVel * 0.05, -0.75, 0.75);
+    this.twist = this.spring('twist', twistTarget, 11, dt);
     const reachDown = clamp((1.15 - drop0 - hand.y) * 0.5, 0, 0.3);
     const reachForward = clamp((-hand.z - 0.3) * 0.25, 0, 0.15);
-    this.lean = approach(this.lean, 0.1 + reachDown + reachForward, 8, dt);
+    this.lean = this.spring('lean', 0.1 + reachDown + reachForward, 9, dt);
 
     // Reaching for a ball beyond the arm: bend sideways toward it and lean in.
     const sx = side * this.shoulderX;
     const far = Math.max(0, Math.hypot(hand.x - sx, hand.y - (SHOULDER_Y - drop0), hand.z) - COMFORT);
     const sideways = Math.min(1, Math.abs(hand.x - sx) / Math.max(0.01, Math.hypot(hand.x - sx, hand.z)));
-    this.sideLean = approach(this.sideLean, -Math.sign(hand.x - sx || 1) * clamp(far * 1.5 * sideways, 0, 0.5), 18, dt);
-    this.reachLean = approach(this.reachLean, clamp(far * 1.1 * (1 - sideways * 0.6), 0, 0.35), 18, dt);
+    this.sideLean = this.spring('sideLean', -Math.sign(hand.x - sx || 1) * clamp(far * 1.5 * sideways, 0, 0.5), 12, dt);
+    this.reachLean = this.spring('reachLean', clamp(far * 1.1 * (1 - sideways * 0.6), 0, 0.35), 12, dt);
 
     // Ready stance: knees bent, a light bounce on the toes.
     const bounce = Math.sin(time * Math.PI * 2 * 1.4) * (1 - this.stride * 2);
@@ -990,12 +1021,12 @@ export class Avatar {
     const wz = (body.z - prev.z) / dt;
     const lx = wx * Math.cos(ry) - wz * Math.sin(ry);
     const lz = wx * Math.sin(ry) + wz * Math.cos(ry);
-    this.vel.x = approach(this.vel.x, lx, 14, dt);
-    this.vel.z = approach(this.vel.z, lz, 14, dt);
+    this.vel.x = approach(this.vel.x, lx, 10, dt);
+    this.vel.z = approach(this.vel.z, lz, 10, dt);
     // Heading: swing the footplate toward the side she's wheeling to.
     const yawTarget = clamp(-this.vel.x * 0.42, -0.6, 0.6);
     const yaw0 = this.chairYaw;
-    this.chairYaw = approach(this.chairYaw, yawTarget, 5, dt);
+    this.chairYaw = this.spring('chairYaw', yawTarget, 6, dt);
     const omega = (this.chairYaw - yaw0) / dt;
     this.chair.rotation.y = this.chairYaw;
     // Velocity in the chair's own frame: forward drive along its heading.

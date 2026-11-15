@@ -65,4 +65,15 @@ describe('Bryony: wheelchair player', () => {
     // Competitive, not a pushover: she wins a fair share of points.
     expect(myPoints / points).toBeGreaterThan(0.25);
   }, 120000);
+
+  it('is left-handed: the bat waits on her left, and that is her forehand', () => {
+    expect(STYLES.wheelchair.leftHanded).toBe(true);
+    for (const [style, sign] of [['wheelchair', -1], ['allround', 1]] as const) {
+      const ai = new AiPlayer('near', AI_LEVELS.medium, P, mulberry32(2));
+      ai.setStyle(STYLES[style]);
+      for (let t = 0; t < 1; t += 1 / 60) ai.update(1 / 60, t);
+      expect(Math.sign(ai.worldPose.pos.x - ai.worldBody.x)).toBe(sign);
+      expect(ai.wing).toBe('forehand');
+    }
+  });
 });
