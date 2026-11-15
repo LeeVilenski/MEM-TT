@@ -35,6 +35,8 @@ interface Look {
   build?: number;
   cap?: { color: number; badge?: number };
   beard?: number;
+  /** Rectangular glasses frames, by colour. */
+  glasses?: number;
   /** A watch on the free wrist. */
   watch?: number;
   /** Something held in the free hand (a water bottle), by colour. */
@@ -153,6 +155,30 @@ const LOOKS: Record<StyleId, Look> = {
     build: 0.92,
     cap: { color: 0x2f5bd3, badge: 0xf3f4f6 },
     watch: 0x111111,
+  },
+  // Dan: dark hair, full dark beard, dark rectangular glasses, grey v-neck jumper.
+  pusher: {
+    shirt: 0x8e959c,
+    legs: { kind: 'trousers', color: 0x2a2d33 },
+    skin: 0xeec4a6,
+    hair: 0x2e2119,
+    beard: 0x2a1d15,
+    glasses: 0x1a1a1a,
+    shoes: 0x1f2937,
+    height: 1.0,
+    build: 1.12,
+    accessory: (g, m, t) => {
+      // V-neck: a darker grey wedge at the collar, with a pale undershirt showing.
+      const v = new THREE.Mesh(new THREE.CircleGeometry(0.06, 3), m(0x6b7178));
+      v.position.set(0, 1.42, t.front(1.42) - 0.004);
+      v.rotation.set(0, Math.PI, -Math.PI / 2);
+      v.scale.set(1.3, 0.8, 1);
+      const under = new THREE.Mesh(new THREE.CircleGeometry(0.045, 3), m(0xd4d4d8));
+      under.position.set(0, 1.43, t.front(1.43) - 0.005);
+      under.rotation.set(0, Math.PI, -Math.PI / 2);
+      under.scale.set(1.3, 0.8, 1);
+      g.add(v, under);
+    },
   },
 };
 
@@ -408,6 +434,21 @@ export class Avatar {
     if (look.beard !== undefined) {
       const beard = add(new THREE.SphereGeometry(0.084, 18, 10, 0, Math.PI * 2, Math.PI / 2.1, Math.PI / 2.4), look.beard, 0, HY - 0.04, -0.016);
       beard.scale.set(0.98, 0.9, 1.03);
+    }
+    if (look.glasses !== undefined) {
+      const c = look.glasses;
+      const z = -0.101;
+      for (const s of [-1, 1]) {
+        const x = s * 0.036;
+        const y = HY + 0.012;
+        add(new THREE.BoxGeometry(0.044, 0.005, 0.004), c, x, y + 0.014, z);
+        add(new THREE.BoxGeometry(0.044, 0.004, 0.004), c, x, y - 0.013, z);
+        add(new THREE.BoxGeometry(0.005, 0.03, 0.004), c, x - 0.0215, y, z);
+        add(new THREE.BoxGeometry(0.005, 0.03, 0.004), c, x + 0.0215, y, z);
+        // Arm back to the ear.
+        add(new THREE.BoxGeometry(0.004, 0.004, 0.1), c, s * 0.091, y + 0.012, z + 0.05);
+      }
+      add(new THREE.BoxGeometry(0.018, 0.004, 0.004), c, 0, HY + 0.02, z);
     }
     if (look.cap) {
       const crown = add(new THREE.SphereGeometry(0.108, 22, 12, 0, Math.PI * 2, 0, Math.PI / 2), look.cap.color, 0, HY + 0.035, 0.004);

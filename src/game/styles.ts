@@ -1,11 +1,11 @@
 import { RUBBERS, type Rubber } from '../physics';
 
 /**
- * Player styles: the characters (Lee, Ryan, Ed, Will and a Sysadmin), each with an IT job. A style changes handling (not the
+ * Player styles: the characters (Lee, Ryan, Ed, Will, Dan and a Sysadmin), each with an IT job. A style changes handling (not the
  * physics): swing power, reach, footwork speed, where you stand, and your default
  * rubbers. For the AI it also sets stroke preferences and playing distance.
  */
-export type StyleId = 'allround' | 'looper' | 'chopper' | 'blocker' | 'penhold';
+export type StyleId = 'allround' | 'looper' | 'chopper' | 'blocker' | 'penhold' | 'pusher';
 
 /** AI stroke kinds that styles can weight (see ai.ts), serves included. */
 export type StyleStroke = 'loop' | 'drive' | 'push' | 'block' | 'smash' | 'flick' | 'chop' | 'serve-short' | 'serve-long' | 'serve-side';
@@ -123,6 +123,20 @@ export const STYLES: Record<StyleId, PlayStyle> = {
     rubbers: { forehand: RUBBERS.inverted, backhand: RUBBERS.inverted },
     ai: { loop: 2, smash: 2, flick: 1.3, drive: 1, chop: 0.2, 'serve-side': 4, 'serve-short': 2.5, 'serve-long': 0.3 },
     personality: { slice: 0.55, spin: 1.5, smashHeight: 0.3, smashAppetite: 1.8, smashError: 2.4 },
+  },
+  pusher: {
+    id: 'pusher',
+    character: 'Dan',
+    role: 'Dan',
+    label: 'Pusher',
+    description: 'Pushes everything back low with backspin and waits for you to make the mistake.',
+    power: 0.9,
+    reach: 1.05,
+    footwork: 1.05,
+    distance: 0.5,
+    rubbers: { forehand: RUBBERS.inverted, backhand: RUBBERS.inverted },
+    ai: { push: 4, chop: 1.6, block: 1.4, loop: 0.5, drive: 0.4, smash: 0.3, flick: 0.4, 'serve-short': 3, 'serve-side': 1, 'serve-long': 0.3 },
+    personality: { slice: 0.85, placement: 0.6, smashHeight: 0.6, smashAppetite: 0.4 },
   },
 };
 
