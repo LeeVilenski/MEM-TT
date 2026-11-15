@@ -5,6 +5,7 @@ import { TOURNAMENTS, TournamentRun, tournamentUnlocked } from '../src/progress/
 import { isUnlocked, newlyUnlocked, unlockedKeys } from '../src/progress/unlocks';
 import { TOUR_STOPS, TourRun, stopUnlocked, stopsWon } from '../src/progress/tour';
 import { mulberry32 } from './helpers/rng';
+import { STYLES } from '../src/game/styles';
 import { playBall } from './helpers/practice';
 
 function memoryStorage(initial: string | null = null): Storage & { value: string | null } {
@@ -202,7 +203,8 @@ describe('World Tour', () => {
 
   it('a knockout stop advances on wins and ends on a loss', () => {
     const run = new TourRun(TOUR_STOPS[0]);
-    expect(run.current?.label).toMatch(/Round 1/);
+    // Labels name the opponent's character, not a team.
+    expect(run.current?.label).toBe('Round 1 vs Lee');
     expect(run.current?.venue).toBe('mem');
     expect(run.report(1, 0)).toBe('playing');
     expect(run.report(0, 1)).toBe('eliminated');
@@ -215,7 +217,7 @@ describe('World Tour', () => {
     const seen = new Set<string>();
     for (let i = 0; i < 3; i++) {
       const f = run.current!;
-      expect(f.label).toMatch(/Group match/);
+      expect(f.label).toBe(`Group match ${i + 1} vs ${STYLES[f.style].character}`);
       seen.add(f.style);
       expect(run.report(1, 0)).toBe('playing');
     }

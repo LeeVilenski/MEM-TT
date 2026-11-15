@@ -1384,7 +1384,7 @@ export class Sandbox implements MenuHost {
     this.setVenue(r.venue); // tour stops may use venues you haven't unlocked yet
     this.startMatch();
     this.tournament = keep; // startMatch clears ongoing modes; keep the run
-    this.hud.flash(r.label.toUpperCase(), `${STYLES[r.style].character} · ${AI_LEVELS[r.level].name} · best of ${r.bestOf}`);
+    this.hud.flash(r.label.toUpperCase(), `${AI_LEVELS[r.level].name} · best of ${r.bestOf}`);
   }
 
   private reportTournamentMatch(mine: number, theirs: number) {

@@ -1,7 +1,7 @@
 import type { AiLevel } from '../game/ai';
-import type { StyleId } from '../game/styles';
+import { STYLES, type StyleId } from '../game/styles';
 import type { VenueId } from '../render/venues';
-import { TOURNAMENTS, TournamentRun, type Round, type Tournament } from './tournament';
+import { TOURNAMENTS, TournamentRun, roundLabel, type Round, type Tournament } from './tournament';
 
 /**
  * World Tour: a route of stops, starting at MEM HQ, each at its own venue and with its own
@@ -10,8 +10,8 @@ import { TOURNAMENTS, TournamentRun, type Round, type Tournament } from './tourn
  * Pure logic; the random source (for the AI-vs-AI group matches) is injectable for tests.
  */
 
+/** A group opponent: named after their character. */
 export interface GroupOpponent {
-  name: string;
   style: StyleId;
   level: AiLevel;
 }
@@ -67,9 +67,9 @@ export const TOUR_STOPS: TourStop[] = [
     blurb: 'A round-robin between sprint teams. Play everyone once; the top two meet in a best-of-3 final.',
     xp: 350,
     opponents: [
-      { name: 'Dan (QA)', style: 'pusher', level: 'easy' },
-      { name: 'Ryan (Frontend)', style: 'looper', level: 'medium' },
-      { name: 'Lee (Helpdesk)', style: 'allround', level: 'easy' },
+      { style: 'pusher', level: 'easy' },
+      { style: 'looper', level: 'medium' },
+      { style: 'allround', level: 'easy' },
     ],
     bestOf: 1,
     finalBestOf: 3,
@@ -83,9 +83,9 @@ export const TOUR_STOPS: TourStop[] = [
     blurb: 'Three rounds in the cold aisle against the infrastructure teams. The final is best of 3.',
     xp: 400,
     rounds: [
-      { name: 'Round 1 vs Storage', level: 'medium', style: 'chopper', bestOf: 1, venue: 'server' },
-      { name: 'Semi-final vs Networking', level: 'medium', style: 'penhold', bestOf: 1, venue: 'server' },
-      { name: 'Final vs SRE', level: 'medium', style: 'blocker', bestOf: 3, venue: 'server' },
+      { name: 'Round 1', level: 'medium', style: 'chopper', bestOf: 1, venue: 'server' },
+      { name: 'Semi-final', level: 'medium', style: 'penhold', bestOf: 1, venue: 'server' },
+      { name: 'Final', level: 'medium', style: 'blocker', bestOf: 3, venue: 'server' },
     ],
   },
   {
@@ -97,9 +97,9 @@ export const TOUR_STOPS: TourStop[] = [
     blurb: 'Out of the office: concrete tables in the park, a round-robin group, then a best-of-3 final.',
     xp: 500,
     opponents: [
-      { name: 'Will (Network)', style: 'penhold', level: 'medium' },
-      { name: 'Ed (Security)', style: 'blocker', level: 'hard' },
-      { name: 'The Sysadmin', style: 'chopper', level: 'medium' },
+      { style: 'penhold', level: 'medium' },
+      { style: 'blocker', level: 'hard' },
+      { style: 'chopper', level: 'medium' },
     ],
     bestOf: 1,
     finalBestOf: 3,
@@ -113,9 +113,9 @@ export const TOUR_STOPS: TourStop[] = [
     blurb: 'The executives clear the table for a knockout. Hard opponents, every match best of 3.',
     xp: 600,
     rounds: [
-      { name: 'Quarter-final vs Finance', level: 'medium', style: 'pusher', bestOf: 3, venue: 'conference' },
-      { name: 'Semi-final vs Legal', level: 'hard', style: 'allround', bestOf: 3, venue: 'conference' },
-      { name: 'Final vs the COO', level: 'hard', style: 'looper', bestOf: 3, venue: 'conference' },
+      { name: 'Quarter-final', level: 'medium', style: 'pusher', bestOf: 3, venue: 'conference' },
+      { name: 'Semi-final', level: 'hard', style: 'allround', bestOf: 3, venue: 'conference' },
+      { name: 'Final', level: 'hard', style: 'looper', bestOf: 3, venue: 'conference' },
     ],
   },
   {
@@ -127,9 +127,9 @@ export const TOUR_STOPS: TourStop[] = [
     blurb: 'Sand, sea breeze and a hard group. Best of 3 in the group; the final is best of 5.',
     xp: 700,
     opponents: [
-      { name: 'Ryan (Platform)', style: 'looper', level: 'hard' },
-      { name: 'Will (Red Team)', style: 'penhold', level: 'hard' },
-      { name: 'Dan (Data)', style: 'pusher', level: 'hard' },
+      { style: 'looper', level: 'hard' },
+      { style: 'penhold', level: 'hard' },
+      { style: 'pusher', level: 'hard' },
     ],
     bestOf: 3,
     finalBestOf: 5,
@@ -208,7 +208,7 @@ export class GroupRun {
     readonly stop: GroupStop,
     private rng: () => number = Math.random,
   ) {
-    this.entries = [{ id: 'you', name: 'You', you: true }, ...stop.opponents.map((o, i) => ({ id: `o${i}`, name: o.name, style: o.style, level: o.level }))];
+    this.entries = [{ id: 'you', name: 'You', you: true }, ...stop.opponents.map((o, i) => ({ id: `o${i}`, name: STYLES[o.style].character, style: o.style, level: o.level }))];
   }
 
   /** Who you play next (null when it's over). */
@@ -278,7 +278,7 @@ export class GroupRun {
 
 /** The next match to play at a stop. */
 export interface Fixture {
-  /** e.g. "Semi-final vs Legal" or "Group match 2 vs Ed (Security)". */
+  /** e.g. "Semi-final vs Ed" or "Group match 2 vs Will": the stage and the character. */
   label: string;
   style: StyleId;
   level: AiLevel;
@@ -311,7 +311,7 @@ export class TourRun {
   get current(): Fixture | null {
     if (this.knockout) {
       const r = this.knockout.current;
-      return r && { label: r.name, style: r.style, level: r.level, bestOf: r.bestOf, venue: r.venue };
+      return r && { label: roundLabel(r), style: r.style, level: r.level, bestOf: r.bestOf, venue: r.venue };
     }
     const g = this.group!;
     const o = g.opponent;

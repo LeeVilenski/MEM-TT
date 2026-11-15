@@ -1,6 +1,6 @@
 import { CAREER_LEVELS, type Career } from '../progress/profile';
+import { roundLabel } from '../progress/tournament';
 import { TOUR_STOPS, stopUnlocked, stopsWon, type TourRun, type TourStop } from '../progress/tour';
-import { STYLES } from '../game/styles';
 import { AI_LEVELS } from '../game/ai';
 import { VENUES } from '../render/venues';
 
@@ -58,7 +58,7 @@ export class TourScreen {
         .map((r, i) => {
           const res = k.results[i];
           const mark = res ? (i < k.round || k.state === 'won' ? `✓ ${res}` : `✗ ${res}`) : i === k.round && k.state === 'playing' ? '▶ next' : '';
-          return `<div class="cs-round${i === k.round && k.state === 'playing' ? ' next' : ''}"><span>${esc(r.name)}</span><span class="cs-opp">${STYLES[r.style].character} · ${AI_LEVELS[r.level].name} · best of ${r.bestOf}</span><b>${mark}</b></div>`;
+          return `<div class="cs-round${i === k.round && k.state === 'playing' ? ' next' : ''}"><span>${esc(roundLabel(r))}</span><span class="cs-opp">${AI_LEVELS[r.level].name} · best of ${r.bestOf}</span><b>${mark}</b></div>`;
         })
         .join('');
     } else {
