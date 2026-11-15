@@ -385,6 +385,15 @@ const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v
 /** Frame-rate independent approach of `cur` to `target` (rate per second). */
 const approach = (cur: number, target: number, rate: number, dt: number) => cur + (target - cur) * (1 - Math.exp(-rate * dt));
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
+const NEG_Y = new THREE.Vector3(0, -1, 0);
+/** Shortest signed difference between two angles. */
+const angleDiff = (a: number, b: number) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
+/** Wheelchair geometry: half the rear track (hub x), front caster radius and pivot z. */
+const TRACK = 0.3;
+const CASTER_R = 0.035;
+/** Push stroke on the hand rim: from behind the top (θ < 0) round to the front (θ > 0), rad. */
+const PUSH_FROM = -0.6;
+const PUSH_TO = 0.5;
 
 /** One jointed arm: upper arm, forearm and hand, each segment a group pointing along +y. */
 interface ArmRig {
@@ -412,8 +421,20 @@ export class Avatar {
   private firstPerson = false;
   /** Seated in a wheelchair (lower body, legs on the footplate, wheels that roll). */
   private seated = false;
+  /** Chair, legs and hips: turns (yaws) as she wheels about, under the upper body. */
+  private chair = new THREE.Group();
+  /** Rear wheels, left then right: spin group (rolls) and camber group (the push rim's frame). */
   private wheelSpin: THREE.Group[] = [];
-  private rolled = 0;
+  private wheelCamber: THREE.Group[] = [];
+  private wheelRoll = [0, 0];
+  /** Front casters: swivel pivot (trails the travel), wheel spin and its local x. */
+  private casters: { pivot: THREE.Group; spin: THREE.Group; x: number; roll: number }[] = [];
+  /** Chair heading relative to facing the table (rad, + turns left). */
+  private chairYaw = 0;
+  /** Smoothed body velocity in the character frame (m/s). */
+  private vel = { x: 0, z: 0 };
+  /** Free hand pushing the rim: blend weight, angle on the rim, and recovery stroke. */
+  private push = { w: 0, theta: 0, lift: 0, rec: -1, recFrom: 0, recTo: 0, wheel: 0 };
 
   constructor(style: StyleId, opacity = 1) {
     const look = LOOKS[style];
@@ -455,7 +476,7 @@ export class Avatar {
       foot.position.y = -SHIN;
       hip.add(knee);
       knee.add(foot);
-      this.group.add(hip);
+      (look.wheelchair ? this.chair : this.group).add(hip);
       this.legs.push({ hip, knee, foot });
       if (look.legs.kind === 'shorts') {
         // Shorts over the upper thigh, then bare legs, white socks.
@@ -477,11 +498,12 @@ export class Avatar {
     }
     // Hips and waistband move with the legs, not the twisting upper body.
     this.pelvis = new THREE.Mesh(lathe(PELVIS, halfW * 0.98, halfD * 0.98), mat(look.legs.color));
-    this.group.add(this.pelvis);
     if (look.wheelchair) {
       this.seated = true;
+      this.chair.add(this.pelvis);
+      this.group.add(this.chair);
       this.buildWheelchair(look.wheelchair, mat);
-    }
+    } else this.group.add(this.pelvis);
 
     // ---- torso, shoulders, neck, head
     const torso: TorsoShape = {
@@ -573,14 +595,23 @@ export class Avatar {
       tube(v(x, seatY - 0.03, 0.12), v(x, seatY - 0.03, -0.4)); // side rail
       tube(v(x, seatY - 0.03, 0.12), v(x, seatY + 0.3, 0.12)); // backrest upright
       tube(v(x, seatY - 0.03, -0.4), v(x * 0.75, 0.13, -0.5)); // down to the footplate
-      // Front caster: a fork and a small wheel.
-      tube(v(x * 0.85, 0.13, -0.5), v(x * 0.85, 0.06, -0.52), 0.01);
-      const caster = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.022, 14).rotateZ(Math.PI / 2), mat(c.tyre));
-      caster.position.set(x * 0.85, 0.035, -0.53);
-      g.add(caster);
+      // Front caster: a fork that swivels to trail the direction of travel, and a small wheel.
+      const pivot = new THREE.Group();
+      pivot.position.set(x * 0.85, 0.13, -0.5);
+      const fork = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.1, 8), metal);
+      fork.position.set(0, -0.04, 0.015);
+      fork.rotation.x = -0.3;
+      const cspin = new THREE.Group();
+      cspin.position.set(0, CASTER_R - 0.13, 0.03);
+      const caster = new THREE.Mesh(new THREE.CylinderGeometry(CASTER_R, CASTER_R, 0.022, 14).rotateZ(Math.PI / 2), mat(c.tyre));
+      const cHub = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.012, 0.05), metal);
+      cspin.add(caster, cHub);
+      pivot.add(fork, cspin);
+      g.add(pivot);
+      this.casters.push({ pivot, spin: cspin, x: x * 0.85, roll: 0 });
       // Rear wheel: cambered (tops lean in), with a push rim, hub and spokes; spins as she rolls.
       const camber = new THREE.Group();
-      camber.position.set(sx * 0.3, WHEEL_R, 0.02);
+      camber.position.set(sx * TRACK, WHEEL_R, 0.02);
       camber.rotation.z = sx * 0.14;
       const spin = new THREE.Group();
       camber.add(spin);
@@ -598,6 +629,7 @@ export class Avatar {
         spin.add(spoke);
       }
       this.wheelSpin.push(spin);
+      this.wheelCamber.push(camber);
       g.add(camber);
     }
     tube(v(-0.3, WHEEL_R, 0.02), v(0.3, WHEEL_R, 0.02), 0.016); // axle bar
@@ -609,7 +641,7 @@ export class Avatar {
     const tip = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.02, 12).rotateZ(Math.PI / 2), mat(c.tyre));
     tip.position.set(0, 0.04, 0.36);
     g.add(tip);
-    this.group.add(g);
+    this.chair.add(g);
   }
 
   private buildHead(look: Look, add: (geo: THREE.BufferGeometry, color: number, x: number, y: number, z: number) => THREE.Mesh) {
@@ -718,9 +750,45 @@ export class Avatar {
     this.group.updateMatrixWorld();
     const local = this.group.worldToLocal(hand.clone());
     const side = local.x >= 0 ? 1 : -1;
+    this.lastFreeSide = -side;
     this.animate(dt, now, body, local, side);
     this.group.updateMatrixWorld(true);
     this.solveArm(local, side);
+    if (this.seated && this.push.w > 0.01) this.solvePushArm(-side);
+  }
+
+  /**
+   * Seated: the free hand grips the hand rim of the wheel on its side and pushes it
+   * round (a two-bone reach to a point on the rim), blended over the posed arm.
+   */
+  private solvePushArm(fs: number) {
+    const p = this.push;
+    const camber = this.wheelCamber[fs < 0 ? 0 : 1];
+    const r = WHEEL_R - 0.05;
+    // On the rim (just outside it, where the fingers wrap), lifted off it during the recovery.
+    const onRim = new THREE.Vector3(fs * (0.065 + p.lift * 0.05), r * Math.cos(p.theta) + p.lift * 0.07, -r * Math.sin(p.theta));
+    const t = this.upperAbs.worldToLocal(camber.localToWorld(onRim));
+    const shoulder = new THREE.Vector3(fs * this.shoulderX, SHOULDER_Y, 0);
+    const l1 = UPPER;
+    const l2 = FORE - 0.02;
+    const d = t.sub(shoulder);
+    const dist = clamp(d.length(), 0.15, l1 + l2 - 1e-4);
+    const dir = d.normalize();
+    // Elbows out and back, as when pushing a wheelchair.
+    const pole = new THREE.Vector3(fs * 0.5, 0.1, 1);
+    pole.addScaledVector(dir, -pole.dot(dir));
+    if (pole.lengthSq() < 1e-6) pole.set(fs, 0, 0);
+    pole.normalize();
+    const cosA = clamp((l1 * l1 + dist * dist - l2 * l2) / (2 * l1 * dist), -1, 1);
+    const sinA = Math.sqrt(1 - cosA * cosA);
+    const elbowDir = dir.clone().multiplyScalar(cosA).addScaledVector(pole, sinA);
+    const elbow = elbowDir.clone().multiplyScalar(l1);
+    const handPos = dir.clone().multiplyScalar(dist);
+    const qU = new THREE.Quaternion().setFromUnitVectors(NEG_Y, elbowDir);
+    const foreDir = handPos.sub(elbow).normalize().applyQuaternion(qU.clone().invert());
+    const qF = new THREE.Quaternion().setFromUnitVectors(NEG_Y, foreDir);
+    this.freeArm.quaternion.slerp(qU, p.w);
+    this.freeElbow.quaternion.slerp(qF, p.w);
   }
 
   /**
@@ -803,11 +871,10 @@ export class Avatar {
     let speed = 0;
     if (this.lastBody && dt > 0) speed = Math.hypot(body.x - this.lastBody.x, body.z - this.lastBody.z) / dt;
     this.lastBody = { x: body.x, z: body.z };
-    // Seated: the shoulders are lower, and moving rolls the wheels (no steps).
+    // Seated: the shoulders are lower, and moving wheels the chair about (no steps).
     const drop0 = this.seated ? SEAT_DROP : 0;
     if (this.seated) {
-      this.rolled += speed * dt;
-      for (const w of this.wheelSpin) w.rotation.x = -this.rolled / WHEEL_R;
+      this.wheelAbout(dt, body);
       speed = 0;
     }
     this.stride = approach(this.stride, clamp(speed * 0.35, 0, 0.32), 12, dt);
@@ -836,7 +903,8 @@ export class Avatar {
     const bounce = Math.sin(time * Math.PI * 2 * 1.4) * (1 - this.stride * 2);
     let bend = 0.24 + this.lean * 0.35 + bounce * 0.03;
     let lean = this.lean;
-    let twist = this.twist;
+    // Seated, the shoulders turn part of the way with the chair under them.
+    let twist = this.twist + this.chairYaw * 0.5;
     let freeZ = 0.2 + this.stride * 0.6;
     let freeX = 0.35 + this.lean * 0.6; // free arm a little forward, for balance
     let elbow = 1.25;
@@ -874,6 +942,8 @@ export class Avatar {
     // Bent knees lower the hips: thigh and shin each lose height to the bend.
     const drop = this.seated ? SEAT_DROP : THIGH * (1 - Math.cos(bend)) + SHIN * (1 - Math.cos(bend));
     this.upper.position.y = HIP - drop + jump;
+    // Seated: a little lean into each push on the rim.
+    if (this.seated && !r) lean += this.push.w * (this.push.rec < 0 ? 0.1 : 0.03);
     this.upper.rotation.set(-(lean + this.reachLean), twist, this.sideLean, 'YXZ');
     this.legs.forEach((leg, i) => {
       const s = i === 0 ? -1 : 1;
@@ -893,7 +963,8 @@ export class Avatar {
     // Free arm on the side away from the paddle.
     const fs = -side;
     this.freeArm.position.set(fs * this.shoulderX, SHOULDER_Y, 0);
-    // Seated, the free hand rests out by the wheel's push rim.
+    // Seated, the free hand rests out by the wheel's push rim (and pushes it when moving).
+    if (this.seated && r) this.push.w = 0;
     if (this.seated && !r) {
       freeX = 0.25;
       freeZ = 0.45;
@@ -902,6 +973,90 @@ export class Avatar {
     this.freeArm.rotation.set(freeX, 0, fs * freeZ, 'XYZ');
     this.freeElbow.rotation.set(elbow, 0, 0);
   }
+
+  /**
+   * Wheeling about: the chair turns toward where she's heading (and back to square
+   * once she stops), the rear wheels roll at their own speeds (forward drive plus the
+   * turn: they counter-rotate when she spins on the spot), the front casters swivel to
+   * trail the travel, and the free hand works the push rim on its side.
+   */
+  private wheelAbout(dt: number, body: { x: number; z: number }) {
+    if (dt <= 0) return;
+    // Body velocity in the character's frame (it faces local −z).
+    const prev = this.lastBodyChair ?? body;
+    this.lastBodyChair = { x: body.x, z: body.z };
+    const ry = this.group.rotation.y;
+    const wx = (body.x - prev.x) / dt;
+    const wz = (body.z - prev.z) / dt;
+    const lx = wx * Math.cos(ry) - wz * Math.sin(ry);
+    const lz = wx * Math.sin(ry) + wz * Math.cos(ry);
+    this.vel.x = approach(this.vel.x, lx, 14, dt);
+    this.vel.z = approach(this.vel.z, lz, 14, dt);
+    // Heading: swing the footplate toward the side she's wheeling to.
+    const yawTarget = clamp(-this.vel.x * 0.42, -0.6, 0.6);
+    const yaw0 = this.chairYaw;
+    this.chairYaw = approach(this.chairYaw, yawTarget, 5, dt);
+    const omega = (this.chairYaw - yaw0) / dt;
+    this.chair.rotation.y = this.chairYaw;
+    // Velocity in the chair's own frame: forward drive along its heading.
+    const c = Math.cos(this.chairYaw);
+    const s = Math.sin(this.chairYaw);
+    const cx = this.vel.x * c - this.vel.z * s;
+    const cz = this.vel.x * s + this.vel.z * c;
+    const forward = -cz;
+    // Each rear wheel: forward drive ± the turn (turning left drives the right wheel on).
+    const rollL = (forward - omega * TRACK) * dt;
+    const rollR = (forward + omega * TRACK) * dt;
+    this.wheelRoll[0] += rollL;
+    this.wheelRoll[1] += rollR;
+    this.wheelSpin[0].rotation.x = -this.wheelRoll[0] / WHEEL_R;
+    this.wheelSpin[1].rotation.x = -this.wheelRoll[1] / WHEEL_R;
+    // Casters: velocity at each pivot (chair motion + the turn), the wheel trailing behind it.
+    for (const k of this.casters) {
+      const pz = -0.5;
+      const vx = cx + omega * pz;
+      const vz = cz - omega * k.x;
+      const v = Math.hypot(vx, vz);
+      if (v > 0.05) {
+        const target = Math.atan2(-vx, -vz);
+        const cur = k.pivot.rotation.y;
+        k.pivot.rotation.y = cur + angleDiff(target, cur) * (1 - Math.exp(-clamp(v * 18, 0, 22) * dt));
+      }
+      k.roll += v * dt;
+      k.spin.rotation.x = -k.roll / CASTER_R;
+    }
+
+    // Free hand on the rim of the wheel on its side: rides round with the rim while it
+    // drives, then lifts off and swings back for the next stroke.
+    const p = this.push;
+    const wheel = this.lastFreeSide < 0 ? 0 : 1;
+    const roll = wheel === 0 ? rollL : rollR;
+    const rimSpeed = Math.abs(roll) / dt;
+    if (wheel !== p.wheel) {
+      // The free hand changed sides with the paddle: start fresh on the new wheel.
+      p.wheel = wheel;
+      p.w = 0;
+      p.rec = -1;
+      p.theta = roll >= 0 ? PUSH_FROM : PUSH_TO;
+    }
+    p.w = approach(p.w, rimSpeed > 0.25 ? 1 : 0, rimSpeed > 0.25 ? 7 : 4, dt);
+    if (p.rec >= 0) {
+      p.rec += dt / clamp(0.55 - rimSpeed * 0.12, 0.25, 0.45);
+      const k = Math.min(1, p.rec);
+      const e = k * k * (3 - 2 * k);
+      p.theta = p.recFrom + (p.recTo - p.recFrom) * e;
+      p.lift = Math.sin(Math.PI * k);
+      if (p.rec >= 1) p.rec = -1;
+    } else {
+      p.lift = 0;
+      if (p.w < 0.05) p.theta = approach(p.theta, 0, 6, dt);
+      else p.theta += roll / WHEEL_R; // the hand turns with the wheel
+      if (p.theta > PUSH_TO) Object.assign(p, { rec: 0, recFrom: PUSH_TO, recTo: PUSH_FROM });
+      else if (p.theta < PUSH_FROM) Object.assign(p, { rec: 0, recFrom: PUSH_FROM, recTo: PUSH_TO });
+    }
+  }
+  private lastBodyChair: { x: number; z: number } | null = null;
+  private lastFreeSide = 1;
 
   /** First person: nothing of the body is drawn, only the paddle (handled by the player view). */
   setFirstPerson(on: boolean) {
