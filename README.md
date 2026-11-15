@@ -70,7 +70,7 @@ Progression lives in three places on the title screen: **World Tour** (the caree
 
 **Unlocks**
 - **Venues:** Server room (Junior), Conference room (Mid-level), Rooftop (win the Cup), City Park (win the Data Centre Knockout), Offsite beach (win the Boardroom Showdown). Tour stops are always played at their own venue.
-- **Styles:** Lee, Ryan, Ed and Will from the start; the Sysadmin (On-call defence drill).
+- **Styles:** Lee, Ryan, Ed and Will from the start; the Sysadmin appears only as a tournament opponent (including World Tour stops).
 - **Rubbers:** Hotfix (Junior), Legacy Code (On-call defence), Air Gap (win the Championship).
 - **Unlock everything** (Unlocks tab) switches gating off for free play. Online lobbies aren't gated.
 

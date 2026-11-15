@@ -176,11 +176,10 @@ describe('unlocks', () => {
     const before = unlockedKeys(c.data, c.levelIndex);
     expect(isUnlocked('venue', 'office', c.data, c.levelIndex)).toBe(true);
     expect(isUnlocked('venue', 'server', c.data, c.levelIndex)).toBe(false);
-    expect(isUnlocked('style', 'chopper', c.data, c.levelIndex)).toBe(false);
     c.addXp(CAREER_LEVELS[1].xp, 'test');
     c.recordDrill('defence', 2, ['defence']);
     const fresh = newlyUnlocked(before, c.data, c.levelIndex).map((u) => `${u.kind}:${u.id}`);
-    expect(fresh).toEqual(expect.arrayContaining(['venue:server', 'style:chopper', 'rubber:longPips', 'rubber:shortPips']));
+    expect(fresh).toEqual(expect.arrayContaining(['venue:server', 'rubber:longPips', 'rubber:shortPips']));
     expect(isUnlocked('venue', 'rooftop', c.data, c.levelIndex)).toBe(false);
     c.recordTournament('department-cup', 300, 'cup');
     expect(isUnlocked('venue', 'rooftop', c.data, c.levelIndex)).toBe(true);

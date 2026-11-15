@@ -3,7 +3,7 @@ import { AI_LEVELS, AiPlayer, type AiLevel } from '../game/ai';
 import { mapVec, type SideId } from '../game/frame';
 import { RallyReferee, Scoreboard, type RallyOutcome } from '../game/rules';
 import { DEFAULT_REALISM, realismSettings } from '../game/realism';
-import { STYLES, STYLE_IDS, type StyleId } from '../game/styles';
+import { STYLES, PLAYABLE_STYLE_IDS, type StyleId } from '../game/styles';
 import {
   PROTOCOL_VERSION,
   fromV,
@@ -268,8 +268,8 @@ export class RoomCore {
     if (this.info.aiStyle !== 'random') return this.info.aiStyle;
     // Random, but not a character already at the table (two Ryans is confusing).
     const taken = new Set<StyleId | undefined>([...Object.values(this.info.seats).map((s) => s?.style), ...Object.values(this.info.aiStyles ?? {})]);
-    const free = STYLE_IDS.filter((id) => !taken.has(id));
-    const pool = free.length ? free : STYLE_IDS;
+    const free = PLAYABLE_STYLE_IDS.filter((id) => !taken.has(id));
+    const pool = free.length ? free : PLAYABLE_STYLE_IDS;
     return pool[Math.floor(this.rng() * pool.length)];
   }
 

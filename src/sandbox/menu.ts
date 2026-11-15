@@ -1,4 +1,4 @@
-import { STYLES, STYLE_IDS, PLAYABLE_STYLE_IDS, type StyleId } from '../game/styles';
+import { STYLES, PLAYABLE_STYLE_IDS, type StyleId } from '../game/styles';
 import { AI_LEVELS, type AiLevel } from '../game/ai';
 import { REALISM_PRESETS } from '../game/realism';
 import { VENUES, type VenueId } from '../render/venues';
@@ -300,7 +300,7 @@ export class Menu {
       .map((id, i) => this.choice('level', id, AI_LEVELS[id].name, m.level === id, ['Gentle, slow to react', 'Solid all round', 'Fast, precise, aggressive', 'Barely misses. Good luck'][i]))
       .join('');
     const styles = [this.choice('aiStyle', 'random', 'Random', m.aiStyle === 'random', 'Surprise me')]
-      .concat(STYLE_IDS.map((id) => this.choice('aiStyle', id, STYLES[id].character, m.aiStyle === id, styleNote(id))))
+      .concat(PLAYABLE_STYLE_IDS.map((id) => this.choice('aiStyle', id, STYLES[id].character, m.aiStyle === id, styleNote(id))))
       .join('');
     const formats = BEST_OF.map((n) => this.choice('bestOf', String(n), `Best of ${n}`, m.bestOf === n)).join('');
     return `
@@ -325,7 +325,7 @@ export class Menu {
     const picker = (slot: (typeof slots)[number]) => {
       const others = new Set<StyleId>([h.realism.style, ...slots.filter((x) => x !== slot).map((x) => m[x]).filter((v): v is StyleId => v !== 'random')]);
       return [this.choice(slot, 'random', 'Random', m[slot] === 'random')]
-        .concat(STYLE_IDS.map((id) => this.choice(slot, id, STYLES[id].character, m[slot] === id, others.has(id) ? (id === h.realism.style ? 'You' : 'In the game') : STYLES[id].role, null, others.has(id))))
+        .concat(PLAYABLE_STYLE_IDS.map((id) => this.choice(slot, id, STYLES[id].character, m[slot] === id, others.has(id) ? (id === h.realism.style ? 'You' : 'In the game') : STYLES[id].role, null, others.has(id))))
         .join('');
     };
     return `

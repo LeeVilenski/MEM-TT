@@ -27,8 +27,6 @@ export const UNLOCKS: UnlockRule[] = [
   { kind: 'venue', id: 'rooftop', ...cup('department-cup', 'Department Cup') },
   { kind: 'venue', id: 'park', ...stop('datacentre-knockout', 'Data Centre Knockout') },
   { kind: 'venue', id: 'beach', ...stop('board-showdown', 'Boardroom Showdown') },
-  // Player styles: Lee, Ryan, Ed, Will and Dan from the start; the Sysadmin is earned.
-  { kind: 'style', id: 'chopper', ...drill('defence', 'On-call defence') },
   // Rubbers (Standard Build from the start).
   { kind: 'rubber', id: 'shortPips', ...level(1, 'Junior') },
   { kind: 'rubber', id: 'longPips', ...drill('defence', 'On-call defence') },
