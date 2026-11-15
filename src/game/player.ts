@@ -6,6 +6,24 @@ import { DEFAULT_SWING } from './swing';
 import { REACH, SwingController, type StrokeSide, type SwingInput } from './swing';
 import type { IncomingPrediction, PathPoint } from './intercept';
 import { serveContact, type ServeType } from './serves';
+import { landingOutcome } from './assist';
+import { faceNormal } from './swing';
+
+/**
+ * How smashable a ball is at this contact height above the table (m): 0 (too low to kill,
+ * a big risk) to 1 (a sitter). Ramps from 12 cm to 40 cm above the table.
+ */
+export function smashQuality(heightAboveTable: number): number {
+  const t = clamp((heightAboveTable - 0.12) / 0.28, 0, 1);
+  return t * t * (3 - 2 * t);
+}
+/** Paddle speed of a smash (m/s): from a firm hit on a low ball to a full kill on a high one. */
+const SMASH_SPEED = { low: 10, high: 15 };
+/**
+ * Face-angle error of a smash, as a fraction of half the window of angles that land it
+ * (standard deviation): small on a sitter, more than the whole window on a low ball.
+ */
+const SMASH_ERROR = { low: 3, high: 0.35 };
 
 export interface AssistSettings {
   /** 0–1: pull the face angle toward one that lands on the table. */
@@ -252,6 +270,13 @@ export class Player {
 
   /** Extra bat speed for a perfectly timed stroke (0 = none; set by the realism slider). */
   perfectBonus = 0;
+  /** Smash held this frame. */
+  smashHeld = false;
+  /** Whether the last contact was a smash (read on the paddle event). */
+  lastContactSmash = false;
+  /** Random source for smash execution error (replaceable in tests). */
+  rng: () => number = Math.random;
+
   /** Whether the last paddle contact was perfectly timed (read on the paddle event). */
   lastContactPerfect = false;
 
@@ -266,6 +291,7 @@ export class Player {
   }
 
   update(dt: number, input: SwingInput, move: MoveInput, aim: { x: number; z: number }) {
+    this.smashHeld = !!input.smash;
     // The bat is anchored in the world (it goes exactly where you move it); the body follows it.
     const batX = this.batX;
 
@@ -346,6 +372,14 @@ export class Player {
   private contact(ball: BallState, pose: PaddlePose, normal: Vec3, rubber: Rubber): Vec3 | ContactAdjust {
     const perfect = this.shotMode === 'rally' && this.swing.strokePeakAge <= PERFECT_WINDOW;
     this.lastContactPerfect = perfect;
+    this.lastContactSmash = false;
+    if (this.shotMode === 'rally' && this.smashHeld) {
+      const smash = this.smashContact(ball, pose, rubber);
+      if (smash) {
+        this.lastContactSmash = true;
+        return smash;
+      }
+    }
     if (this.shotMode === 'serve' && this.serveType !== 'auto') {
       const adj = serveContact(this.serveType, ball, pose, rubber, this.params, this.assists.angle, false, this.doubles);
       if (adj) return adj;
@@ -353,6 +387,58 @@ export class Player {
     if (!perfect || this.perfectBonus <= 0) return this.angleAssist(ball, pose, normal, rubber);
     const faster = { ...pose, vel: scale(pose.vel, 1 + this.perfectBonus) };
     return withVel(this.angleAssist(ball, faster, normal, rubber), faster.vel);
+  }
+
+  /**
+   * A smash: a flat, fast stroke at the aim point. The face angle is chosen to land it, then
+   * an execution error is added that grows as the ball gets lower: a high ball is a near-certain
+   * kill, a low one a gamble. Arcade realism (the angle assist) halves the error.
+   */
+  private smashContact(ball: BallState, pose: PaddlePose, rubber: Rubber): ContactAdjust | null {
+    const q = smashQuality(ball.pos.y - TABLE.height);
+    const full = (SMASH_SPEED.low + (SMASH_SPEED.high - SMASH_SPEED.low) * q) * this.style.power;
+    const target = this.aimTarget ?? { x: 0, z: -0.9 };
+    const yaw = (Math.atan2(target.x - ball.pos.x, -(target.z - ball.pos.z)) * 180) / Math.PI;
+    // A flat hit: the face and the stroke point the same way. Scan that angle for the one
+    // that lands nearest the target, then take the middle of the run of angles that land.
+    let speed = full;
+    let pitch = -4;
+    let window = 0;
+    // Take pace off only if nothing lands at full speed (a deep or low ball can't be killed flat out).
+    for (const f of [1, 0.85, 0.7]) {
+      speed = full * f;
+      const ok: boolean[] = [];
+      const pitches: number[] = [];
+      for (let p = -35; p <= 25; p += 0.5) {
+        const n = faceNormal(p, yaw);
+        const res = landingOutcome(ball, { ...pose, vel: scale(n, speed) }, n, rubber, this.params, 'rally', 1 / 120);
+        pitches.push(p);
+        ok.push(res.outcome === 'in');
+      }
+      // The widest run of angles that land; aim at its middle.
+      let lo = -1;
+      let bestLo = -1;
+      let bestHi = -1;
+      ok.forEach((v, i) => {
+        if (v && lo < 0) lo = i;
+        if (lo >= 0 && (!v || i === ok.length - 1)) {
+          const hi = v ? i : i - 1;
+          if (hi - lo > bestHi - bestLo) ((bestLo = lo), (bestHi = hi));
+          lo = -1;
+        }
+      });
+      if (bestLo < 0) continue;
+      pitch = (pitches[bestLo] + pitches[bestHi]) / 2;
+      window = pitches[bestHi] - pitches[bestLo] + 0.5;
+      break;
+    }
+    // Execution error, relative to how much room there is: on a sitter a small fraction of the
+    // window (almost always in), on a low ball more than the whole window (a gamble).
+    const frac = SMASH_ERROR.high + (SMASH_ERROR.low - SMASH_ERROR.high) * (1 - q);
+    const err = Math.max(window, 1.5) * 0.5 * frac * (1 - 0.3 * this.assists.angle);
+    const g = Math.sqrt(-2 * Math.log(Math.max(1e-9, this.rng()))) * Math.cos(2 * Math.PI * this.rng());
+    const n = faceNormal(pitch + g * err, yaw);
+    return { normal: n, vel: scale(faceNormal(pitch, yaw), speed) };
   }
 
   /**

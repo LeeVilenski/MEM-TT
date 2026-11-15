@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { PADDLE, UP, add, cross, dot, length, normalize, scale, sub, v3, type Vec3 } from '../physics';
+import { PADDLE, TABLE, UP, add, cross, dot, length, normalize, scale, sub, v3, type Vec3 } from '../physics';
 import type { Player } from '../game/player';
 import type { StrokeSide } from '../game/swing';
 import type { PaddlePose } from '../physics';
@@ -13,6 +13,10 @@ const BLACK = 0x15161a;
 /** Hit-zone colours: yours, and your doubles partner's turn. */
 const MINE = 0x5eead4;
 const PARTNER = 0x60a5fa;
+/** The ring turns red when the ball will be high enough to smash. */
+const SMASHABLE = 0xff4d6d;
+/** Contact height above the table (m) from which the ring shows a ball as smashable. */
+const SMASH_HEIGHT = 0.3;
 /** The drawn backswing starts this long (game s) before the ball arrives, and reaches the contact point on time. */
 const WIND_UP = 0.2;
 /** Follow-through after contact: out along the stroke, then back (real s). */
@@ -150,15 +154,16 @@ export class PlayerView {
     this.markerLine.visible = !!p;
     if (!p) return;
     const mat = this.marker.material as THREE.MeshBasicMaterial;
+    const base = p.y - TABLE.height >= SMASH_HEIGHT ? SMASHABLE : MINE;
     if (eta !== undefined && Number.isFinite(eta)) {
       const k = Math.max(0, Math.min(1, eta / 0.5));
       this.marker.scale.setScalar(1 + 1.6 * k);
-      mat.color.set(partner ? PARTNER : eta <= PERFECT_RING ? 0xffc83d : MINE);
+      mat.color.set(partner ? PARTNER : eta <= PERFECT_RING ? 0xffc83d : base);
     } else {
       this.marker.scale.setScalar(1);
-      mat.color.set(partner ? PARTNER : MINE);
+      mat.color.set(partner ? PARTNER : base);
     }
-    (this.markerLine.material as THREE.LineDashedMaterial).color.set(partner ? PARTNER : MINE);
+    (this.markerLine.material as THREE.LineDashedMaterial).color.set(partner ? PARTNER : base);
     this.marker.position.set(p.x, p.y, p.z);
     this.markerLine.position.set(p.x, p.y, p.z);
     this.markerLine.scale.y = p.y;
