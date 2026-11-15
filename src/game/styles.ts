@@ -140,7 +140,7 @@ export const STYLES: Record<StyleId, PlayStyle> = {
   },
 };
 
-/** Styles hidden from every picker and opponent list (kept defined so old saves still load). */
-export const HIDDEN_STYLES: ReadonlySet<StyleId> = new Set<StyleId>(['chopper']);
+export const STYLE_IDS = Object.keys(STYLES) as StyleId[];
 
-export const STYLE_IDS = (Object.keys(STYLES) as StyleId[]).filter((id) => !HIDDEN_STYLES.has(id));
+/** Characters offered in the "Your character" chooser (the Sysadmin stays an opponent only). */
+export const PLAYABLE_STYLE_IDS: StyleId[] = STYLE_IDS.filter((id) => id !== 'chopper');

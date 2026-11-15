@@ -32,7 +32,7 @@ export const TOURNAMENTS: Tournament[] = [
     rounds: [
       { name: 'Round 1 vs IT Support', level: 'easy', style: 'allround', bestOf: 1, venue: 'office' },
       { name: 'Quarter-final vs Security', level: 'easy', style: 'blocker', bestOf: 1, venue: 'server' },
-      { name: 'Semi-final vs Infrastructure', level: 'medium', style: 'pusher', bestOf: 1, venue: 'server' },
+      { name: 'Semi-final vs Infrastructure', level: 'medium', style: 'chopper', bestOf: 1, venue: 'server' },
       { name: 'Final vs Platform Team', level: 'medium', style: 'looper', bestOf: 3, venue: 'conference' },
     ],
   },
@@ -45,7 +45,7 @@ export const TOURNAMENTS: Tournament[] = [
     requires: 'department-cup',
     rounds: [
       { name: 'Round 1 vs Networking', level: 'medium', style: 'penhold', bestOf: 3, venue: 'office' },
-      { name: 'Quarter-final vs SRE', level: 'medium', style: 'pusher', bestOf: 3, venue: 'server' },
+      { name: 'Quarter-final vs SRE', level: 'medium', style: 'chopper', bestOf: 3, venue: 'server' },
       { name: 'Semi-final vs Red Team', level: 'hard', style: 'blocker', bestOf: 3, venue: 'conference' },
       { name: 'Final vs the CTO', level: 'expert', style: 'looper', bestOf: 5, venue: 'rooftop' },
     ],

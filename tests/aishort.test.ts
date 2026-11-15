@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BallSim, DEFAULT_PARAMS as P, TABLE, TICK_DT, launchState, v3, type BallEvent } from '../src/physics';
 import { AI_LEVELS, AiPlayer } from '../src/game/ai';
-import { STYLES } from '../src/game/styles';
+import { STYLES, STYLE_IDS } from '../src/game/styles';
 import { mulberry32 } from './helpers/rng';
 
 /** One short ball from the near end at the far AI; returns the outcome. */
@@ -60,7 +60,7 @@ describe('AI against short balls', () => {
     let valid = 0;
     let made = 0;
     let doubleBounce = 0;
-    for (const sid of Object.keys(STYLES) as (keyof typeof STYLES)[]) {
+    for (const sid of STYLE_IDS) {
       for (const spin of spins) {
         for (let k = 0; k < 10; k++) {
           const ai = new AiPlayer('far', AI_LEVELS.hard, P, rng);
@@ -84,7 +84,7 @@ describe('AI against short balls', () => {
     const rng = mulberry32(9);
     let valid = 0;
     let made = 0;
-    for (const sid of Object.keys(STYLES) as (keyof typeof STYLES)[]) {
+    for (const sid of STYLE_IDS) {
       for (let k = 0; k < 16; k++) {
         const ai = new AiPlayer('far', AI_LEVELS.hard, P, rng);
         ai.setStyle(STYLES[sid]);

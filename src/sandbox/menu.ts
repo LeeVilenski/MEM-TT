@@ -1,4 +1,4 @@
-import { STYLES, STYLE_IDS, type StyleId } from '../game/styles';
+import { STYLES, STYLE_IDS, PLAYABLE_STYLE_IDS, type StyleId } from '../game/styles';
 import { AI_LEVELS, type AiLevel } from '../game/ai';
 import { REALISM_PRESETS } from '../game/realism';
 import { VENUES, type VenueId } from '../render/venues';
@@ -352,7 +352,7 @@ export class Menu {
     const st = STYLES[id];
     const lock = h.lockReason('style', id);
     const current = h.realism.style === id;
-    const list = STYLE_IDS.map((sid) => {
+    const list = PLAYABLE_STYLE_IDS.map((sid) => {
       const s2 = STYLES[sid];
       const l = h.lockReason('style', sid);
       return `<button class="cs-pick${sid === id ? ' on' : ''}${l ? ' locked' : ''}" data-k="browse" data-v="${sid}" aria-pressed="${sid === id}" aria-label="${esc(s2.character)}, ${esc(s2.role)}${l ? ', locked' : ''}${h.realism.style === sid ? ', your player' : ''}">
@@ -562,8 +562,8 @@ export class Menu {
     // Character select: left/right flip through the characters.
     if (this.screen === 'characters' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
       e.preventDefault();
-      const i = STYLE_IDS.indexOf(this.browse!);
-      this.browse = STYLE_IDS[(i + (e.key === 'ArrowRight' ? 1 : -1) + STYLE_IDS.length) % STYLE_IDS.length];
+      const i = PLAYABLE_STYLE_IDS.indexOf(this.browse!);
+      this.browse = PLAYABLE_STYLE_IDS[(i + (e.key === 'ArrowRight' ? 1 : -1) + PLAYABLE_STYLE_IDS.length) % PLAYABLE_STYLE_IDS.length];
       this.render();
       (this.card.querySelector(`.cs-pick[data-v="${this.browse}"]`) as HTMLElement | null)?.focus();
       return;
