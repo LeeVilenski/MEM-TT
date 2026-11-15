@@ -12,6 +12,7 @@ import { TABLE, length, normalize, scale, v3, type PaddlePose, type Vec3 } from 
  *   - swing sideways → brush across + forward  → sidespin
  *   - hold left button ("drive") → more forward, less brush → pace (drive / smash)
  *   - W/S close/open the face, A/D add a hooking sidespin brush
+ *   - an up/down stroke angled sideways also brushes across the ball (sidespin), as well as aiming
  *   - no movement   → a block: the ball rebounds off the still paddle
  */
 export interface SwingParams {
@@ -30,6 +31,12 @@ export interface SwingParams {
   driveBrushScale: number;
   /** Lateral brush added by A/D, per m/s of swing speed. */
   hookGain: number;
+  /**
+   * Rally strokes: how much of a hook a sideways-angled stroke brushes, at full angle (~40° off
+   * vertical), as a fraction of holding A/D. Swiping up-right brushes the back of the ball to the
+   * right, so it curves left (like A); up-left curves right. 0 = the angle only aims.
+   */
+  swipeHook: number;
   /** Face angle change while W or S is held, degrees. */
   faceStep: number;
   /** How far the paddle can travel forward during a stroke, metres. */
@@ -78,6 +85,7 @@ export const DEFAULT_SWING: SwingParams = {
   driveForwardGain: 2.4,
   driveBrushScale: 0.5,
   hookGain: 1.0,
+  swipeHook: 0.8,
   faceStep: 22,
   maxForwardTravel: 0.3,
   lateralStroke: 0.3,
@@ -132,9 +140,10 @@ export function faceNormal(pitchDeg: number, yawDeg: number): Vec3 {
 
 /**
  * Paddle velocity for a planar swing velocity (in the hitting plane, m/s).
+ * `hook` is −1 … 1: −1 brushes for a ball that curves left (A), 1 right (D).
  * Exported for tests and for the AI later on.
  */
-export function strokeVelocity(mousePlanar: { x: number; y: number }, drive: boolean, hook: -1 | 0 | 1, p: SwingParams, threshold = p.swingThreshold, serving = false): Vec3 {
+export function strokeVelocity(mousePlanar: { x: number; y: number }, drive: boolean, hook: number, p: SwingParams, threshold = p.swingThreshold, serving = false): Vec3 {
   const planar = { x: mousePlanar.x * p.swingGain, y: mousePlanar.y * p.swingGain };
   const speed = Math.hypot(planar.x, planar.y);
   const brushScale = drive ? p.driveBrushScale : 1;
@@ -185,6 +194,8 @@ export class SwingController {
   private heldAge = 0;
   /** Mouse-plane velocity of the stroke in memory (for its direction). */
   private heldGesture = { x: 0, y: 0 };
+  /** Its strength as a stroke (as `rawGesture` measures it). */
+  private heldStrength = 0;
   /** Seconds since the last frame of flick movement. */
   private flickAge = Infinity;
   /** How long the current flick has been going, seconds. */
@@ -278,8 +289,6 @@ export class SwingController {
       const f = (p.powerCap * Math.tanh(gs / p.powerCap)) / gs;
       gesture = { x: gesture.x * f, y: gesture.y * f };
     }
-    let vel = strokeVelocity(gesture, input.drive, hook, p, this.serving ? p.serveThreshold : p.swingThreshold, this.serving);
-
     // The flick itself, from this frame's raw movement (not the smoothed velocity): its
     // direction aims, and the time since it ended times the stroke ("perfect" timing).
     // Sliding across to reach the ball, or slow positioning before a block, isn't a flick.
@@ -291,9 +300,24 @@ export class SwingController {
       if (fresh) ((this.flickLen = 0), (this.flickPeak = 0));
       else this.flickLen += this.flickAge + dt;
       this.flickPeak = Math.max(this.flickPeak, rawGesture);
-      if (this.flickAge > p.strokeHold || Math.hypot(rawVx, rawVy) >= Math.hypot(this.heldGesture.x, this.heldGesture.y)) this.heldGesture = { x: rawVx, y: rawVy };
+      // The stroke's direction: the strongest recent flick, but a fresh one the other way up/down
+      // (a flick up after a quick drag down to the ball) replaces it, as for the bat speed below.
+      const flipped = Math.abs(rawVy) > thrNow && Math.sign(rawVy) !== Math.sign(this.heldGesture.y);
+      // Strength as a stroke (sideways discounted in rallies), so a fast drag across to the ball
+      // doesn't outrank the flick that follows it.
+      if (this.flickAge > p.strokeHold || flipped || rawGesture >= this.heldStrength) {
+        this.heldGesture = { x: rawVx, y: rawVy };
+        this.heldStrength = rawGesture;
+      }
       this.flickAge = 0;
     } else this.flickAge += dt;
+
+    // A rally stroke angled sideways brushes across the ball too: sidespin from the swipe's
+    // path, on top of the aim it gives. Brushing to the right makes the ball curve left, so a
+    // swipe up-right hooks like A. (Serves read the swipe's side themselves.)
+    const swipe = this.serving ? 0 : -this.strokeAim * p.swipeHook;
+    const totalHook = clamp(hook + swipe, -1, 1);
+    let vel = strokeVelocity(gesture, input.drive, totalHook, p, this.serving ? p.serveThreshold : p.swingThreshold, this.serving);
 
     // Stroke memory: the strongest recent stroke stays "live" for strokeHold seconds,
     // fading out, so contact doesn't have to land on the exact frame of the flick.
@@ -346,6 +370,7 @@ export class SwingController {
     this.planarVel = { x: 0, y: 0 };
     this.held = v3();
     this.heldGesture = { x: 0, y: 0 };
+    this.heldStrength = 0;
     this.flickAge = Infinity;
     this.flickLen = 0;
     this.flickPeak = 0;
