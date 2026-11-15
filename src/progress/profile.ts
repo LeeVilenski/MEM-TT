@@ -58,7 +58,7 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'marathon', name: 'Marathon Standup', description: 'Play a rally of 15+ hits', xp: 60 },
   { id: 'speed', name: 'Low Latency', description: 'Hit a shot faster than 25 m/s (90 km/h)', xp: 40 },
   { id: 'spin', name: 'Spin Doctor', description: 'Put 7,000+ rpm on the ball', xp: 40 },
-  { id: 'principal', name: 'Skip-level', description: 'Beat a Principal AI', xp: 120 },
+  { id: 'principal', name: 'Skip-level', description: 'Beat a Hard or Expert AI', xp: 120 },
   { id: 'full-stack', name: 'Full Stack', description: 'Win a match with every player style', xp: 150 },
   { id: 'online', name: 'Distributed System', description: 'Finish an online match', xp: 40 },
   { id: 'drills', name: 'Continuous Integration', description: 'Earn 3 stars on every drill', xp: 200 },
@@ -242,9 +242,9 @@ export class Career {
       if (ctx.aiLevel) s.aiWins[ctx.aiLevel] = (s.aiWins[ctx.aiLevel] ?? 0) + 1;
       if (ctx.style && !s.wonWithStyles.includes(ctx.style)) s.wonWithStyles.push(ctx.style);
       this.award('first-win');
-      if (ctx.aiLevel === 'hard') this.award('principal');
+      if (ctx.aiLevel === 'hard' || ctx.aiLevel === 'expert') this.award('principal');
       if (s.wonWithStyles.length >= 5) this.award('full-stack');
-      const mult = ctx.aiLevel === 'hard' ? 2 : ctx.aiLevel === 'easy' ? 0.6 : ctx.online ? 1.5 : 1;
+      const mult = ctx.aiLevel === 'expert' ? 3 : ctx.aiLevel === 'hard' ? 2 : ctx.aiLevel === 'easy' ? 0.6 : ctx.online ? 1.5 : 1;
       this.addXp(60 * mult, 'Match won');
     } else {
       this.addXp(15, 'Match played');

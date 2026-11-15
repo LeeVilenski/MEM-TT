@@ -39,7 +39,7 @@ export const TOURNAMENTS: Tournament[] = [
   {
     id: 'championship',
     name: 'Company Championship',
-    description: 'Every department sends its best. Principal-level opponents; the final is best of 5.',
+    description: 'Every department sends its best. Hard opponents, and an Expert CTO; the final is best of 5.',
     xp: 800,
     achievement: 'championship',
     requires: 'department-cup',
@@ -47,7 +47,7 @@ export const TOURNAMENTS: Tournament[] = [
       { name: 'Round 1 vs Networking', level: 'medium', style: 'penhold', bestOf: 3, venue: 'office' },
       { name: 'Quarter-final vs SRE', level: 'medium', style: 'chopper', bestOf: 3, venue: 'server' },
       { name: 'Semi-final vs Red Team', level: 'hard', style: 'blocker', bestOf: 3, venue: 'conference' },
-      { name: 'Final vs the CTO', level: 'hard', style: 'looper', bestOf: 5, venue: 'rooftop' },
+      { name: 'Final vs the CTO', level: 'expert', style: 'looper', bestOf: 5, venue: 'rooftop' },
     ],
   },
 ];

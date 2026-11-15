@@ -57,6 +57,19 @@ describe('AI vs AI matches', () => {
     console.log('hard', hardPoints, 'easy', easyPoints);
     expect(hardPoints).toBeGreaterThan(easyPoints);
   }, 30000);
+
+  it('an expert AI beats a hard AI', () => {
+    let expert = 0;
+    let hard = 0;
+    for (const seed of [4, 5, 6]) {
+      const { m } = aiMatch('expert', 'hard', seed);
+      for (const g of m.score.history) {
+        expert += g.near;
+        hard += g.far;
+      }
+    }
+    expect(expert).toBeGreaterThan(hard);
+  }, 60000);
 });
 
 import { Player } from '../src/game/player';

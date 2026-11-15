@@ -50,12 +50,14 @@ export interface AiProfile {
   margin: number;
 }
 
-export type AiLevel = 'easy' | 'medium' | 'hard';
+export type AiLevel = 'easy' | 'medium' | 'hard' | 'expert';
 
 export const AI_LEVELS: Record<AiLevel, AiProfile> = {
-  easy: { name: 'Junior', reaction: 0.22, moveSpeed: 2.6, paddleSpeed: 4, pitchError: 4.5, yawError: 3.5, speedError: 0.12, aggression: 0.2, margin: 0.3 },
-  medium: { name: 'Senior', reaction: 0.16, moveSpeed: 3.4, paddleSpeed: 5, pitchError: 2.2, yawError: 2, speedError: 0.07, aggression: 0.5, margin: 0.2 },
-  hard: { name: 'Principal', reaction: 0.1, moveSpeed: 4.4, paddleSpeed: 6.5, pitchError: 1.0, yawError: 1, speedError: 0.04, aggression: 0.8, margin: 0.12 },
+  easy: { name: 'Easy', reaction: 0.22, moveSpeed: 2.6, paddleSpeed: 4, pitchError: 4.5, yawError: 3.5, speedError: 0.12, aggression: 0.2, margin: 0.3 },
+  medium: { name: 'Medium', reaction: 0.16, moveSpeed: 3.4, paddleSpeed: 5, pitchError: 2.2, yawError: 2, speedError: 0.07, aggression: 0.5, margin: 0.2 },
+  hard: { name: 'Hard', reaction: 0.1, moveSpeed: 4.4, paddleSpeed: 6.5, pitchError: 1.0, yawError: 1, speedError: 0.04, aggression: 0.8, margin: 0.12 },
+  // Near-perfect: reads the ball instantly, covers the table and rarely misses.
+  expert: { name: 'Expert', reaction: 0.06, moveSpeed: 5.4, paddleSpeed: 8, pitchError: 0.45, yawError: 0.5, speedError: 0.02, aggression: 0.7, margin: 0.16 },
 };
 
 type StrokeKind = 'loop' | 'drive' | 'push' | 'block' | 'smash' | 'flick' | 'chop' | 'serve-short' | 'serve-long' | 'serve-side';

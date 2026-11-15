@@ -23,7 +23,7 @@ The old tuning panel is now **Developer tools**: off by default, toggled with <k
 Open **📈 Career, drills & tournaments**, from the start screen or the top of the panel. **❓ How to play** explains each shot; it also opens automatically the first time you play. Progress is saved in your browser; there are no accounts.
 
 **Career and stats**
-- **XP** comes from points, matches (more against Principal AI, and online), practice returns, drills, tournaments and achievements.
+- **XP** comes from points, matches (more against Hard and Expert AI, and online), practice returns, drills, tournaments and achievements.
 - **Career ladder:** Intern → Junior → Mid-level → Senior → Staff → Principal → CTO.
 - **Lifetime stats:** matches and points won, aces, longest rally, fastest shot, most spin, practice return rate, AI levels beaten and favourite shots.
 
@@ -40,7 +40,7 @@ Open **📈 Career, drills & tournaments**, from the start screen or the top of 
 
 **Tournaments:** knockout ladders; one loss and you're out.
 - **Department Cup:** four rounds (IT Support, Security, Infrastructure, then a best-of-3 final against the Platform Team).
-- **Company Championship:** unlocks after the Cup. Principal opponents, ending in a best-of-5 final against the CTO on the rooftop.
+- **Company Championship:** unlocks after the Cup. Hard opponents, ending in a best-of-5 final against an Expert CTO on the rooftop.
 
 **Unlocks**
 - **Venues:** Server room (Junior), Conference room (Mid-level), Rooftop (win the Cup).
@@ -48,7 +48,7 @@ Open **📈 Career, drills & tournaments**, from the start screen or the top of 
 - **Rubbers:** Hotfix (Junior), Legacy Code (On-call defence), Air Gap (win the Championship).
 - **Unlock everything** (Unlocks tab) switches gating off for free play. Online lobbies aren't gated.
 
-**Achievements:** 11 badges, including Hello World (first win), Zero-day (ace), Marathon Standup (15-hit rally), Low Latency (90 km/h shot), Spin Doctor (7,000 rpm), Skip-level (beat a Principal), Full Stack (win with every style) and IPO (win the Championship).
+**Achievements:** 11 badges, including Hello World (first win), Zero-day (ace), Marathon Standup (15-hit rally), Low Latency (90 km/h shot), Spin Doctor (7,000 rpm), Skip-level (beat a Hard or Expert AI), Full Stack (win with every style) and IPO (win the Championship).
 
 ### Milestone 7 — mobile
 
@@ -142,7 +142,7 @@ Online, the whole room runs at the slider's game speed: the server and every cli
 | Ed | Counter-attacker ("The Firewall") | deep, +10% reach | Standard Build / Standard Build |
 | Will | Spinner & slammer | close, +15% power | Standard Build / Standard Build |
 
-**AI per character:** an AI opponent is a character plus a level (Junior, Senior or Principal). Each plays like the real person:
+**AI per character:** an AI opponent is a character plus a level (Easy, Medium, Hard or Expert). Each plays like the real person:
 - **Lee:** an all-rounder, but goes for smashes on balls that aren't really high enough, and misses some.
 - **Ryan:** moves you around with wide placement, switching sides, and only smashes a genuinely high ball.
 - **Ed:** defends deep, counter-loops topspin (including from below the table: he lets pushes drop and lifts them), and blocks smashes steadily. He returns about 70% of smashes and power loops, against roughly 25% for the others.
