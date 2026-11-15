@@ -118,6 +118,8 @@ const MIN_REACH_Z = MIN_BODY_Z - OVER_REACH;
 /** During the stroke the bat stays this close to the body (m), and this far back from the net. */
 const STRIKE_REACH = REACH + 0.1;
 const NET_CLEARANCE_Z = 0.12;
+/** Rally contact happens about this long after the planned moment (s): the blade starts behind the ball. */
+const CONTACT_LAG = 0.008;
 /** Half-duration of the visible swing through the contact point, seconds. */
 const SWING_TIME = 0.05;
 
@@ -198,6 +200,18 @@ export class AiPlayer {
     let ic = pred.interceptAt(planeZ, now, TABLE.height + 0.95);
     // Out of reach over the table (a short ball, or heavy backspin checking back toward the
     // net): take it at the highest point it can still be reached, or let it go.
+    // A slow ball that bounces short (a drop, or short topspin that kicks on past the end
+    // line low): step in and take it at the top of the bounce, not falling below the table.
+    const play = pred.playable();
+    if (ic && play.length) {
+      const first = play[0];
+      const next = play[Math.min(play.length - 1, 4)];
+      const speed = Math.hypot(next.pos.x - first.pos.x, next.pos.y - first.pos.y, next.pos.z - first.pos.z) / Math.max(1e-6, next.t - first.t);
+      if (first.pos.z < TABLE.halfLength * 0.6 && speed < 6.5 && ic.pos.y < TABLE.height + 0.12) {
+        const top = play.filter((p) => p.t >= now + this.profile.reaction + 0.12 && p.pos.z >= MIN_REACH_Z && p.pos.y <= TABLE.height + 0.95);
+        if (top.length) ic = top.reduce((a, b) => (b.pos.y > a.pos.y ? b : a));
+      }
+    }
     if (!ic || ic.pos.z < MIN_REACH_Z) {
       const reachable = pred.playable().filter((p) => p.t >= now && p.pos.z >= MIN_REACH_Z && p.pos.y <= TABLE.height + 0.95);
       ic = reachable.length ? reachable.reduce((a, b) => (b.pos.y > a.pos.y ? b : a)) : null;
@@ -225,6 +239,8 @@ export class AiPlayer {
 
     let choices: StrokeKind[];
     if (height > (pers.smashHeight ?? 0.42) && r < Math.min(0.95, (0.35 + 0.6 * a) * (pers.smashAppetite ?? 1))) choices = ['smash', 'drive', 'block'];
+    // Short topspin over the table: block it back (safe), or flick it when feeling aggressive.
+    else if (overTable && c.top > 5) choices = r < 0.6 * a ? ['flick', 'block', 'push'] : ['block', 'flick', 'push'];
     else if (overTable) choices = c.top < -10 && r > 0.25 + 0.5 * a ? ['push', 'flick', 'block'] : ['flick', 'push', 'block'];
     else if (c.top < -15) choices = r < 0.2 + 0.7 * a ? ['loop', 'push', 'drive'] : ['push', 'loop', 'block'];
     else if (at.pos.z > TABLE.halfLength + 1.2) choices = r < 0.5 ? ['chop', 'loop', 'block'] : ['loop', 'chop', 'block'];
@@ -270,6 +286,13 @@ export class AiPlayer {
     return sim.state;
   }
 
+  /** The ball (local frame) `dt` seconds later. */
+  private advance(b: BallState, dt: number): BallState {
+    const sim = new BallSim(b, this.params);
+    while (sim.time < dt - 1e-9) sim.step(TICK_DT);
+    return sim.state;
+  }
+
   private gauss() {
     const u = Math.max(1e-9, this.rng());
     return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * this.rng());
@@ -281,6 +304,9 @@ export class AiPlayer {
     const pers = this.style.personality ?? {};
     const spin = pers.spin ?? 1;
     // Paddle just behind the ball so contact happens at the planned moment.
+    // The blade starts just behind the ball and meets it a few milliseconds after the planned
+    // moment: judge the landing from the ball as it will be then (it matters on short, slow balls).
+    const met = mode === 'rally' ? this.advance(at, CONTACT_LAG) : at;
     const pos = v3(at.pos.x, at.pos.y, at.pos.z + 0.018);
     let best: AiPlan | null = null;
 
@@ -318,7 +344,7 @@ export class AiPlayer {
       const scan: { pitch: number; pos?: Vec3 }[] = [];
       for (let pitch = -72; pitch <= 72; pitch += STEP) {
         const normal = faceNormal(pitch, yaw);
-        const res = landingOutcome(at, { ...pose, normal }, normal, this.rubber, this.params, mode);
+        const res = landingOutcome(met, { ...pose, normal }, normal, this.rubber, this.params, mode);
         const diagonalOk = !diagonal || (res.first !== undefined && res.first.x >= 0.02 && res.pos !== undefined && res.pos.x <= -0.02);
         scan.push({ pitch, pos: res.outcome === 'in' && diagonalOk ? res.pos : undefined });
       }
