@@ -1476,6 +1476,24 @@ export class Sandbox implements MenuHost {
       this.targetRing.visible = false;
       this.predictionLine.visible = false;
     } else if (screen === null && !this.playing) this.setCamera(this.settings.camera);
+    this.menuFrame = title;
+    requestAnimationFrame(() => this.frameAroundMenu());
+  }
+
+  /** On the title screen, shift the picture so the table sits in the space beside the menu. */
+  private menuFrame = false;
+  private frameAroundMenu() {
+    const w = this.container.clientWidth;
+    const h = this.container.clientHeight;
+    const card = this.menuFrame ? this.container.querySelector<HTMLElement>('.menu-card') : null;
+    const box = this.container.getBoundingClientRect();
+    const right = card ? card.getBoundingClientRect().right - box.left : 0;
+    // Only when there is real room beside the menu (landscape); portrait phones keep the plain view.
+    if (card && w - right > w * 0.3) {
+      const freeCentre = (right + w) / 2;
+      this.camera.setViewOffset(w, h, w / 2 - freeCentre, 0, w, h);
+    } else this.camera.clearViewOffset();
+    this.camera.updateProjectionMatrix();
   }
 
   setRealismPercent(p: number) {
@@ -2376,7 +2394,7 @@ export class Sandbox implements MenuHost {
     this.renderer.setSize(w, h);
     this.post.setSize(w, h, this.renderer.getPixelRatio());
     this.camera.aspect = w / h;
-    this.camera.updateProjectionMatrix();
+    this.frameAroundMenu();
   }
 
   private buildGui() {
