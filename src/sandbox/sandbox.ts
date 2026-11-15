@@ -424,6 +424,7 @@ export class Sandbox implements MenuHost {
     this.juice = new Juice(this.scene);
     this.juice.enabled = this.look.arcadeFx;
     this.sfx.heavyHits = this.look.arcadeFx;
+    this.sfx.wantGrunts = this.look.mjMode;
     this.hud = new Hud(container);
 
     this.player = new Player('p1', this.params);
@@ -1736,7 +1737,8 @@ export class Sandbox implements MenuHost {
   setMjMode(on: boolean) {
     this.look.mjMode = on;
     savePref('mem.mjMode', on ? '1' : '0');
-    if (on) this.sfx.yelp(); // a taste of it
+    this.sfx.wantGrunts = on;
+    if (on) this.sfx.yelp(); // a taste of it (and starts loading the grunts)
   }
 
   setCallouts(on: boolean) {
