@@ -113,7 +113,7 @@ const LOOKS: Record<StyleId, Look> = {
       g.add(badge, stripe);
     },
   },
-  // Ed: black cap, teal speckled tee, black shorts, a watch and a water bottle.
+  // Ed: black cap, teal speckled tee, black shorts, and a watch.
   blocker: {
     shirt: 0x1d5a57,
     legs: { kind: 'shorts', color: 0x111214 },
@@ -124,7 +124,6 @@ const LOOKS: Record<StyleId, Look> = {
     build: 1.12,
     cap: { color: 0x1a1b1f },
     watch: 0x111111,
-    bottle: 0x2f8fe0,
     accessory: (g, m, t) => {
       // Speckled print on the front and back of the shirt.
       const dots = [0x7dd3c0, 0x0f3b39, 0x9ee6d6];

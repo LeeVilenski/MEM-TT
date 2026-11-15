@@ -22,6 +22,8 @@ export interface Personality {
   blockPace?: number;
   /** 0–1: counter-loops balls it takes late, below the height of the table. */
   lowLoop?: number;
+  /** Chance (0–1) of slicing (backspin push/chop) a ball it isn't smashing. */
+  slice?: number;
   /** 0–1: aims for the wide angles and switches sides, moving the opponent around. */
   placement?: number;
   /** Multiplier on brush (spin) for loops and serves. */
@@ -119,8 +121,8 @@ export const STYLES: Record<StyleId, PlayStyle> = {
     footwork: 1.1,
     distance: 0.55,
     rubbers: { forehand: RUBBERS.inverted, backhand: RUBBERS.inverted },
-    ai: { loop: 2, smash: 2, flick: 1.3, drive: 1, chop: 0.2, 'serve-side': 3, 'serve-short': 1.5, 'serve-long': 0.6 },
-    personality: { spin: 1.4, smashHeight: 0.3, smashAppetite: 1.8, smashError: 2.4 },
+    ai: { loop: 2, smash: 2, flick: 1.3, drive: 1, chop: 0.2, 'serve-side': 4, 'serve-short': 2.5, 'serve-long': 0.3 },
+    personality: { slice: 0.55, spin: 1.5, smashHeight: 0.3, smashAppetite: 1.8, smashError: 2.4 },
   },
 };
 

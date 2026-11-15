@@ -237,6 +237,12 @@ export class AiPlayer {
       return (this.plan = this.solve(at, ic.t, ['loop', 'chop', 'block'], 'rally', now));
     }
 
+    // Slicers (Will): when it isn't a ball to smash, often slice it back with backspin.
+    const smashable = height > (pers.smashHeight ?? 0.42);
+    if (pers.slice && !smashable && c.top < 15 && this.rng() < pers.slice) {
+      const slice: StrokeKind[] = at.pos.z > TABLE.halfLength + 0.5 ? ['chop', 'push', 'block'] : ['push', 'chop', 'block'];
+      return (this.plan = this.solve(at, ic.t, slice, 'rally', now));
+    }
     let choices: StrokeKind[];
     if (height > (pers.smashHeight ?? 0.42) && r < Math.min(0.95, (0.35 + 0.6 * a) * (pers.smashAppetite ?? 1))) choices = ['smash', 'drive', 'block'];
     // Short topspin over the table: block it back (safe), or flick it when feeling aggressive.
