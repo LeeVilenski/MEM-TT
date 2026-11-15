@@ -379,6 +379,8 @@ export class Sandbox implements MenuHost {
   private localServer: LocalServer | null = null;
   private lobby: Lobby;
   private remoteViews = new Map<Seat, PlayerView>();
+  /** The character (and partner see-through-ness) each remote view was dressed as. */
+  private remoteLooks = new Map<Seat, string>();
   onlineSettings = {
     name: loadPref('mem.name', 'Player'),
     server: loadPref('mem.server', DEFAULT_SERVER),
@@ -1136,7 +1138,7 @@ export class Sandbox implements MenuHost {
     const badge = sc.deuce ? 'DEUCE · RACE CONDITION' : mp ? `MATCH POINT · ${mp === 'near' ? 'You' : ai.displayName}` : gp ? `GAME POINT · ${gp === 'near' ? 'You' : ai.displayName}` : null;
     this.matchHud.setScore({
       you: 'You',
-      them: `${ai.displayName} (AI)`,
+      them: 'Opponent',
       points: [sc.points.near, sc.points.far],
       games: [sc.games.near, sc.games.far],
       youServe: (match.phase === 'rally' || match.phase === 'point-over') && match.referee ? match.referee.server === 'near' : sc.server === 'near',
@@ -1661,7 +1663,7 @@ export class Sandbox implements MenuHost {
       const c = this.online;
       const sc = c.score!;
       const them: SideId = c.side === 'near' ? 'far' : 'near';
-      this.venue.setScore([`${this.teamName(c.side, false).slice(0, 12).toUpperCase()}  ${sc.points[c.side]}`, `${this.teamName(them, false).slice(0, 12).toUpperCase()}  ${sc.points[them]}`, `GAMES ${sc.games[c.side]}-${sc.games[them]}`]);
+      this.venue.setScore([`YOU  ${sc.points[c.side]}`, `OPPONENT  ${sc.points[them]}`, `GAMES ${sc.games[c.side]}-${sc.games[them]}`]);
     } else if (this.match && this.ai) {
       const sc = this.match.score;
       this.venue.setScore([`YOU          ${sc.points.near}`, `${this.ai.style.character.toUpperCase().padEnd(12)} ${sc.points.far}`, `GAMES ${sc.games.near}-${sc.games.far}`]);
@@ -2077,11 +2079,18 @@ export class Sandbox implements MenuHost {
     for (const seat of seats) {
       if (seat === c.seat) continue;
       let view = this.remoteViews.get(seat);
+      // Your doubles partner stands between the camera and the table: draw them see-through.
+      const partner = seatSide(seat) === side;
+      const style = c.room?.seats[seat]?.style ?? 'allround';
+      const look = `${style}|${partner}`;
       if (!view) {
-        // Your doubles partner stands between the camera and the table: draw them see-through.
-        const partner = seatSide(seat) === side;
-        view = new PlayerView(this.scene, { bodyColor: partner ? 0x60a5fa : 0xe8562a, bodyOpacity: 1, style: c.room?.seats[seat]?.style ?? 'allround', avatarOpacity: partner ? 0.35 : 1 });
+        view = new PlayerView(this.scene, { bodyColor: partner ? 0x60a5fa : 0xe8562a, bodyOpacity: 1, style, avatarOpacity: partner ? 0.35 : 1 });
         this.remoteViews.set(seat, view);
+        this.remoteLooks.set(seat, look);
+      } else if (this.remoteLooks.get(seat) !== look) {
+        // A new match with a different line-up: re-dress the seat (it may now be your partner, or someone else).
+        view.setStyle(style, partner ? 0.35 : 1);
+        this.remoteLooks.set(seat, look);
       }
       const r = c.remotes.get(seat);
       view.visible = inMatch && !!r;
@@ -2123,8 +2132,8 @@ export class Sandbox implements MenuHost {
       const them: SideId = side === 'near' ? 'far' : 'near';
       const badge = sc.deuce ? 'DEUCE · RACE CONDITION' : sc.matchPoint ? `MATCH POINT · ${this.teamName(sc.matchPoint)}` : sc.gamePoint ? `GAME POINT · ${this.teamName(sc.gamePoint)}` : null;
       this.matchHud.setScore({
-        you: this.teamName(side),
-        them: this.teamName(them),
+        you: 'You',
+        them: 'Opponent',
         points: [sc.points[side], sc.points[them]],
         games: [sc.games[side], sc.games[them]],
         youServe: !!c.serverSeat && seatSide(c.serverSeat) === side,
