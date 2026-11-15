@@ -44,7 +44,7 @@ Open **📈 Career, drills & tournaments**, from the start screen or the top of 
 
 **Unlocks**
 - **Venues:** Server room (Junior), Conference room (Mid-level), Rooftop (win the Cup).
-- **Styles:** Lee, Ryan, Ed and Will from the start; the Sysadmin (On-call defence drill).
+- **Styles:** Lee, Ryan, Ed, Will and Dan from the start (the Sysadmin is currently hidden).
 - **Rubbers:** Hotfix (Junior), Legacy Code (On-call defence), Air Gap (win the Championship).
 - **Unlock everything** (Unlocks tab) switches gating off for free play. Online lobbies aren't gated.
 

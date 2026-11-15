@@ -140,4 +140,7 @@ export const STYLES: Record<StyleId, PlayStyle> = {
   },
 };
 
-export const STYLE_IDS = Object.keys(STYLES) as StyleId[];
+/** Styles hidden from every picker and opponent list (kept defined so old saves still load). */
+export const HIDDEN_STYLES: ReadonlySet<StyleId> = new Set<StyleId>(['chopper']);
+
+export const STYLE_IDS = (Object.keys(STYLES) as StyleId[]).filter((id) => !HIDDEN_STYLES.has(id));

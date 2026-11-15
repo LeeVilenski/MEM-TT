@@ -27,7 +27,7 @@ import {
 import { Player } from '../game/player';
 import { AI_LEVELS, AiPlayer, type AiLevel } from '../game/ai';
 import { DEFAULT_REALISM, REALISM_PRESETS, realismSettings } from '../game/realism';
-import { STYLES, STYLE_IDS, type StyleId } from '../game/styles';
+import { HIDDEN_STYLES, STYLES, STYLE_IDS, type StyleId } from '../game/styles';
 import { IncomingPrediction } from '../game/intercept';
 import { Match } from '../game/match';
 import { LET_MESSAGE, pointMessage } from '../game/messages';
@@ -515,7 +515,7 @@ export class Sandbox implements MenuHost {
     this.playerView.setStyle(this.player.style.id);
     // Restore the last player picked ("Playing as"), if still unlocked.
     const savedStyle = loadPref('mem.style', '');
-    if (savedStyle in STYLES && savedStyle !== this.realism.style && !this.lockReason('style', savedStyle)) this.setStyle(savedStyle as StyleId);
+    if (savedStyle in STYLES && !HIDDEN_STYLES.has(savedStyle as StyleId) && savedStyle !== this.realism.style && !this.lockReason('style', savedStyle)) this.setStyle(savedStyle as StyleId);
     this.sfx.volume = this.look.volume;
     this.sfx.muted = this.look.muted;
     this.sfx.ambienceOn = this.look.ambience;
@@ -2698,7 +2698,7 @@ const DEFAULT_SERVER: string =
 /** A remembered character choice ('random' if none or unknown). */
 function pickPref(key: string): StyleId | 'random' {
   const v = loadPref(key, 'random');
-  return v in STYLES ? (v as StyleId) : 'random';
+  return v in STYLES && !HIDDEN_STYLES.has(v as StyleId) ? (v as StyleId) : 'random';
 }
 
 function loadPref(key: string, fallback: string): string {
