@@ -108,7 +108,8 @@ export class PlayerView {
   }
 
   /** Show this player as a style's character (replacing the plain torso). */
-  setStyle(style: StyleId) {
+  setStyle(style: StyleId, avatarOpacity = this.avatarOpacity) {
+    this.avatarOpacity = avatarOpacity;
     if (this.avatar) {
       this.body.remove(this.avatar.group);
       this.avatar.dispose();

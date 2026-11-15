@@ -379,6 +379,8 @@ export class Sandbox implements MenuHost {
   private localServer: LocalServer | null = null;
   private lobby: Lobby;
   private remoteViews = new Map<Seat, PlayerView>();
+  /** The character (and partner see-through-ness) each remote view was dressed as. */
+  private remoteLooks = new Map<Seat, string>();
   onlineSettings = {
     name: loadPref('mem.name', 'Player'),
     server: loadPref('mem.server', DEFAULT_SERVER),
@@ -2077,11 +2079,18 @@ export class Sandbox implements MenuHost {
     for (const seat of seats) {
       if (seat === c.seat) continue;
       let view = this.remoteViews.get(seat);
+      // Your doubles partner stands between the camera and the table: draw them see-through.
+      const partner = seatSide(seat) === side;
+      const style = c.room?.seats[seat]?.style ?? 'allround';
+      const look = `${style}|${partner}`;
       if (!view) {
-        // Your doubles partner stands between the camera and the table: draw them see-through.
-        const partner = seatSide(seat) === side;
-        view = new PlayerView(this.scene, { bodyColor: partner ? 0x60a5fa : 0xe8562a, bodyOpacity: 1, style: c.room?.seats[seat]?.style ?? 'allround', avatarOpacity: partner ? 0.35 : 1 });
+        view = new PlayerView(this.scene, { bodyColor: partner ? 0x60a5fa : 0xe8562a, bodyOpacity: 1, style, avatarOpacity: partner ? 0.35 : 1 });
         this.remoteViews.set(seat, view);
+        this.remoteLooks.set(seat, look);
+      } else if (this.remoteLooks.get(seat) !== look) {
+        // A new match with a different line-up: re-dress the seat (it may now be your partner, or someone else).
+        view.setStyle(style, partner ? 0.35 : 1);
+        this.remoteLooks.set(seat, look);
       }
       const r = c.remotes.get(seat);
       view.visible = inMatch && !!r;
