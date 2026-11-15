@@ -524,8 +524,9 @@ export class Sandbox implements MenuHost {
     canvas.addEventListener('pointerdown', (e) => this.onPointerDown(e));
     window.addEventListener('pointerup', (e) => {
       if (e.button === 0) this.input.drive = false;
+      if (e.button === 2) this.input.smash = false;
     });
-    window.addEventListener('pointercancel', () => (this.input.drive = false));
+    window.addEventListener('pointercancel', () => ((this.input.drive = false), (this.input.smash = false)));
     window.addEventListener('mousemove', (e) => {
       if (!this.playing) return;
       this.input.dx += e.movementX;
@@ -933,6 +934,7 @@ export class Sandbox implements MenuHost {
       dx: this.input.dx + swipe.dx,
       dy: this.input.dy + swipe.dy,
       drive: this.input.drive || t.drive,
+      smash: !!this.input.smash || t.smash,
       close: k.has('KeyW') || t.close,
       open: k.has('KeyS') || t.open,
       hookLeft: k.has('KeyA') || t.hookLeft,
@@ -956,7 +958,7 @@ export class Sandbox implements MenuHost {
     this.player.update(realDt, input, move, AIM_POINT);
     this.playerView.update(this.player);
     this.playerView.setMarker(this.settings.showIntercept ? intercept : null, this.markerEta());
-    this.hud.setPaddle(this.player.swing.pitchDeg, this.player.swing.side, this.player.swing.forcedSide !== null, input.drive);
+    this.hud.setPaddle(this.player.swing.pitchDeg, this.player.swing.side, this.player.swing.forcedSide !== null, input.drive, !!input.smash);
   }
 
   // ---------------------------------------------------------------- match vs AI
@@ -1074,7 +1076,7 @@ export class Sandbox implements MenuHost {
       const { input, move } = this.gatherInput();
       const rate = this.updatePlayRate(realDt, match.sim && match.referee && match.referee.hits > 0 ? match.sim.state.vel.z : null);
       match.frame(realDt * this.settings.timeScale * rate * fxScale, realDt, { side: 'near', input, move });
-      this.hud.setPaddle(this.player.swing.pitchDeg, this.player.swing.side, this.player.swing.forcedSide !== null, input.drive);
+      this.hud.setPaddle(this.player.swing.pitchDeg, this.player.swing.side, this.player.swing.forcedSide !== null, input.drive, !!input.smash);
     }
 
     // Players and ball.
@@ -1996,7 +1998,7 @@ export class Sandbox implements MenuHost {
     const { input, move } = this.playing && inMatch ? this.gatherInput() : { input: { ...NO_INPUT }, move: { x: 0, z: 0 } };
     c.frame(realDt, input, move);
     const side = c.side;
-    if (this.playing) this.hud.setPaddle(this.player.swing.pitchDeg, this.player.swing.side, this.player.swing.forcedSide !== null, input.drive);
+    if (this.playing) this.hud.setPaddle(this.player.swing.pitchDeg, this.player.swing.side, this.player.swing.forcedSide !== null, input.drive, !!input.smash);
 
     // Me (view frame), other players (world → view).
     this.playerView.visible = !!c.seat && inMatch;
@@ -2309,8 +2311,9 @@ export class Sandbox implements MenuHost {
 
   private onPointerDown(e: PointerEvent) {
     if (this.playing) {
-      // Left mouse button = Drive. Touches (swipes) never are: touch has its own Drive button.
+      // Left mouse button = Drive, right = Smash. Touches (swipes) never are: touch has its own buttons.
       if (e.button === 0 && e.pointerType === 'mouse') this.input.drive = true;
+      if (e.button === 2 && e.pointerType === 'mouse') this.input.smash = true;
       return;
     }
     if (!e.shiftKey) return;

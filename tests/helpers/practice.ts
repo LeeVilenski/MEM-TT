@@ -18,7 +18,7 @@ const AIM = { x: 0, z: -0.85 };
  * @param opts.basePitch face angle to hold (default: −10° vs backspin, −30° vs topspin)
  * @param opts.setup adjust the player before the ball (e.g. realism)
  */
-export function playBall(presetName: string, angleAssist: number, flickLead = 2 / FPS, flickPx = 60, opts: { basePitch?: number; setup?: (p: Player) => void } = {}) {
+export function playBall(presetName: string, angleAssist: number, flickLead = 2 / FPS, flickPx = 60, opts: { basePitch?: number; setup?: (p: Player) => void; smash?: boolean } = {}) {
   const P = DEFAULT_PARAMS;
   const pr = PRESETS.find((p) => p.name === presetName)!;
   const origin = v3(pr.lateral, TABLE.height + pr.height, -TABLE.halfLength - pr.distanceBack);
@@ -42,7 +42,7 @@ export function playBall(presetName: string, angleAssist: number, flickLead = 2 
   let landing: { x: number; z: number } | undefined;
 
   for (let frame = 0; frame < FPS * 4 && !result; frame++) {
-    const input = { ...NO_INPUT };
+    const input = { ...NO_INPUT, smash: !!opts.smash };
     const ic = player.contactFor(hit ? null : pred, sim.time);
     player.setIntercept(ic, sim.time);
     if (ic) {
