@@ -260,7 +260,16 @@ export class Hud {
     this.warnEl.style.display = msg && !this.playing ? 'block' : 'none';
   }
 
+  /** Keep a title card on screen until hold(null) (e.g. drill instructions before the first ball). */
+  hold(title: string | null, sub = '', go = '') {
+    window.clearTimeout(this.flashTimer);
+    this.flashEl.classList.remove('show');
+    this.flashEl.classList.toggle('hold', !!title);
+    if (title) this.flashEl.innerHTML = `<div class="flash-title">${title}</div><div class="flash-sub">${sub}</div>${go ? `<div class="flash-go">${go}</div>` : ''}`;
+  }
+
   flash(title: string, sub: string) {
+    this.flashEl.classList.remove('hold');
     this.flashEl.innerHTML = `<div class="flash-title">${title}</div><div class="flash-sub">${sub}</div>`;
     this.flashEl.classList.remove('show');
     void this.flashEl.offsetWidth; // restart the CSS animation

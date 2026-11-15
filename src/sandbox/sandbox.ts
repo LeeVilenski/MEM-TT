@@ -1238,9 +1238,13 @@ export class Sandbox implements MenuHost {
       this.drillZone.position.set((z.x0 + z.x1) / 2, TABLE.height + 0.002, (z.z0 + z.z1) / 2);
       this.scene.add(this.drillZone);
     }
-    this.hud.flash('DRILL', this.drill.drill.description);
+    // Instructions stay up until the player says go — no ball until then.
+    const d = this.drill.drill;
+    const touch = matchMedia('(pointer: coarse)').matches;
+    this.hud.hold(d.name.toUpperCase(), `${d.description}<br><b>Goal:</b> ${d.goal}`, touch ? 'Tap to start' : 'Click or press any key to start');
+    this.drillWaiting = true;
     this.phase = 'done';
-    this.sinceResolved = -1.2; // give the player a moment to read
+    this.sinceResolved = 0;
     this.updateDrillHud();
     this.requestPlay();
   }
@@ -1269,7 +1273,20 @@ export class Sandbox implements MenuHost {
     this.careerScreen.drillResult(d);
   }
 
+  /** The drill's instructions are up; the first ball waits for this. */
+  private drillWaiting = false;
+
+  private drillGo() {
+    if (!this.drillWaiting) return false;
+    this.drillWaiting = false;
+    this.hud.hold(null);
+    this.sinceResolved = 0; // first ball shortly after
+    return true;
+  }
+
   private stopDrill() {
+    if (this.drillWaiting) this.hud.hold(null);
+    this.drillWaiting = false;
     if (this.drillZone) this.scene.remove(this.drillZone);
     this.drillZone = null;
     this.drill = null;
@@ -2265,7 +2282,9 @@ export class Sandbox implements MenuHost {
   private advance(gameDt: number, realDt: number) {
     this.sinceFire += gameDt;
     if (this.playing) {
-      if (this.phase === 'done' || this.phase === 'idle') {
+      if (this.drillWaiting) {
+        // Waiting on the player to read the drill.
+      } else if (this.phase === 'done' || this.phase === 'idle') {
         this.sinceResolved += realDt;
         if (this.sinceResolved > 0.9) this.fire();
       } else if (this.sinceFire > 6) {
@@ -2329,6 +2348,7 @@ export class Sandbox implements MenuHost {
       this.setPlaying(false);
       return;
     }
+    if (down && !e.repeat && e.code !== 'Escape' && this.playing && this.drillGo()) return;
     // Esc in the developer free-camera view brings the menu back.
     if (down && e.code === 'Escape' && !this.playing && this.inspecting) {
       this.inspecting = false;
@@ -2388,6 +2408,7 @@ export class Sandbox implements MenuHost {
   }
 
   private onPointerDown(e: PointerEvent) {
+    if (this.playing && this.drillGo()) return;
     if (this.playing) {
       // Left mouse button = Drive, right = Smash. Touches (swipes) never are: touch has its own buttons.
       if (e.button === 0 && e.pointerType === 'mouse') this.input.drive = true;

@@ -161,6 +161,22 @@ kbd {
   animation: flash 1.4s ease-out forwards;
 }
 
+/* Held on screen until the player is ready (e.g. drill instructions). */
+.hud-flash.hold {
+  opacity: 1;
+  transform: translate(-50%, -50%);
+  animation: none;
+  max-width: min(560px, calc(100vw - 32px));
+  background: rgba(10, 14, 22, 0.78);
+  border-radius: 16px;
+  padding: 18px 22px;
+}
+.flash-go {
+  margin-top: 12px;
+  font-size: 15px;
+  opacity: 0.8;
+}
+
 .flash-title {
   font-family: var(--mono);
   font-weight: 800;
