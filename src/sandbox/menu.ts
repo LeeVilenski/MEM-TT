@@ -234,7 +234,7 @@ export class Menu {
   private vsAiHtml() {
     const m = this.host.matchSettings;
     const levels = (Object.keys(AI_LEVELS) as AiLevel[])
-      .map((id, i) => this.choice('level', id, AI_LEVELS[id].name, m.level === id, ['Gentle, slow to react', 'Solid all round', 'Fast, precise, aggressive'][i]))
+      .map((id, i) => this.choice('level', id, AI_LEVELS[id].name, m.level === id, ['Gentle, slow to react', 'Solid all round', 'Fast, precise, aggressive', 'Barely misses. Good luck'][i]))
       .join('');
     const styles = [this.choice('aiStyle', 'random', 'Random', m.aiStyle === 'random', 'Surprise me')]
       .concat(STYLE_IDS.map((id) => this.choice('aiStyle', id, STYLES[id].character, m.aiStyle === id, styleNote(id))))
