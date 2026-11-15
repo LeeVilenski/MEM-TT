@@ -1,5 +1,6 @@
 import type { Ambience, SongId } from '../render/venues';
 import { Music } from './music';
+import { GRUNT_CLIPS } from './grunts';
 
 /**
  * Procedural sound effects (Web Audio, no audio files). Ball sounds scale with
@@ -104,6 +105,7 @@ export class Sfx {
       this.applyVolume();
       this.setAmbience(this.ambKind);
       this.setMusic(this.musicKind);
+      if (this.wantGrunts) this.loadGrunts();
     }
     if (!this.hidden) void this.ctx.resume();
   }
@@ -217,14 +219,49 @@ export class Sfx {
   }
 
   private lastYelp = -1;
+  private grunts: AudioBuffer | null = null;
+  private gruntsState: 'idle' | 'loading' | 'failed' = 'idle';
+  private recentGrunts: number[] = [];
+  /** MJ mode is on: fetch the grunt clips as soon as there is an audio context. */
+  wantGrunts = false;
+
+  /** Fetch and decode the grunt sprite (once; a failure leaves the synthesized yelps). */
+  loadGrunts() {
+    if (!this.ctx || this.grunts || this.gruntsState !== 'idle') return;
+    this.gruntsState = 'loading';
+    const ctx = this.ctx;
+    fetch(`${import.meta.env.BASE_URL}sfx/mj-grunts.mp3`)
+      .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(String(r.status)))))
+      .then((data) => ctx.decodeAudioData(data))
+      .then((buf) => (this.grunts = buf))
+      .catch(() => (this.gruntsState = 'failed'));
+  }
 
   /**
-   * MJ mode: a falsetto pop-star yelp on a smash ("Hee-hee!", "Ow!", "Hoo!"), made by
-   * formant synthesis (no samples), never the same one twice running. Returns its caption.
+   * MJ mode: a grunt on a smash, from the recorded clips (none of the last few again). Until
+   * they've loaded, a falsetto yelp ("Hee-hee!", "Ow!", "Hoo!") by formant synthesis, which
+   * returns its caption.
    */
   yelp(x = 0): string {
     const ctx = this.ready();
     if (!ctx) return '';
+    // The recorded grunts once loaded; the synthesized yelps until then (or if they can't load).
+    this.loadGrunts();
+    if (this.grunts) {
+      let i = Math.floor(Math.random() * GRUNT_CLIPS.length);
+      while (this.recentGrunts.includes(i)) i = (i + 1) % GRUNT_CLIPS.length;
+      this.recentGrunts = [i, ...this.recentGrunts].slice(0, Math.min(8, GRUNT_CLIPS.length - 1));
+      const [start, dur] = GRUNT_CLIPS[i];
+      const src = ctx.createBufferSource();
+      src.buffer = this.grunts;
+      const out = ctx.createStereoPanner();
+      out.pan.value = panFor(x) * 0.5;
+      const g = ctx.createGain();
+      g.gain.value = 0.9;
+      src.connect(g).connect(out).connect(this.master!);
+      src.start(ctx.currentTime, start, dur);
+      return '';
+    }
     let i = Math.floor(Math.random() * YELPS.length);
     if (i === this.lastYelp) i = (i + 1) % YELPS.length;
     this.lastYelp = i;
