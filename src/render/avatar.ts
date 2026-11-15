@@ -4,7 +4,7 @@ import type { StyleId } from '../game/styles';
 /**
  * Characters built from smooth primitives: a tapered torso, jointed arms and legs,
  * hands and a proper head. One look per player style; four are modelled on real
- * people (Lee, Ed, Ryan, Will) from their clothes, hair and build. The racket arm is
+ * people (Lee, Ed, Ryan, Will, Dan, Paul) from their clothes, hair and build. The racket arm is
  * a two-bone chain (shoulder, elbow, hand) solved each frame to hold the paddle handle.
  */
 type Mat = (c: number) => THREE.Material;
@@ -37,6 +37,10 @@ interface Look {
   beard?: number;
   /** Rectangular glasses frames, by colour. */
   glasses?: number;
+  /** Tinted lenses in the glasses (sunglasses), by colour. */
+  lenses?: number;
+  /** A goatee and moustache (instead of a full beard), by colour. */
+  goatee?: number;
   /** A watch on the free wrist. */
   watch?: number;
   /** Something held in the free hand (a water bottle), by colour. */
@@ -178,6 +182,81 @@ const LOOKS: Record<StyleId, Look> = {
       under.rotation.set(0, Math.PI, -Math.PI / 2);
       under.scale.set(1.3, 0.8, 1);
       g.add(v, under);
+    },
+  },
+  // Paul: navy Hawaiian shirt with a pink, teal and orange flower print, open collar,
+  // jeans, dark sunglasses, short dark hair and a goatee.
+  patient: {
+    shirt: 0x1c2442,
+    legs: { kind: 'trousers', color: 0x3b5b8f },
+    skin: 0xe9b996,
+    hair: 0x3a2a20,
+    shoes: 0x1f2937,
+    height: 1.0,
+    build: 1.0,
+    glasses: 0x111111,
+    lenses: 0x1b2230,
+    goatee: 0x4a3426,
+    accessory: (g, m, t) => {
+      // A busy flower print front and back: big blossoms (petals round a yellow centre) among leaves.
+      const petals = [0xf06292, 0x2bb3a3, 0xf59e0b, 0xf8fafc, 0xec4899];
+      const disc = new THREE.CircleGeometry(1, 10);
+      const leaf = new THREE.CircleGeometry(1, 6);
+      const place = (o: THREE.Object3D, i: number, back: boolean, x: number, y: number) => {
+        const z = t.front(y, x) - 0.002 - (i % 3) * 0.0003;
+        o.position.set(x, y, back ? -z : z);
+        o.rotation.y = back ? 0 : Math.PI;
+        g.add(o);
+      };
+      // A jittered grid over the front and back, so the print covers the shirt evenly.
+      const COLS = 5;
+      const ROWS = 6;
+      const jitter = (n: number) => ((Math.sin(n * 12.9898) * 43758.5453) % 1 + 1) % 1 - 0.5;
+      for (let i = 0; i < COLS * ROWS * 2; i++) {
+        const back = i >= COLS * ROWS;
+        const cell = i % (COLS * ROWS);
+        const col = cell % COLS;
+        const row = Math.floor(cell / COLS);
+        const x = ((col + 0.5) / COLS - 0.5 + jitter(i) * 0.12) * t.halfW * 1.6;
+        const y = 0.93 + ((row + 0.5) / ROWS + jitter(i + 99) * 0.08) * 0.45;
+        if (i % 3 === 0) {
+          // A leaf.
+          const l = new THREE.Mesh(leaf, m(i % 2 ? 0x15803d : 0x0e7490));
+          l.scale.set(0.012, 0.028, 1);
+          l.rotation.z = i;
+          const w = new THREE.Group();
+          w.add(l);
+          place(w, i, back, x, y);
+          continue;
+        }
+        const r = 0.022 + (i % 4) * 0.005;
+        const flower = new THREE.Group();
+        for (let k = 0; k < 5; k++) {
+          const petal = new THREE.Mesh(disc, m(petals[i % petals.length]));
+          petal.scale.setScalar(r * 0.5);
+          const a = (k * Math.PI * 2) / 5 + i;
+          petal.position.set(Math.cos(a) * r * 0.5, Math.sin(a) * r * 0.5, 0);
+          flower.add(petal);
+        }
+        const centre = new THREE.Mesh(disc, m(0xfde047));
+        centre.scale.setScalar(r * 0.25);
+        centre.position.z = -0.0005;
+        flower.add(centre);
+        place(flower, i, back, x, y);
+      }
+      // Open collar: two lapels either side of the neck.
+      for (const side of [-1, 1]) {
+        const lapel = new THREE.Mesh(new THREE.CircleGeometry(0.04, 3), m(0x141a33));
+        lapel.position.set(side * 0.03, 1.415, t.front(1.415, side * 0.03) - 0.004);
+        lapel.rotation.set(0, Math.PI, side * 0.6 - Math.PI / 2);
+        lapel.scale.set(1.2, 0.7, 1);
+        g.add(lapel);
+      }
+      const neck = new THREE.Mesh(new THREE.CircleGeometry(0.03, 3), m(0xe9b996));
+      neck.position.set(0, 1.43, t.front(1.43) - 0.005);
+      neck.rotation.set(0, Math.PI, -Math.PI / 2);
+      neck.scale.set(1.2, 0.8, 1);
+      g.add(neck);
     },
   },
 };
@@ -449,6 +528,15 @@ export class Avatar {
         add(new THREE.BoxGeometry(0.004, 0.004, 0.1), c, s * 0.091, y + 0.012, z + 0.05);
       }
       add(new THREE.BoxGeometry(0.018, 0.004, 0.004), c, 0, HY + 0.02, z);
+      if (look.lenses !== undefined) for (const s of [-1, 1]) add(new THREE.BoxGeometry(0.04, 0.025, 0.002), look.lenses, s * 0.036, HY + 0.012, z + 0.001);
+    }
+    if (look.goatee !== undefined) {
+      // Chin patch, the strip down from the lip, and a moustache.
+      const chin = add(new THREE.SphereGeometry(0.03, 12, 8), look.goatee, 0, HY - 0.082, -0.084);
+      chin.scale.set(1, 0.75, 0.6);
+      add(new THREE.BoxGeometry(0.014, 0.022, 0.006), look.goatee, 0, HY - 0.06, -0.097);
+      const tache = add(new THREE.BoxGeometry(0.05, 0.009, 0.008), look.goatee, 0, HY - 0.03, -0.098);
+      tache.rotation.x = 0.1;
     }
     if (look.cap) {
       const crown = add(new THREE.SphereGeometry(0.108, 22, 12, 0, Math.PI * 2, 0, Math.PI / 2), look.cap.color, 0, HY + 0.035, 0.004);

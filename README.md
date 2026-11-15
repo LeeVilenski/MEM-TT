@@ -122,6 +122,7 @@ Everything is generated in code: geometry, textures and sound. There are no asse
 | Ryan | Full-Stack Dev | tall; dark tousled hair and stubble, black rugby-style jersey with white trim |
 | Will | Network Engineer | blue cap, royal-blue running vest, grey shorts, watch |
 | Sysadmin | Sysadmin | beard, black t-shirt, lanyard and badge |
+| Paul | Patient flat hitter (World Tour opponent) | navy Hawaiian flower-print shirt, jeans, dark sunglasses, goatee |
 
 In first person you see only your paddle, so nothing hides the ball. Replays and the other cameras show your full character.
 
@@ -165,6 +166,7 @@ Online, the whole room runs at the slider's game speed: the server and every cli
 | Lee | All-rounder | mid | Standard Build / Standard Build |
 | Ryan | Tactician | mid, +10% footwork | Standard Build / Standard Build |
 | Sysadmin | Chopper | deep, +12% reach | Standard Build / Legacy Code (long pips) |
+| Paul | Patient flat hitter | mid, +5% reach | Hotfix / Hotfix (short pips) |
 | Ed | Counter-attacker ("The Firewall") | deep, +10% reach | Standard Build / Standard Build |
 | Will | Spinner & slammer | close, +15% power | Standard Build / Standard Build |
 
@@ -174,6 +176,7 @@ Online, the whole room runs at the slider's game speed: the server and every cli
 - **Ed:** defends deep, counter-loops topspin (including from below the table: he lets pushes drop and lifts them), and blocks smashes steadily. He returns about 70% of smashes and power loops, against roughly 25% for the others.
 - **Will:** heavy spin, especially on serve (mostly sidespin), and smashes often and wildly.
 - **Sysadmin:** chops from about 2.6 m back.
+- **Paul:** never puts spin on the ball: every stroke is flat (no brush), on short pips. Patient: aims well inside the lines, hits a little softer and makes fewer errors, and almost never smashes. A World Tour opponent only (Sprint League and Beach Classic groups).
 
 You choose the AI's style in **Match vs AI** or in the online lobby (or leave it random).
 

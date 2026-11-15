@@ -69,7 +69,7 @@ export const TOUR_STOPS: TourStop[] = [
     opponents: [
       { style: 'pusher', level: 'easy' },
       { style: 'looper', level: 'medium' },
-      { style: 'allround', level: 'easy' },
+      { style: 'patient', level: 'easy' },
     ],
     bestOf: 1,
     finalBestOf: 3,
@@ -129,7 +129,7 @@ export const TOUR_STOPS: TourStop[] = [
     opponents: [
       { style: 'looper', level: 'hard' },
       { style: 'penhold', level: 'hard' },
-      { style: 'pusher', level: 'hard' },
+      { style: 'patient', level: 'hard' },
     ],
     bestOf: 3,
     finalBestOf: 5,
