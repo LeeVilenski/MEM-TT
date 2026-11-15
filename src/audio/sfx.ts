@@ -1,4 +1,5 @@
 import type { Ambience } from '../render/venues';
+import { Music } from './music';
 
 /**
  * Procedural sound effects (Web Audio, no audio files). Ball sounds scale with
@@ -30,7 +31,7 @@ export class Sfx {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
   private noise: AudioBuffer | null = null;
-  private amb: { stop: () => void } | null = null;
+  private music: Music | null = null;
   private ambKind: Ambience = 'none';
   volume = 0.7;
   muted = false;
@@ -265,59 +266,11 @@ export class Sfx {
     });
   }
 
-  /** Looping background bed for a venue (very quiet). */
+  /** Background music for a venue (procedural songs; see music.ts). */
   setAmbience(kind: Ambience) {
     this.ambKind = kind;
-    this.amb?.stop();
-    this.amb = null;
-    const ctx = this.ctx;
-    if (!ctx || !this.noise || kind === 'none' || !this.ambienceOn) return;
-    const src = ctx.createBufferSource();
-    src.buffer = this.noise;
-    src.loop = true;
-    const f = ctx.createBiquadFilter();
-    const g = ctx.createGain();
-    const nodes: AudioNode[] = [];
-    switch (kind) {
-      case 'office': // HVAC hum + distant chatter-ish band
-        f.type = 'lowpass';
-        f.frequency.value = 400;
-        g.gain.value = 0.05;
-        break;
-      case 'servers': // fan roar
-        f.type = 'bandpass';
-        f.frequency.value = 1200;
-        f.Q.value = 0.4;
-        g.gain.value = 0.07;
-        break;
-      case 'room':
-        f.type = 'lowpass';
-        f.frequency.value = 250;
-        g.gain.value = 0.03;
-        break;
-      case 'wind': {
-        f.type = 'bandpass';
-        f.frequency.value = 500;
-        f.Q.value = 0.8;
-        g.gain.value = 0.06;
-        // Gusts: slowly modulate the filter.
-        const lfo = ctx.createOscillator();
-        lfo.frequency.value = 0.15;
-        const lg = ctx.createGain();
-        lg.gain.value = 300;
-        lfo.connect(lg).connect(f.frequency);
-        lfo.start();
-        nodes.push(lfo);
-        break;
-      }
-    }
-    src.connect(f).connect(g).connect(this.master!);
-    src.start();
-    this.amb = {
-      stop: () => {
-        src.stop();
-        nodes.forEach((n) => (n as OscillatorNode).stop?.());
-      },
-    };
+    if (!this.ctx || !this.noise || !this.master) return;
+    this.music ??= new Music(this.ctx, this.master, this.noise);
+    this.music.play(this.ambienceOn ? kind : 'none');
   }
 }

@@ -2444,7 +2444,7 @@ export class Sandbox implements MenuHost {
       .name('Mute')
       .onChange((m: boolean) => this.setMuted(m));
     lf.add(this.look, 'ambience')
-      .name('Venue ambience')
+      .name('Music')
       .onChange((a: boolean) => this.setAmbience(a));
     lf.add(this.look, 'autoReplay')
       .name('Auto-replay long rallies')
