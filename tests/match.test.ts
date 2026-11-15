@@ -156,3 +156,29 @@ describe('human player in a match (scripted input through the real pipeline)', (
     expect(m.score.points.near + m.score.points.far).toBeGreaterThan(0);
   });
 });
+
+describe('AI stroke at the hit event', () => {
+  // MJ mode grunts on an AI smash by reading the hitter's plan when its hit is reported.
+  it('the hitter still has its plan (with the stroke it chose) when its hit is emitted', () => {
+    // (A rare unplanned contact, e.g. a ball clipping the paddle, has none.)
+    const P = DEFAULT_PARAMS;
+    const rng = mulberry32(7);
+    const ais = { near: new AiPlayer('near', AI_LEVELS.hard, P, rng), far: new AiPlayer('far', AI_LEVELS.hard, P, rng) };
+    const m = new Match(P, { near: { kind: 'ai', ai: ais.near }, far: { kind: 'ai', ai: ais.far } }, { bestOf: 1, pointsToWin: 11, firstServer: 'near' });
+    let rallyHits = 0;
+    let withPlan = 0;
+    let smashes = 0;
+    m.on((e) => {
+      if (e.type !== 'hit' || e.serve) return;
+      rallyHits++;
+      const stroke = ais[e.side].plan?.stroke;
+      if (stroke) withPlan++;
+      if (stroke === 'smash') smashes++;
+    });
+    for (let i = 0; i < 60 * 60 * 20 && m.phase !== 'match-over'; i++) m.frame(1 / 60, 1 / 60);
+    console.log('rally hits', rallyHits, 'with plan', withPlan, 'smashes', smashes);
+    expect(rallyHits).toBeGreaterThan(20);
+    expect(withPlan).toBeGreaterThanOrEqual(rallyHits * 0.9);
+    expect(smashes).toBeGreaterThan(0);
+  });
+});
