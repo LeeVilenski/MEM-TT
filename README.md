@@ -123,6 +123,7 @@ Everything is generated in code: geometry, textures and sound. There are no asse
 | Will | Network Engineer | blue cap, royal-blue running vest, grey shorts, watch |
 | Sysadmin | Sysadmin | beard, black t-shirt, lanyard and badge |
 | Paul | Patient flat hitter (World Tour opponent) | navy Hawaiian flower-print shirt, jeans, dark sunglasses, goatee |
+| Bryony | Wheelchair counter-hitter (World Tour opponent) | plays seated in a sports wheelchair (cambered wheels, push rims); berry star-print top, ponytail, glasses |
 
 In first person you see only your paddle, so nothing hides the ball. Replays and the other cameras show your full character.
 
@@ -167,6 +168,7 @@ Online, the whole room runs at the slider's game speed: the server and every cli
 | Ryan | Tactician | mid, +10% footwork | Standard Build / Standard Build |
 | Sysadmin | Chopper | deep, +12% reach | Standard Build / Legacy Code (long pips) |
 | Paul | Patient flat hitter | mid, +5% reach | Hotfix / Hotfix (short pips) |
+| Bryony | Wheelchair counter-hitter | tight to the table, +5% reach, 30% less sideways movement | Standard Build / Standard Build |
 | Ed | Counter-attacker ("The Firewall") | deep, +10% reach | Standard Build / Standard Build |
 | Will | Spinner & slammer | close, +15% power | Standard Build / Standard Build |
 
@@ -177,6 +179,7 @@ Online, the whole room runs at the slider's game speed: the server and every cli
 - **Will:** heavy spin, especially on serve (mostly sidespin), and smashes often and wildly.
 - **Sysadmin:** chops from about 2.6 m back.
 - **Paul:** never puts spin on the ball: every stroke is flat (no brush), on short pips. Patient: aims well inside the lines, hits a little softer and makes fewer errors, and almost never smashes. A World Tour opponent only (Sprint League and Beach Classic groups).
+- **Bryony:** plays from her wheelchair right at the table: takes the ball early, blocks pace and works the angles, but covers less ground sideways (the AI's movement speed is scaled down). A World Tour opponent only (Park Open group, Boardroom Showdown quarter-final).
 
 You choose the AI's style in **Match vs AI** or in the online lobby (or leave it random).
 

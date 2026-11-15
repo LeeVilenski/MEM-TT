@@ -450,7 +450,8 @@ export class AiPlayer {
       const over = plan.pos.z < TABLE.halfLength;
       target = { x: plan.pos.x + (fh ? -0.4 : 0.3) * (over ? 0.6 : 1), z: Math.max(over ? MIN_BODY_Z : TABLE.halfLength + 0.15, plan.pos.z + ARM) };
     }
-    const move = (from: number, to: number) => from + Math.max(-p.moveSpeed * dt, Math.min(p.moveSpeed * dt, to - from));
+    const step = p.moveSpeed * (this.style.personality?.mobility ?? 1) * dt;
+    const move = (from: number, to: number) => from + Math.max(-step, Math.min(step, to - from));
     if (!plan || now >= this.moveFrom) {
       this.body.x = move(this.body.x, target.x);
       this.body.z = move(this.body.z, target.z);
