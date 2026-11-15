@@ -6,7 +6,7 @@ A 3D browser table tennis game for 1–4 players, built around spin, pace and a 
 
 ### Menus
 
-The game opens on a **title screen** over a slowly orbiting view of the venue: **Quick match**, **Match vs AI** (opponent level, character and format), **Practice**, **Career**, **Online** (create or join a room), **How to play** and **Settings** (difficulty, your character, venue, sound, effects, graphics quality). Locked characters and venues show what unlocks them.
+The game opens on a **title screen** over a slowly orbiting view of the venue: **Quick match**, **Match vs AI** (opponent level, character and format), **World Tour**, **Training** (drills, the ball machine and the tutorial), **Online** (create or join a room), then **Locker** (stats, badges, unlocks), **Controls** and **Settings** (difficulty, your character, venue, sound, effects, graphics quality). Locked characters and venues show what unlocks them.
 
 **Esc** (or **☰** on touch) during play opens the **pause menu**: Resume, Restart, How to play, Settings, Quit to title. Menus work with the mouse, touch, Tab or the arrow keys, and Esc goes back.
 
@@ -20,7 +20,7 @@ The game opens on a **title screen** over a slowly orbiting view of the venue: *
 
 The old tuning panel is now **Developer tools**: off by default, toggled with <kbd>`</kbd> or **Settings → Advanced**. With it on, the menus also offer a free camera (the inspect view with the ball-machine controls below).
 
-Open **📈 Career, drills & tournaments**, from the start screen or the top of the panel. **❓ How to play** explains each shot; it also opens automatically the first time you play. Progress is saved in your browser; there are no accounts.
+Progression lives in three places on the title screen: **World Tour** (the career), **Training** (drills) and the **Locker** (stats, badges and unlocks). **❓ How to play** explains each shot; it also opens automatically the first time you play. Progress is saved in your browser; there are no accounts.
 
 **Career and stats**
 - **XP** comes from points, matches (more against Hard and Expert AI, and online), practice returns, drills, tournaments and achievements.
@@ -38,17 +38,27 @@ Open **📈 Career, drills & tournaments**, from the start screen or the top of 
 | Ship it to the corner | Land in a marked target zone |
 | On-call defence | Chop loops back |
 
-**Tournaments:** knockout ladders; one loss and you're out.
-- **Department Cup:** four rounds (IT Support, Security, Infrastructure, then a best-of-3 final against the Platform Team).
-- **Company Championship:** unlocks after the Cup. Hard opponents, ending in a best-of-5 final against an Expert CTO on the rooftop.
+**World Tour** (`src/progress/tour.ts`): a route of seven stops, each at its own venue. Win a stop to travel on to the next.
+- **Knockouts:** lose once and you're out.
+- **Round-robin groups:** you and three opponents each play everyone once (the matches you aren't in are simulated by level); the top two meet in a final.
+
+| # | Stop | Venue | Event |
+|---|---|---|---|
+| 1 | MEM HQ: Department Cup | MEM | Knockout, final best of 3 |
+| 2 | Sprint League | Open-plan office | Group, final best of 3 |
+| 3 | Data Centre Knockout | Server room | Knockout, final best of 3 |
+| 4 | Park Open | **City Park** (new, outdoors) | Group, final best of 3 |
+| 5 | Boardroom Showdown | Conference room | Knockout, all best of 3 |
+| 6 | Beach Classic | **Offsite beach** (new, outdoors) | Group best of 3, final best of 5 |
+| 7 | Company Championship | Rooftop | Knockout, final best of 5 vs an Expert CTO |
 
 **Unlocks**
-- **Venues:** Server room (Junior), Conference room (Mid-level), Rooftop (win the Cup).
+- **Venues:** Server room (Junior), Conference room (Mid-level), Rooftop (win the Cup), City Park (win the Data Centre Knockout), Offsite beach (win the Boardroom Showdown). Tour stops are always played at their own venue.
 - **Styles:** Lee, Ryan, Ed and Will from the start; the Sysadmin (On-call defence drill).
 - **Rubbers:** Hotfix (Junior), Legacy Code (On-call defence), Air Gap (win the Championship).
 - **Unlock everything** (Unlocks tab) switches gating off for free play. Online lobbies aren't gated.
 
-**Achievements:** 11 badges, including Hello World (first win), Zero-day (ace), Marathon Standup (15-hit rally), Low Latency (90 km/h shot), Spin Doctor (7,000 rpm), Skip-level (beat a Hard or Expert AI), Full Stack (win with every style) and IPO (win the Championship).
+**Achievements:** 14 badges, including Global Rollout (win every World Tour stop), Clean Code (10 clean contacts in a row), Social Engineering (win a point off a serve the AI misread), Hello World (first win), Zero-day (ace), Marathon Standup (15-hit rally), Low Latency (90 km/h shot), Spin Doctor (7,000 rpm), Skip-level (beat a Hard or Expert AI), Full Stack (win with every style) and IPO (win the Championship).
 
 ### Milestone 7 — mobile
 

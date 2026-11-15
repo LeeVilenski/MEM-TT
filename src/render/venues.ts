@@ -15,7 +15,7 @@ function glow(color: number, strength = 2.2) {
  * core scene's lights, floor and background, and adds its own props. Everything
  * stays outside the playing area so the ball and its shadow remain readable.
  */
-export type VenueId = 'sandbox' | 'office' | 'mem' | 'server' | 'conference' | 'rooftop';
+export type VenueId = 'sandbox' | 'office' | 'mem' | 'server' | 'conference' | 'rooftop' | 'park' | 'beach';
 export type Ambience = 'none' | 'office' | 'servers' | 'room' | 'wind';
 /** Background song per venue (see audio/music.ts). */
 export type SongId = 'none' | 'office' | 'mem' | 'servers' | 'room' | 'wind';
@@ -27,6 +27,8 @@ export const VENUES: Record<VenueId, { name: string; ambience: Ambience; song: S
   server: { name: 'Server room', ambience: 'servers', song: 'servers' },
   conference: { name: 'Conference room', ambience: 'room', song: 'room' },
   rooftop: { name: 'Rooftop (company offsite)', ambience: 'wind', song: 'wind' },
+  park: { name: 'City Park', ambience: 'wind', song: 'wind' },
+  beach: { name: 'Offsite beach', ambience: 'wind', song: 'wind' },
 };
 
 export interface Venue {
@@ -1244,6 +1246,286 @@ function rooftop(): Venue {
   });
 }
 
+// ---------------------------------------------------------------- outdoors
+
+/** Repeatable pseudo-random numbers for prop placement (same layout every visit). */
+function seeded(seed: number) {
+  return () => {
+    seed = (seed * 16807) % 2147483647;
+    return (seed - 1) / 2147483646;
+  };
+}
+
+/** A sky dome: a vertical gradient (top to bottom), drawn unfogged. */
+function skyDome(stops: [number, string][], radius = 60) {
+  const tex = canvasTexture(16, 256, (ctx) => {
+    const grd = ctx.createLinearGradient(0, 0, 0, 256);
+    for (const [t, c] of stops) grd.addColorStop(t, c);
+    ctx.fillStyle = grd;
+    ctx.fillRect(0, 0, 16, 256);
+  });
+  return new THREE.Mesh(new THREE.SphereGeometry(radius, 32, 16), new THREE.MeshBasicMaterial({ map: tex, side: THREE.BackSide, fog: false }));
+}
+
+/** A speckled ground texture (grass, sand) that tiles. */
+function groundTexture(base: string, specks: string[], repeat: number, blades = false) {
+  return canvasTexture(
+    256,
+    256,
+    (ctx) => {
+      const rnd = seeded(7);
+      ctx.fillStyle = base;
+      ctx.fillRect(0, 0, 256, 256);
+      for (let i = 0; i < 2600; i++) {
+        ctx.fillStyle = specks[i % specks.length];
+        const x = rnd() * 256;
+        const y = rnd() * 256;
+        if (blades) ctx.fillRect(x, y, 1, 2 + rnd() * 4);
+        else ctx.fillRect(x, y, 1.5, 1.5);
+      }
+    },
+    [repeat, repeat],
+  );
+}
+
+/** A slab under the table so the playing area reads clearly on grass or sand. */
+function pad(w: number, d: number, color: number) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.02, d), std(color, { roughness: 0.95 }));
+  m.position.y = 0.005;
+  return m;
+}
+
+/** City Park: a sunny afternoon at a concrete table among the trees. */
+function park(): Venue {
+  const g = new THREE.Group();
+  g.add(
+    skyDome([
+      [0, '#3f7fd0'],
+      [0.42, '#8fc2ee'],
+      [0.5, '#d9ecf7'],
+      [0.56, '#a7c48a'],
+      [1, '#4d6b3a'],
+    ]),
+  );
+  g.add(pad(5.6, 8.4, 0xb9b4aa));
+
+  // Trees: instanced trunks and leafy crowns, in a ring well clear of the table.
+  const rnd = seeded(42);
+  const trunks: THREE.Matrix4[] = [];
+  const crowns: THREE.Matrix4[] = [];
+  const crowns2: THREE.Matrix4[] = [];
+  for (let i = 0; i < 38; i++) {
+    const a = (i / 38) * Math.PI * 2 + rnd() * 0.12;
+    const r = 9 + rnd() * 11;
+    const x = Math.cos(a) * r;
+    const z = Math.sin(a) * r;
+    if (Math.abs(x) < 4 && Math.abs(z) < 7) continue;
+    const h = 2.2 + rnd() * 1.6;
+    const sc = 0.8 + rnd() * 0.7;
+    trunks.push(new THREE.Matrix4().compose(new THREE.Vector3(x, h / 2, z), new THREE.Quaternion(), new THREE.Vector3(1, h, 1)));
+    (i % 2 ? crowns : crowns2).push(new THREE.Matrix4().compose(new THREE.Vector3(x, h + 0.9 * sc, z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), rnd() * 6), new THREE.Vector3(1.6 * sc, 1.4 * sc, 1.6 * sc)));
+  }
+  g.add(instances(new THREE.CylinderGeometry(0.12, 0.18, 1, 8), std(0x6b4a2f), trunks));
+  g.add(instances(new THREE.IcosahedronGeometry(1, 1), std(0x3f7a35, { flatShading: true }), crowns));
+  g.add(instances(new THREE.IcosahedronGeometry(1, 1), std(0x5a8f3c, { flatShading: true }), crowns2));
+
+  // Benches either side, lamp posts, a bin and the event sign.
+  const wood = std(0x9a6b3f);
+  const iron = std(0x2f3437, { metalness: 0.5, roughness: 0.5 });
+  for (const sx of [-1, 1]) {
+    for (const z of [-2.5, 2.5]) {
+      const bench = new THREE.Group();
+      bench.add(box(0.45, 0.05, 1.6, wood, 0, 0.45, 0), box(0.06, 0.4, 1.6, wood, 0.2 * sx, 0.7, 0));
+      bench.add(box(0.4, 0.45, 0.06, iron, 0, 0.225, -0.7), box(0.4, 0.45, 0.06, iron, 0, 0.225, 0.7));
+      bench.position.set(sx * 4.2, 0, z);
+      g.add(bench);
+    }
+  }
+  const lampMat = glow(0xfff1c8, 1.6);
+  for (const [x, z] of [
+    [-5.5, -6],
+    [5.5, -6],
+    [-5.5, 6],
+    [5.5, 6],
+  ] as const) {
+    g.add(box(0.08, 3.4, 0.08, iron, x, 1.7, z));
+    const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.16, 12, 8), lampMat);
+    lamp.position.set(x, 3.5, z);
+    g.add(lamp);
+  }
+  g.add(box(0.5, 0.8, 0.5, std(0x2f6b45), 3.6, 0.4, -5.2));
+  const sign = board(['PARK OPEN', 'all welcome'], 2.6, 0.8, { bg: '#2f6b45', fg: '#f4f1e6', font: 'bold 54px sans-serif' });
+  sign.position.set(0, 1.3, -7.5);
+  g.add(sign, box(0.08, 1.3, 0.08, iron, -1.1, 0.65, -7.52), box(0.08, 1.3, 0.08, iron, 1.1, 0.65, -7.52));
+  g.add(plant(-3.6, 5.6, 1.4), plant(3.6, 5.6, 1.4));
+
+  // A few birds circling overhead.
+  const birds: THREE.Mesh[] = [];
+  const birdMat = new THREE.MeshBasicMaterial({ color: 0x1f2328 });
+  for (let i = 0; i < 5; i++) {
+    const b = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.35, 3), birdMat);
+    b.rotation.z = Math.PI / 2;
+    g.add(b);
+    birds.push(b);
+  }
+
+  const grass = groundTexture('#4f7d36', ['#5d8f3f', '#446d2e', '#6a9a48', '#3c6128'], 14, true);
+  let t = 0;
+  return makeVenue('park', g, {
+    background: 0x8fc2ee,
+    fog: [0xc6dcea, 22, 58],
+    hemi: [0xe4f1ff, 0x55703a, 1.15],
+    key: [0xfff3dc, 2.6],
+    env: 0.5,
+    floor: grass,
+    update: (dt) => {
+      t += dt;
+      birds.forEach((b, i) => {
+        const a = t * (0.25 + i * 0.03) + i * 1.3;
+        const r = 14 + i * 2;
+        b.position.set(Math.cos(a) * r, 9 + i * 0.8 + Math.sin(t * 2 + i) * 0.3, Math.sin(a) * r - 6);
+        b.rotation.y = -a;
+      });
+    },
+  });
+}
+
+/** Offsite beach: late afternoon on the sand, the sea beyond the far end of the table. */
+function beach(): Venue {
+  const g = new THREE.Group();
+  g.add(
+    skyDome([
+      [0, '#3d6fb8'],
+      [0.38, '#8db8e2'],
+      [0.48, '#ffd6a0'],
+      [0.52, '#f6a96b'],
+      [0.53, '#2f7fa3'],
+      [1, '#1f5f80'],
+    ]),
+  );
+  // The sun, low over the sea.
+  const sun = new THREE.Mesh(new THREE.CircleGeometry(2.2, 32), glow(0xffe1a0, 2.4));
+  sun.position.set(-8, 7, -55);
+  g.add(sun);
+
+  // The sea: a wide plane beyond the far end, with a shimmering tint and a line of surf.
+  const seaMat = new THREE.MeshStandardMaterial({ color: 0x2f86a8, roughness: 0.25, metalness: 0.1, emissive: 0x0a3a50, emissiveIntensity: 0.4 });
+  const sea = new THREE.Mesh(new THREE.PlaneGeometry(140, 60), seaMat);
+  sea.rotation.x = -Math.PI / 2;
+  sea.position.set(0, 0.02, -44);
+  g.add(sea);
+  const foamMat = new THREE.MeshBasicMaterial({ color: 0xf4f7f6, transparent: true, opacity: 0.8 });
+  const foam = new THREE.Mesh(new THREE.PlaneGeometry(140, 0.5), foamMat);
+  foam.rotation.x = -Math.PI / 2;
+  foam.position.set(0, 0.03, -14);
+  g.add(foam);
+  g.add(pad(5.2, 8, 0xc9a77c));
+
+  // Palms: a leaning trunk of stacked segments, and a crown of drooping fronds.
+  const trunkMat = std(0x8a6a44);
+  const frondMat = std(0x3c8a3e, { side: THREE.DoubleSide, flatShading: true });
+  const rnd = seeded(11);
+  const palm = (x: number, z: number, h: number) => {
+    const p = new THREE.Group();
+    const lean = (rnd() - 0.5) * 0.5;
+    let top = new THREE.Vector3();
+    for (let k = 0; k < 8; k++) {
+      const seg = new THREE.Mesh(new THREE.CylinderGeometry(0.13 - k * 0.008, 0.16 - k * 0.008, h / 8, 7), trunkMat);
+      const y = (k + 0.5) * (h / 8);
+      seg.position.set(lean * y * y * 0.15, y, 0);
+      seg.rotation.z = -lean * y * 0.3;
+      p.add(seg);
+      top = new THREE.Vector3(lean * h * h * 0.15, h, 0);
+    }
+    for (let f = 0; f < 7; f++) {
+      const fr = new THREE.Mesh(new THREE.ConeGeometry(0.28, 2.2, 4), frondMat);
+      fr.scale.set(1, 1, 0.15);
+      fr.position.copy(top);
+      fr.rotation.set(0, (f / 7) * Math.PI * 2, 0);
+      fr.rotateZ(Math.PI / 2 + 0.5);
+      fr.translateY(1);
+      p.add(fr);
+    }
+    p.position.set(x, 0, z);
+    p.rotation.y = rnd() * 6;
+    return p;
+  };
+  for (const [x, z, h] of [
+    [-7, -9, 5.5],
+    [8, -10, 6.2],
+    [-9, 3, 5],
+    [9.5, 5, 5.6],
+    [-12, -3, 6],
+    [12, -4, 5.2],
+  ] as const)
+    g.add(palm(x, z, h));
+
+  // Umbrellas and deck chairs along the sides.
+  const stripes = canvasTexture(128, 16, (ctx) => {
+    for (let i = 0; i < 8; i++) {
+      ctx.fillStyle = i % 2 ? '#ffffff' : '#e8562a';
+      ctx.fillRect(i * 16, 0, 16, 16);
+    }
+  });
+  const canopy = new THREE.MeshStandardMaterial({ map: stripes, side: THREE.DoubleSide, roughness: 0.8 });
+  const pole = std(0xe9e4da);
+  for (const [x, z] of [
+    [-5, -4],
+    [5.2, -2],
+    [-5.4, 4.5],
+    [5.6, 5.5],
+  ] as const) {
+    g.add(box(0.05, 2.2, 0.05, pole, x, 1.1, z));
+    const c = new THREE.Mesh(new THREE.ConeGeometry(1.2, 0.45, 16, 1, true), canopy);
+    c.position.set(x, 2.25, z);
+    g.add(c);
+    const chair = new THREE.Group();
+    chair.add(box(0.55, 0.04, 1.1, std(0x2f86a8), 0, 0.25, 0));
+    const back = box(0.55, 0.04, 0.6, std(0x2f86a8), 0, 0.45, 0.62);
+    back.rotation.x = -0.9;
+    chair.add(back);
+    chair.position.set(x + 0.9 * Math.sign(x), 0, z + 0.4);
+    g.add(chair);
+  }
+
+  // The offsite bar, and bunting above the court.
+  const bar = new THREE.Group();
+  bar.add(box(3, 1.1, 0.8, std(0x8a5a32), 0, 0.55, 0), box(3.4, 0.08, 1.4, std(0xd9c08a), 0, 2.4, 0.2));
+  bar.add(box(0.08, 2.4, 0.08, trunkMat, -1.5, 1.2, 0.7), box(0.08, 2.4, 0.08, trunkMat, 1.5, 1.2, 0.7));
+  const barSign = board(['OFFSITE BAR', 'smoothies'], 2.4, 0.6, { bg: '#ffd166', fg: '#7a3412', font: 'bold 44px sans-serif' });
+  barSign.position.set(0, 2.05, 0.82);
+  bar.add(barSign);
+  bar.position.set(-7.5, 0, 7.5);
+  bar.rotation.y = Math.PI / 5;
+  g.add(bar);
+  const flagCols = [0xe8562a, 0xffd166, 0x2f86a8, 0x4ade80, 0xf7f7f4];
+  for (let i = 0; i < 24; i++) {
+    const tt = i / 23;
+    const f = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.22, 3), new THREE.MeshStandardMaterial({ color: flagCols[i % flagCols.length], side: THREE.DoubleSide }));
+    f.rotation.x = Math.PI;
+    f.position.set(-5 + 10 * tt, 3.4 - Math.sin(tt * Math.PI) * 0.5, -6.2);
+    g.add(f);
+  }
+  g.add(box(0.08, 3.5, 0.08, trunkMat, -5, 1.75, -6.2), box(0.08, 3.5, 0.08, trunkMat, 5, 1.75, -6.2));
+
+  const sand = groundTexture('#e2c597', ['#d9b985', '#ecd3a8', '#cfae7c', '#f1dcb6'], 12);
+  let t = 0;
+  return makeVenue('beach', g, {
+    background: 0x8db8e2,
+    fog: [0xf0d6b4, 30, 80],
+    hemi: [0xffe9cc, 0xc9a77a, 1.05],
+    key: [0xffe0b0, 2.5],
+    env: 0.45,
+    floor: sand,
+    update: (dt) => {
+      t += dt;
+      seaMat.emissiveIntensity = 0.35 + Math.sin(t * 0.8) * 0.08;
+      foam.position.z = -14 + Math.sin(t * 0.6) * 0.6;
+      foamMat.opacity = 0.55 + Math.sin(t * 0.6 + 1) * 0.25;
+    },
+  });
+}
+
 // ---------------------------------------------------------------- application
 
 interface Look {
@@ -1282,7 +1564,7 @@ function makeVenue(id: VenueId, group: THREE.Group, look: Look): Venue {
   };
 }
 
-const BUILDERS: Record<Exclude<VenueId, 'sandbox'>, () => Venue> = { office, mem, server: serverRoom, conference, rooftop };
+const BUILDERS: Record<Exclude<VenueId, 'sandbox'>, () => Venue> = { office, mem, server: serverRoom, conference, rooftop, park, beach };
 
 const SANDBOX_LOOK: Look = { background: 0x14161c, fog: [0x14161c, 12, 30], hemi: [0xdfe8ff, 0x22252c, 0.85], key: [0xffffff, 2.2], env: 0.35 };
 

@@ -60,7 +60,7 @@ export class HowToPlay {
           <br><b>Take it early:</b> ${t ? 'swipe' : 'flick'} while the ball is still rising off the bounce, with the bat near it, and you meet it there: on the rise, close to the table. The ring shows the normal point; you'll never have to dig a ball up off the floor.</div></div>
         <div class="ht-step"><div class="ht-n">4</div><div><b>Missing?</b> Into the net → open the face (${open}). Long → close it (${close}). The face angle is shown at the bottom of the screen.</div></div>
         <div class="ht-step"><div class="ht-n">5</div><div><b>Serving.</b> ${toss} (longer = higher toss), let go, then swing as the ball drops; the bat meets the ball as long as you swing. <b>Pick a serve</b> first (${t ? 'tap one of the serve buttons' : '<kbd>1</kbd>–<kbd>6</kbd> or <kbd>Q</kbd>/<kbd>E</kbd>'}): <b>Backspin</b>, <b>Sidespin</b> (swipe left or right for the curve), <b>Topspin</b>, <b>Fast long</b> or <b>No-spin</b>. The faster you ${t ? 'swipe' : 'flick'}, the more spin. <b>Free</b> lets your swing decide everything.</div></div>
-        <div class="ht-tip">Still too hard? Open <b>Realism</b> in the panel: <b>Arcade</b> slows the game and helps even more. The <b>📈 Career → Training drills</b> teach each shot one at a time.</div>
+        <div class="ht-tip">Still too hard? Open <b>Realism</b> in the panel: <b>Arcade</b> slows the game and helps even more. The <b>Training</b> drills (title screen) teach each shot one at a time.</div>
         <div class="cs-actions"><button data-a="tutorial" class="secondary">Try the interactive tutorial</button><button data-a="close">Got it — let's play</button></div>
       </div>
     </div>`;

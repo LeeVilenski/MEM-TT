@@ -3,6 +3,8 @@ import { ACHIEVEMENTS, CAREER_LEVELS, Career, type Storage } from '../src/progre
 import { DRILLS, DrillSession, drillUnlocked, type DrillReturn } from '../src/progress/drills';
 import { TOURNAMENTS, TournamentRun, tournamentUnlocked } from '../src/progress/tournament';
 import { isUnlocked, newlyUnlocked, unlockedKeys } from '../src/progress/unlocks';
+import { TOUR_STOPS, TourRun, stopUnlocked, stopsWon } from '../src/progress/tour';
+import { mulberry32 } from './helpers/rng';
 import { playBall } from './helpers/practice';
 
 function memoryStorage(initial: string | null = null): Storage & { value: string | null } {
@@ -135,5 +137,62 @@ describe('unlocks', () => {
     expect(isUnlocked('venue', 'rooftop', c.data, c.levelIndex)).toBe(true);
     c.setUnlockAll(true);
     expect(isUnlocked('rubber', 'anti', c.data, c.levelIndex)).toBe(true);
+  });
+});
+
+describe('World Tour', () => {
+  it('starts at MEM HQ and opens each stop once the one before is won', () => {
+    expect(TOUR_STOPS[0].place).toBe('MEM HQ');
+    expect(TOUR_STOPS[0].venue).toBe('mem');
+    expect(TOUR_STOPS.some((s) => s.format === 'group')).toBe(true);
+    expect(TOUR_STOPS.some((s) => s.venue === 'park')).toBe(true);
+    expect(stopUnlocked(0, {})).toBe(true);
+    expect(stopUnlocked(1, {})).toBe(false);
+    expect(stopUnlocked(1, { 'department-cup': 1 })).toBe(true);
+    expect(stopUnlocked(3, {}, true)).toBe(true);
+  });
+
+  it('a knockout stop advances on wins and ends on a loss', () => {
+    const run = new TourRun(TOUR_STOPS[0]);
+    expect(run.current?.label).toMatch(/Round 1/);
+    expect(run.current?.venue).toBe('mem');
+    expect(run.report(1, 0)).toBe('playing');
+    expect(run.report(0, 1)).toBe('eliminated');
+    expect(run.current).toBeNull();
+  });
+
+  it('a round-robin group: play everyone once, top two to the final', () => {
+    const stop = TOUR_STOPS.find((s) => s.format === 'group')!;
+    const run = new TourRun(stop, mulberry32(5));
+    const seen = new Set<string>();
+    for (let i = 0; i < 3; i++) {
+      const f = run.current!;
+      expect(f.label).toMatch(/Group match/);
+      seen.add(f.style);
+      expect(run.report(1, 0)).toBe('playing');
+    }
+    expect(seen.size).toBe(3); // three different opponents
+    // Three wins out of three: top of the group, into the final.
+    expect(run.group!.standings()[0].entry.you).toBe(true);
+    expect(run.current!.label).toMatch(/^Final/);
+    expect(run.report(2, 1)).toBe('won');
+  });
+
+  it('losing every group match means going out in the group stage', () => {
+    const stop = TOUR_STOPS.find((s) => s.format === 'group')!;
+    const run = new TourRun(stop, mulberry32(9));
+    for (let i = 0; i < 3; i++) run.report(0, 1);
+    expect(run.state).toBe('eliminated');
+    expect(run.group!.finalScore).toBeNull();
+    const table = run.group!.standings();
+    expect(table.reduce((n, r) => n + r.played, 0)).toBe(12); // 6 matches, 2 players each
+  });
+
+  it('winning a stop records it, unlocking the next stop and its venue', () => {
+    const c = new Career(memoryStorage());
+    expect(isUnlocked('venue', 'park', c.data, c.levelIndex)).toBe(false);
+    c.recordTournament('datacentre-knockout', 400);
+    expect(isUnlocked('venue', 'park', c.data, c.levelIndex)).toBe(true);
+    expect(stopsWon(c.data.tournaments)).toBe(1);
   });
 });

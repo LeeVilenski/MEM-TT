@@ -49,7 +49,8 @@ import { AutoQuality, QUALITY_LEVELS, type QualitySetting } from '../render/qual
 import { Career } from '../progress/profile';
 import { DRILLS, DrillSession, drillUnlocked } from '../progress/drills';
 import { GRADE_TEXT } from '../game/contact';
-import { TOURNAMENTS, TournamentRun, tournamentUnlocked } from '../progress/tournament';
+import { TOUR_STOPS, TourRun, stopUnlocked, stopsWon } from '../progress/tour';
+import { TourScreen } from './tour';
 import { isUnlocked, newlyUnlocked, unlockedKeys, UNLOCKS, type UnlockKind } from '../progress/unlocks';
 import { CareerScreen } from './career';
 import { HowToPlay } from './howto';
@@ -359,7 +360,9 @@ export class Sandbox implements MenuHost {
   private unlocked = new Set<string>();
   private drill: DrillSession | null = null;
   private drillZone: THREE.Mesh | null = null;
-  private tournament: TournamentRun | null = null;
+  /** The World Tour stop being played (knockout or round-robin), if any. */
+  private tournament: TourRun | null = null;
+  private tourScreen!: TourScreen;
   private matchRecorded = false;
   private rallyHits = 0;
   /** This match so far, for the end-of-match card. */
@@ -479,13 +482,14 @@ export class Sandbox implements MenuHost {
     this.unlocked = unlockedKeys(this.career.data, this.career.levelIndex);
     this.careerScreen = new CareerScreen(container, this.career);
     this.careerScreen.onClose = () => this.careerScreen.hide();
-    this.careerScreen.onStartDrill = (id) => this.startDrill(id);
-    this.careerScreen.onStartTournament = (id) => this.startTournament(id);
-    this.careerScreen.onPlayRound = () => this.playTournamentRound();
-    this.careerScreen.onAbandonTournament = () => {
+    this.tourScreen = new TourScreen(container, this.career);
+    this.tourScreen.onClose = () => this.tourScreen.hide();
+    this.tourScreen.onEnter = (id) => this.startTournament(id);
+    this.tourScreen.onPlay = () => this.playTournamentRound();
+    this.tourScreen.onAbandon = () => {
       this.tournament = null;
-      this.careerScreen.run = null;
-      this.careerScreen.render();
+      this.tourScreen.run = null;
+      this.tourScreen.render();
     };
     this.hud.onCareer = () => this.openCareer();
     this.howTo = new HowToPlay(container, this.isTouch);
@@ -1006,6 +1010,7 @@ export class Sandbox implements MenuHost {
     this.endMatch(false);
     this.stopDrill();
     this.careerScreen?.hide();
+    this.tourScreen?.hide();
     this.practicing = false;
     this.stopTutorial();
     this.matchRecorded = false;
@@ -1068,6 +1073,9 @@ export class Sandbox implements MenuHost {
           this.aiView.react(e.result.winner === 'far' ? 'celebrate' : 'dismay');
           this.matchHud.pointGlow(e.result.winner === 'near');
           this.notePoint(e.result.winner === 'near', match.referee?.hits ?? 0, !!e.result.ace);
+          // Won a short point off your own serve that the AI misjudged: that's the serve working.
+          const read = this.ai?.lastRead;
+          if (e.result.winner === 'near' && match.referee?.server === 'near' && (match.referee?.hits ?? 9) <= 3 && read && Math.abs(read.seenTop - read.top) > Math.max(15, 0.35 * Math.abs(read.top))) this.career.award('social-engineering');
           this.fxPoint(e.result.reason, match.referee?.hits ?? 0, e.result.winner === 'near', e.match);
           const m = pointMessage(e.result, names);
           if (e.match) this.hud.flash(e.result.winner === 'near' ? 'SHIPPED TO PROD' : 'INCIDENT REPORT', e.result.winner === 'near' ? 'You won the match!' : `${ai.displayName} won the match`);
@@ -1155,7 +1163,7 @@ export class Sandbox implements MenuHost {
       if (!this.matchRecorded) {
         this.matchRecorded = true;
         this.career.recordMatch(won, { aiLevel: this.matchSettings.level, style: this.player.style.id });
-        if (this.tournament) return this.reportTournamentMatch(won, `${sc.games.near}–${sc.games.far}`);
+        if (this.tournament) return this.reportTournamentMatch(sc.games.near, sc.games.far);
       }
       if (this.tournament) return;
       const games = sc.history.map((g) => `${g.near}–${g.far}`).join('  ·  ');
@@ -1213,11 +1221,38 @@ export class Sandbox implements MenuHost {
     return true;
   }
 
+  /** The Locker: stats, badges and unlocks. */
   openCareer() {
     if (document.pointerLockElement) document.exitPointerLock();
     this.setPlaying(false);
-    this.careerScreen.run = this.tournament;
     this.careerScreen.show();
+  }
+
+  /** The World Tour route and the stop in progress. */
+  openTour(banner = '') {
+    if (document.pointerLockElement) document.exitPointerLock();
+    this.setPlaying(false);
+    this.menu.hide();
+    this.tourScreen.run = this.tournament;
+    this.tourScreen.show(banner);
+  }
+
+  /** "3/7 stops won · next: City Park" for the title screen. */
+  tourSummary(): string {
+    const won = this.career.data.tournaments;
+    const n = stopsWon(won);
+    if (this.tournament && this.tournament.state === 'playing') return `In progress: ${this.tournament.stop.place}`;
+    const next = TOUR_STOPS.find((st, i) => stopUnlocked(i, won, false) && !(won[st.id] ?? 0));
+    return next ? `${n}/${TOUR_STOPS.length} stops · next: ${next.place}` : `All ${TOUR_STOPS.length} stops won`;
+  }
+
+  /** Drills, for the Training menu. */
+  readonly drills = DRILLS;
+  drillOpen(index: number) {
+    return drillUnlocked(index, this.career.data.drills, this.career.data.unlockAll);
+  }
+  drillStars(id: string) {
+    return this.career.data.drills[id] ?? 0;
   }
 
   startDrill(id: string) {
@@ -1273,8 +1308,11 @@ export class Sandbox implements MenuHost {
     if (!d) return;
     this.career.recordDrill(d.drill.id, d.stars, DRILLS.map((x) => x.id));
     this.stopDrill();
-    this.openCareer();
-    this.careerScreen.drillResult(d);
+    if (document.pointerLockElement) document.exitPointerLock();
+    this.setPlaying(false);
+    const st = '★'.repeat(d.stars) + '☆'.repeat(3 - d.stars);
+    this.menu.banner = `<b>${d.drill.name}</b>: ${d.successes}/${d.drill.balls} <span class="stars">${st}</span>${d.stars === 0 ? ` — need ${d.drill.stars[0]} for a star. Try again!` : ''}`;
+    this.menu.show('training');
   }
 
   /** The drill's instructions are up; the first ball waits for this. */
@@ -1297,12 +1335,17 @@ export class Sandbox implements MenuHost {
     this.hud.setStats(this.stats);
   }
 
+  /** Enter a World Tour stop. */
   startTournament(id: string) {
-    const t = TOURNAMENTS.find((x) => x.id === id);
-    if (!t || !tournamentUnlocked(t, this.career.data.tournaments, this.career.data.unlockAll)) return;
-    this.tournament = new TournamentRun(t);
-    this.careerScreen.run = this.tournament;
-    this.careerScreen.show('tournaments', `Entered the <b>${t.name}</b>. Win every round to take the trophy — one loss and you're out.`);
+    const i = TOUR_STOPS.findIndex((x) => x.id === id);
+    if (i < 0 || !stopUnlocked(i, this.career.data.tournaments, this.career.data.unlockAll)) return;
+    const stop = TOUR_STOPS[i];
+    this.tournament = new TourRun(stop);
+    this.openTour(
+      stop.format === 'knockout'
+        ? `Welcome to <b>${stop.place}</b>. Win every round of the ${stop.name} — one loss and you're out.`
+        : `Welcome to <b>${stop.place}</b>. Play everyone in your group once; finish in the top two to reach the final.`,
+    );
   }
 
   private playTournamentRound() {
@@ -1312,27 +1355,35 @@ export class Sandbox implements MenuHost {
     this.matchSettings.level = r.level;
     this.matchSettings.aiStyle = r.style;
     this.matchSettings.bestOf = r.bestOf;
-    this.setVenue(r.venue); // tournaments may use venues you haven't unlocked yet
+    this.setVenue(r.venue); // tour stops may use venues you haven't unlocked yet
     this.startMatch();
     this.tournament = keep; // startMatch clears ongoing modes; keep the run
-    this.hud.flash(r.name.toUpperCase(), `${STYLES[r.style].character} · ${AI_LEVELS[r.level].name} · best of ${r.bestOf}`);
+    this.hud.flash(r.label.toUpperCase(), `${STYLES[r.style].character} · ${AI_LEVELS[r.level].name} · best of ${r.bestOf}`);
   }
 
-  private reportTournamentMatch(won: boolean, score: string) {
+  private reportTournamentMatch(mine: number, theirs: number) {
     const run = this.tournament!;
-    const round = run.current!;
-    const state = run.report(won, score);
+    const played = run.current!;
+    const state = run.report(mine, theirs);
     if (document.pointerLockElement) document.exitPointerLock();
+    const stop = run.stop;
+    const score = `${mine}–${theirs}`;
     let banner: string;
     if (state === 'won') {
-      this.career.recordTournament(run.tournament.id, run.tournament.xp, run.tournament.achievement);
-      banner = `🏆 <b>You won the ${run.tournament.name}!</b> +${run.tournament.xp} XP`;
-    } else if (state === 'eliminated') banner = `Knocked out in ${round.name} (${score}). Enter again to have another go.`;
-    else banner = `✓ ${round.name} won ${score}. Next: <b>${run.current!.name}</b>.`;
+      this.career.recordTournament(stop.id, stop.xp, stop.achievement);
+      if (stopsWon(this.career.data.tournaments) === TOUR_STOPS.length) this.career.award('world-tour');
+      const i = TOUR_STOPS.indexOf(stop);
+      const next = TOUR_STOPS[i + 1];
+      banner = `🏆 <b>You won the ${stop.name}!</b> +${stop.xp} XP${next ? ` · Next stop: <b>${next.place}</b>` : ' · World Tour complete!'}`;
+    } else if (state === 'eliminated') {
+      banner = run.group && run.group.phase === 'eliminated' && !run.group.finalScore ? `Out in the group stage at ${stop.place}: you needed a top-two finish. Enter again to have another go.` : `Knocked out: ${played.label} (${score}). Enter again to have another go.`;
+    } else {
+      const next = run.current!;
+      const toFinal = run.group?.phase === 'final' && !played.label.startsWith('Final');
+      banner = `${mine > theirs ? '✓' : '✗'} ${played.label}: ${score}.${toFinal ? ' <b>Through to the final!</b>' : ''} Next: <b>${next.label}</b>.`;
+    }
     this.endMatch();
-    this.careerScreen.run = run;
-    this.openCareer();
-    this.careerScreen.show('tournaments', banner);
+    this.openTour(banner);
   }
 
   // ---------------------------------------------------------------- menu (title, settings, pause)
@@ -1346,7 +1397,7 @@ export class Sandbox implements MenuHost {
   /** A match from the menu (not a tournament round: that would abandon the run). */
   startAiMatch() {
     this.tournament = null;
-    this.careerScreen.run = null;
+    this.tourScreen.run = null;
     this.startMatch();
   }
 
@@ -1490,7 +1541,7 @@ export class Sandbox implements MenuHost {
       const sc = this.match.score;
       return {
         kind: this.tournament ? 'tournament' : 'match',
-        detail: `${this.tournament ? `${this.tournament.tournament.name} · ` : ''}vs ${this.ai.displayName} · <b>${sc.points.near}–${sc.points.far}</b> · games ${sc.games.near}–${sc.games.far}`,
+        detail: `${this.tournament ? `${this.tournament.stop.name} · ` : ''}vs ${this.ai.displayName} · <b>${sc.points.near}–${sc.points.far}</b> · games ${sc.games.near}–${sc.games.far}`,
       };
     }
     if (this.tutorial?.step) return { kind: 'tutorial', detail: `Tutorial · step ${this.tutorial.index + 1}: ${this.tutorial.step.title}` };
@@ -1501,7 +1552,7 @@ export class Sandbox implements MenuHost {
   /** Whenever nothing else is on screen and you're not playing, show the title or pause menu. */
   private syncMenu() {
     if (this.playing || this.menu.visible || this.inspecting || this.replay) return;
-    if (this.careerScreen.visible || this.howTo.visible || this.lobby.visible || this.matchHud.overVisible || this.coach.finishVisible) return;
+    if (this.careerScreen.visible || this.tourScreen.visible || this.howTo.visible || this.lobby.visible || this.matchHud.overVisible || this.coach.finishVisible) return;
     if (this.inSession()) this.menu.show('pause', this.pauseContext());
     else this.menu.show('title');
   }
@@ -1764,6 +1815,9 @@ export class Sandbox implements MenuHost {
     ];
   }
 
+  /** Clean contacts in a row (any mode), for the Clean Code badge. */
+  private cleanStreak = 0;
+
   /** Arcade effects for a paddle hit (render coordinates). `mine` = the local player. */
   private fxHit(pos: Vec3, velOut: Vec3, spinOut: Vec3, mine: boolean, serve: boolean) {
     this.lastHitPower = serve ? 0 : hitPower(length(velOut));
@@ -1775,6 +1829,10 @@ export class Sandbox implements MenuHost {
     if (this.look.arcadeFx && mine && !serve && kmh >= 45) this.matchHud.impact(Math.min(1, (kmh - 45) / 50));
     // Contact grade: PERFECT (with the chime and sparks under arcade effects) or a mishit.
     const g = mine && !serve ? this.player.lastContact?.grade : undefined;
+    if (g) {
+      this.cleanStreak = g === 'PERFECT' || g === 'GOOD' ? this.cleanStreak + 1 : 0;
+      if (this.cleanStreak >= 10) this.career.award('clean-code');
+    }
     if (perfect && this.look.arcadeFx) {
       this.sfx.perfect();
       this.hud.perfect();
@@ -2495,7 +2553,7 @@ export class Sandbox implements MenuHost {
     const onMachine = () => this.updateMachineVisuals();
 
     gui.add({ play: () => this.requestPlay() }, 'play').name('▶ Play  (Esc to leave)');
-    gui.add({ career: () => this.openCareer() }, 'career').name('📈 Career, drills & tournaments');
+    gui.add({ career: () => this.openCareer() }, 'career').name('📈 Locker: stats & badges');
     gui.add({ help: () => this.howTo.show() }, 'help').name('❓ How to play');
 
     const rf = gui.addFolder('Realism');

@@ -183,7 +183,7 @@ export class Hud {
       : `<button type="button">▶ Play vs ball machine</button><div class="hud-start-sub">Your mouse becomes the paddle. Flick to swing. <kbd>Esc</kbd> to get the cursor back.</div>`;
     const careerLink = document.createElement('div');
     careerLink.className = 'hud-career';
-    careerLink.textContent = '📈 Career, training drills & tournaments';
+    careerLink.textContent = '📈 Locker: stats, badges & unlocks';
     careerLink.addEventListener('click', (e) => {
       e.stopPropagation();
       this.onCareer();

@@ -6,9 +6,10 @@ import type { QualitySetting } from '../render/quality';
 import type { UnlockKind } from '../progress/unlocks';
 import { CharacterPreview } from '../render/charPreview';
 import { canInstall, install, onInstallChange } from '../pwa/install';
+import type { Drill } from '../progress/drills';
 
 /** Which screen the menu shows (null: hidden). */
-export type MenuScreen = 'title' | 'pause' | 'vsai' | 'online' | 'settings' | 'characters';
+export type MenuScreen = 'title' | 'pause' | 'vsai' | 'online' | 'settings' | 'characters' | 'training';
 
 /** What the player was doing when the pause menu opened. */
 export interface PauseContext {
@@ -35,7 +36,16 @@ export interface MenuHost {
   startDoubles(): void;
   startPractice(): void;
   startTutorial(): void;
+  /** The Locker: stats, badges and unlocks. */
   openCareer(): void;
+  /** The World Tour. */
+  openTour(): void;
+  /** One line about World Tour progress for the title screen. */
+  tourSummary(): string;
+  readonly drills: readonly Drill[];
+  drillOpen(index: number): boolean;
+  drillStars(id: string): number;
+  startDrill(id: string): void;
   showHowTo(): void;
   createOnline(): void;
   joinOnline(code: string): void;
@@ -94,6 +104,7 @@ const ICONS: Record<string, string> = {
   bat: '<circle cx="10" cy="10" r="6.5"/><path d="M14 14l5.5 5.5" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/>',
   ball: '<circle cx="12" cy="12" r="7"/>',
   cup: '<path d="M7 4h10v5a5 5 0 0 1-10 0zM4 5h3v3H5.5A1.5 1.5 0 0 1 4 6.5zM20 5h-3v3h1.5A1.5 1.5 0 0 0 20 6.5zM11 14h2v4h3v2H8v-2h3z"/>',
+  globe: '<circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4 12h16M12 4c-3 3.2-3 12.8 0 16M12 4c3 3.2 3 12.8 0 16" fill="none" stroke="currentColor" stroke-width="1.6"/>',
   net: '<path d="M3 9h18v2H3zM5 11h2v8H5zM17 11h2v8h-2z"/><path d="M7 13h10M7 16h10M10 11v8M14 11v8" stroke="currentColor" stroke-width="1.2" fill="none"/>',
 };
 const ico = (k: string) => `<span class="mb-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor">${ICONS[k]}</svg></span>`;
@@ -109,6 +120,8 @@ export class Menu {
   private charReturn: MenuScreen = 'title';
   private preview: CharacterPreview | null = null;
   private pause: PauseContext = { kind: 'practice', detail: '' };
+  /** A message at the top of the next screen shown (e.g. a drill result); cleared when it changes. */
+  banner = '';
   /** Called whenever the menu opens or closes (the Sandbox adjusts the camera and HUD). */
   onChange: (screen: MenuScreen | null) => void = () => {};
 
@@ -140,6 +153,7 @@ export class Menu {
     if (pause) this.pause = pause;
     if (screen === 'title' || screen === 'pause') this.home = screen;
     const changed = this.screen !== screen;
+    if (changed && this.screen === 'training') this.banner = '';
     if (screen === 'characters' && changed) {
       this.charReturn = this.screen ?? 'title';
       this.browse = this.host.realism.style;
@@ -194,6 +208,7 @@ export class Menu {
     else if (s === 'online') this.card.innerHTML = this.onlineHtml();
     else if (s === 'settings') this.card.innerHTML = this.settingsHtml();
     else if (s === 'characters') this.card.innerHTML = this.charactersHtml();
+    else if (s === 'training') this.card.innerHTML = this.trainingHtml();
     if (s === 'characters') {
       this.preview ??= new CharacterPreview();
       const st = STYLES[this.browse!];
@@ -218,11 +233,11 @@ export class Menu {
       <div class="menu-buttons">
         <button data-a="quick" class="primary big c-blue">${ico('play')}<span class="mb-t">Quick match <small>vs ${AI_LEVELS[h.matchSettings.level].name} AI · best of ${h.matchSettings.bestOf}</small></span></button>
         <button data-a="go-vsai" class="c-orange">${ico('bat')}<span class="mb-t">Match vs AI <small>Choose opponent and format</small></span></button>
-        <button data-a="practice" class="c-green">${ico('ball')}<span class="mb-t">Practice <small>Ball machine, no score</small></span></button>
-        <button data-a="career" class="c-yellow">${ico('cup')}<span class="mb-t">Career <small>Drills, tournaments, stats</small></span></button>
+        <button data-a="tour" class="c-yellow">${ico('globe')}<span class="mb-t">World Tour <small>${esc(h.tourSummary())}</small></span></button>
+        <button data-a="go-training" class="c-green">${ico('ball')}<span class="mb-t">Training <small>Drills, ball machine, tutorial</small></span></button>
         <button data-a="go-online" class="c-purple">${ico('net')}<span class="mb-t">Online <small>Play friends: singles or doubles</small></span></button>
         <div class="menu-row three">
-          <button data-a="tutorial" class="secondary">Tutorial</button>
+          <button data-a="career" class="secondary">Locker</button>
           <button data-a="howto" class="secondary">Controls</button>
           <button data-a="go-settings" class="secondary">Settings</button>
         </div>
@@ -248,6 +263,29 @@ export class Menu {
       </div>
       ${this.host.devTools ? '<button data-a="inspect" class="link menu-dev">Developer: free camera</button>' : ''}
       <p class="menu-foot">${this.host.isTouch ? 'Tap Resume to carry on.' : '<b>Resume</b> takes the mouse back. <kbd>Esc</kbd> during play pauses.'}</p>`;
+  }
+
+  private trainingHtml() {
+    const h = this.host;
+    const stars = (n: number) => `<span class="stars" aria-label="${n} of 3 stars">${'★'.repeat(n)}<span class="off">${'★'.repeat(3 - n)}</span></span>`;
+    const drills = h.drills
+      .map((d, i) => {
+        const open = h.drillOpen(i);
+        const best = h.drillStars(d.id);
+        return `<button class="menu-drill${open ? '' : ' locked'}" data-a="drill" data-id="${d.id}"${open ? '' : ' aria-disabled="true"'}>
+          <span class="md-main"><b>${open ? '' : '🔒 '}${esc(d.name)}</b><small>${open ? esc(d.description) : 'Earn a star in the drill before'}</small></span>
+          <span class="md-side">${stars(best)}<small>${open ? (best ? 'Retry' : 'Start') : ''}</small></span>
+        </button>`;
+      })
+      .join('');
+    return `
+      ${this.header('Training')}
+      ${this.banner ? `<div class="menu-banner">${this.banner}</div>` : ''}
+      <div class="menu-buttons"><div class="menu-row">
+        <button data-a="practice" class="c-green">${ico('ball')}<span class="mb-t">Ball machine <small>Free practice, no score</small></span></button>
+        <button data-a="tutorial" class="c-blue">${ico('play')}<span class="mb-t">Tutorial <small>Guided, step by step</small></span></button>
+      </div></div>
+      ${this.group('Drills', `<div class="menu-drills">${drills}</div>`)}`;
   }
 
   private vsAiHtml() {
@@ -442,6 +480,16 @@ export class Menu {
           return h.startTutorial();
         case 'career':
           return h.openCareer();
+        case 'tour':
+          return h.openTour();
+        case 'drill':
+          if (t.getAttribute('aria-disabled') === 'true') {
+            t.classList.remove('shake');
+            void t.offsetWidth;
+            t.classList.add('shake');
+            return;
+          }
+          return h.startDrill(t.dataset.id!);
         case 'howto':
           return h.showHowTo();
         case 'create':

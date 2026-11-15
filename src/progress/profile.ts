@@ -64,6 +64,9 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'drills', name: 'Continuous Integration', description: 'Earn 3 stars on every drill', xp: 200 },
   { id: 'cup', name: 'Promotion Packet', description: 'Win the Department Cup', xp: 0 },
   { id: 'championship', name: 'IPO', description: 'Win the Company Championship', xp: 0 },
+  { id: 'world-tour', name: 'Global Rollout', description: 'Win every stop of the World Tour', xp: 300 },
+  { id: 'clean-code', name: 'Clean Code', description: '10 clean contacts in a row', xp: 40 },
+  { id: 'social-engineering', name: 'Social Engineering', description: 'Win a point with a serve the AI misread', xp: 40 },
 ];
 
 export interface Storage {

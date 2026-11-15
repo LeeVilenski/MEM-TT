@@ -17,12 +17,16 @@ export interface UnlockRule {
 const level = (n: number, title: string) => ({ requirement: `Reach ${title}`, test: (_: ProfileData, lvl: number) => lvl >= n });
 const drill = (id: string, name: string) => ({ requirement: `Earn a star in "${name}"`, test: (p: ProfileData) => (p.drills[id] ?? 0) >= 1 });
 const cup = (id: string, name: string) => ({ requirement: `Win the ${name}`, test: (p: ProfileData) => (p.tournaments[id] ?? 0) > 0 });
+/** A World Tour stop won (stops record their wins alongside tournaments). */
+const stop = (id: string, name: string) => ({ requirement: `World Tour: win the ${name}`, test: (p: ProfileData) => (p.tournaments[id] ?? 0) > 0 });
 
 export const UNLOCKS: UnlockRule[] = [
   // Venues (the sandbox and the office are always available).
   { kind: 'venue', id: 'server', ...level(1, 'Junior') },
   { kind: 'venue', id: 'conference', ...level(2, 'Mid-level') },
   { kind: 'venue', id: 'rooftop', ...cup('department-cup', 'Department Cup') },
+  { kind: 'venue', id: 'park', ...stop('datacentre-knockout', 'Data Centre Knockout') },
+  { kind: 'venue', id: 'beach', ...stop('board-showdown', 'Boardroom Showdown') },
   // Player styles: Lee, Ryan, Ed, Will and Dan from the start; the Sysadmin is earned.
   { kind: 'style', id: 'chopper', ...drill('defence', 'On-call defence') },
   // Rubbers (Standard Build from the start).
