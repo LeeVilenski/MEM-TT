@@ -3407,3 +3407,7 @@ body {
   box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.2);
 }
 .menu input[type='text'] { border: 2px solid #2a3b57; border-radius: 6px; }
+
+/* Install-app link on the title screen */
+.menu-install { margin-top: 10px; }
+.menu-install-help { margin: 6px 0 0; font-size: 0.85rem; opacity: 0.85; text-align: center; }

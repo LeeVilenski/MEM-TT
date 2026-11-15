@@ -1,0 +1,21 @@
+{
+  "packageId": "com.memtabletennis.app",
+  "host": "YOUR-GAME-DOMAIN.example",
+  "name": "MEM Table Tennis",
+  "launcherName": "MEM TT",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "themeColor": "#0d1524",
+  "navigationColor": "#0d1524",
+  "backgroundColor": "#0d1524",
+  "enableNotifications": false,
+  "startUrl": "/",
+  "iconUrl": "https://YOUR-GAME-DOMAIN.example/icons/icon-512.png",
+  "maskableIconUrl": "https://YOUR-GAME-DOMAIN.example/icons/maskable-512.png",
+  "webManifestUrl": "https://YOUR-GAME-DOMAIN.example/manifest.webmanifest",
+  "appVersionName": "1.0.0",
+  "appVersionCode": 1,
+  "signingKey": { "path": "./android.keystore", "alias": "android" },
+  "fallbackType": "customtabs",
+  "minSdkVersion": 21
+}
