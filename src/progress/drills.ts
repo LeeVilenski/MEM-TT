@@ -85,7 +85,7 @@ export const DRILLS: Drill[] = [
   {
     id: 'onboarding',
     category: 'Fundamentals',
-    name: 'Onboarding: keep it on the table',
+    name: 'Warm-up: keep it on the table',
     description: 'Return 10 mixed balls onto the far half. Any shot counts.',
     presets: ['Long push', 'Block', 'Drive', 'Float'],
     balls: 10,
@@ -117,7 +117,7 @@ export const DRILLS: Drill[] = [
   {
     id: 'firewall',
     category: 'Fundamentals',
-    name: 'The Firewall',
+    name: 'Block the loop',
     description: 'Power loops incoming. Block them back: a still or short paddle with a closed face.',
     presets: ['Power loop', 'Opening loop', 'Hook loop'],
     balls: 10,
@@ -127,7 +127,7 @@ export const DRILLS: Drill[] = [
   {
     id: 'target',
     category: 'Placement',
-    name: 'Ship it to the corner',
+    name: 'Hit the corner',
     description: 'Drive or loop the ball deep to the far backhand corner (marked zone).',
     presets: ['Block', 'Drive', 'Float'],
     balls: 10,
@@ -139,7 +139,7 @@ export const DRILLS: Drill[] = [
   {
     id: 'defence',
     category: 'Fundamentals',
-    name: 'On-call defence',
+    name: 'Chop defence',
     description: 'Stand back and chop the loops back with backspin.',
     presets: ['Power loop', 'Opening loop', 'Lob'],
     balls: 10,
@@ -233,7 +233,7 @@ export const DRILLS: Drill[] = [
   },
   {
     id: 'endurance',
-    name: 'On-call shift',
+    name: 'Multi-ball marathon',
     category: 'Consistency',
     requires: 'onboarding',
     description: 'Multi-ball: 25 mixed balls, fed fast. Keep them coming back; the combo multiplier rewards a long run.',

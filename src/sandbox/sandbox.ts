@@ -330,7 +330,7 @@ export class Sandbox implements MenuHost {
     shotDetails: loadPref('mem.shotDetails', '0') === '1',
     bloom: loadPref('mem.bloom', '1') === '1',
     fullSpeedOut: loadPref('mem.fullSpeedOut', '1') === '1',
-    /** The IT-joke call-out after each point / practice return (404, PACKET LOSS…). Off by default. */
+    /** The call-out after each point / practice return (NET, OUT…). Off by default. */
     callouts: loadPref('mem.callouts', '0') === '1',
     /** MJ mode: a falsetto pop-star yelp on each of your smashes. Off by default. */
     mjMode: loadPref('mem.mjMode', '0') === '1',
@@ -796,7 +796,7 @@ export class Sandbox implements MenuHost {
         break;
       case 'net':
         if (!returned) r.netTouches = (r.netTouches ?? 0) + 1;
-        this.callout(e.part === 'tape' ? 'NET CORD' : 'PACKET LOSS', e.part === 'tape' ? 'Clipped the tape' : 'Into the net');
+        this.callout(e.part === 'tape' ? 'NET CORD' : 'NET', e.part === 'tape' ? 'Clipped the tape' : 'Into the net');
         break;
       case 'table': {
         this.recorder.keyframe(this.clock(), { pos: e.pos, vel: e.velOut, spin: e.spinOut });
@@ -831,7 +831,7 @@ export class Sandbox implements MenuHost {
         } else {
           if (r.result === undefined) {
             r.result = 'OUT';
-            this.callout('404', 'Ball not found (on the table)');
+            this.callout('OUT', 'Missed the table');
           }
           if (this.playing && this.phase === 'incoming') {
             if (r.result === 'IN') this.resolveMiss();
@@ -874,8 +874,8 @@ export class Sandbox implements MenuHost {
       if (this.look.arcadeFx && this.stats.streak % 5 === 0) this.sfx.crowd(this.stats.streak % 10 === 0 ? 'cheer' : 'applause', Math.min(1, this.stats.streak / 20));
     } else {
       this.stats.streak = 0;
-      if (result === 'OUT') this.callout('404', 'Ball not found (on the table)');
-      if (result === 'OWN SIDE') this.callout('SEGFAULT', 'Bounced on your own side');
+      if (result === 'OUT') this.callout('OUT', 'Missed the table');
+      if (result === 'OWN SIDE') this.callout('OWN SIDE', 'Bounced on your own side');
     }
     this.hud.setStats(this.stats);
     this.updateDrillHud();
@@ -889,7 +889,7 @@ export class Sandbox implements MenuHost {
     this.career.recordPractice(false);
     this.drillRegister('MISSED');
     this.tutorialRegister('MISSED');
-    this.callout('TIMEOUT', 'Request not handled');
+    this.callout('MISSED', 'Not returned');
     this.hud.setStats(this.stats);
     this.updateDrillHud();
     this.resolve();
@@ -1118,8 +1118,8 @@ export class Sandbox implements MenuHost {
           if (e.result.winner === 'near' && match.referee?.server === 'near' && (match.referee?.hits ?? 9) <= 3 && read && Math.abs(read.seenTop - read.top) > Math.max(15, 0.35 * Math.abs(read.top))) this.career.award('social-engineering');
           this.fxPoint(e.result.reason, match.referee?.hits ?? 0, e.result.winner === 'near', e.match);
           const m = pointMessage(e.result, names);
-          if (e.match) this.hud.flash(e.result.winner === 'near' ? 'SHIPPED TO PROD' : 'INCIDENT REPORT', e.result.winner === 'near' ? 'You won the match!' : `${ai.displayName} won the match`);
-          else if (e.game) this.hud.flash(e.result.winner === 'near' ? 'DEPLOYED' : 'ROLLBACK', `Game to ${names[e.result.winner]}${this.look.callouts ? ` — ${m.title}: ${m.sub}` : ''}`);
+          if (e.match) this.hud.flash(e.result.winner === 'near' ? 'YOU WIN!' : 'MATCH LOST', e.result.winner === 'near' ? 'You won the match!' : `${ai.displayName} won the match`);
+          else if (e.game) this.hud.flash(e.result.winner === 'near' ? 'GAME WON' : 'GAME LOST', `Game to ${names[e.result.winner]}${this.look.callouts ? ` — ${m.title}: ${m.sub}` : ''}`);
           else this.callout(m.title, m.sub);
           break;
         }
@@ -1186,7 +1186,7 @@ export class Sandbox implements MenuHost {
     const sc = match.score;
     const gp = sc.gamePoint();
     const mp = sc.matchPoint();
-    const badge = sc.deuce ? 'DEUCE · RACE CONDITION' : mp ? `MATCH POINT · ${mp === 'near' ? 'You' : ai.displayName}` : gp ? `GAME POINT · ${gp === 'near' ? 'You' : ai.displayName}` : null;
+    const badge = sc.deuce ? 'DEUCE' : mp ? `MATCH POINT · ${mp === 'near' ? 'You' : ai.displayName}` : gp ? `GAME POINT · ${gp === 'near' ? 'You' : ai.displayName}` : null;
     this.matchHud.setScore({
       you: 'You',
       them: 'Opponent',
@@ -1210,7 +1210,7 @@ export class Sandbox implements MenuHost {
       const games = sc.history.map((g) => `${g.near}–${g.far}`).join('  ·  ');
       this.matchHud.setPrompt(null);
       this.matchHud.setMeter(null);
-      this.matchHud.showOver(won ? 'SHIPPED TO PROD' : 'INCIDENT REPORT', won ? `You beat ${ai.displayName} ${sc.games.near}–${sc.games.far}` : `${ai.displayName} won ${sc.games.far}–${sc.games.near}`, games, 'Rematch', 'Back to practice', this.matchStatsList(), this.lastGrade);
+      this.matchHud.showOver(won ? 'YOU WIN!' : 'MATCH LOST', won ? `You beat ${ai.displayName} ${sc.games.near}–${sc.games.far}` : `${ai.displayName} won ${sc.games.far}–${sc.games.near}`, games, 'Rematch', 'Back to practice', this.matchStatsList(), this.lastGrade);
       if (document.pointerLockElement) document.exitPointerLock();
       return;
     }
@@ -1923,7 +1923,7 @@ export class Sandbox implements MenuHost {
     ];
   }
 
-  /** Clean contacts in a row (any mode), for the Clean Code badge. */
+  /** Clean contacts in a row (any mode), for the Clean Hitter badge. */
   private cleanStreak = 0;
 
   /** Arcade effects for a paddle hit (render coordinates). `mine` = the local player. */
@@ -2280,8 +2280,8 @@ export class Sandbox implements MenuHost {
         const names = { near: this.teamName('near'), far: this.teamName('far') };
         const m = pointMessage(e.result, names);
         const mine = e.result.winner === c.side;
-        if (e.match) this.hud.flash(mine ? 'SHIPPED TO PROD' : 'INCIDENT REPORT', `${names[e.result.winner]} won the match`);
-        else if (e.game) this.hud.flash(mine ? 'DEPLOYED' : 'ROLLBACK', `Game to ${names[e.result.winner]}${this.look.callouts ? ` — ${m.title}: ${m.sub}` : ''}`);
+        if (e.match) this.hud.flash(mine ? 'YOU WIN!' : 'MATCH LOST', `${names[e.result.winner]} won the match`);
+        else if (e.game) this.hud.flash(mine ? 'GAME WON' : 'GAME LOST', `Game to ${names[e.result.winner]}${this.look.callouts ? ` — ${m.title}: ${m.sub}` : ''}`);
         else this.callout(m.title, m.sub);
         break;
       }
@@ -2363,7 +2363,7 @@ export class Sandbox implements MenuHost {
     const sc = c.score;
     if (sc && c.phase !== 'lobby') {
       const them: SideId = side === 'near' ? 'far' : 'near';
-      const badge = sc.deuce ? 'DEUCE · RACE CONDITION' : sc.matchPoint ? `MATCH POINT · ${this.teamName(sc.matchPoint)}` : sc.gamePoint ? `GAME POINT · ${this.teamName(sc.gamePoint)}` : null;
+      const badge = sc.deuce ? 'DEUCE' : sc.matchPoint ? `MATCH POINT · ${this.teamName(sc.matchPoint)}` : sc.gamePoint ? `GAME POINT · ${this.teamName(sc.gamePoint)}` : null;
       this.matchHud.setScore({
         you: 'You',
         them: 'Opponent',
@@ -2381,7 +2381,7 @@ export class Sandbox implements MenuHost {
       const them: SideId = side === 'near' ? 'far' : 'near';
       if (!this.lobby.visible) {
         this.matchHud.showOver(
-          won ? 'SHIPPED TO PROD' : 'INCIDENT REPORT',
+          won ? 'YOU WIN!' : 'MATCH LOST',
           `${this.teamName(sc.winner!)} won ${sc.games[sc.winner!]}–${sc.games[sc.winner === 'near' ? 'far' : 'near']}`,
           sc.history.map((g) => `${g[side]}–${g[them]}`).join('  ·  '),
           c.isHost ? 'Rematch' : null,

@@ -60,11 +60,11 @@ export const TOUR_STOPS: TourStop[] = [
   },
   {
     id: 'sprint-league',
-    name: 'Sprint League',
+    name: 'Office League',
     place: 'Open-plan office',
     venue: 'office',
     format: 'group',
-    blurb: 'A round-robin between sprint teams. Play everyone once; the top two meet in a best-of-3 final.',
+    blurb: 'A round-robin between office teams. Play everyone once; the top two meet in a best-of-3 final.',
     xp: 350,
     opponents: [
       { style: 'pusher', level: 'easy' },
@@ -80,7 +80,7 @@ export const TOUR_STOPS: TourStop[] = [
     place: 'Server room',
     venue: 'server',
     format: 'knockout',
-    blurb: 'Three rounds in the cold aisle against the infrastructure teams. The final is best of 3.',
+    blurb: 'Three rounds among the humming racks. The final is best of 3.',
     xp: 400,
     rounds: [
       { name: 'Round 1', level: 'medium', style: 'chopper', bestOf: 1, venue: 'server' },
@@ -140,7 +140,7 @@ export const TOUR_STOPS: TourStop[] = [
     place: 'Rooftop',
     venue: 'rooftop',
     format: 'knockout',
-    blurb: 'Every department sends its best, ending in a best-of-5 final against an Expert CTO.',
+    blurb: 'Every department sends its best, ending in a best-of-5 final against an Expert opponent.',
     xp: champ.xp,
     achievement: champ.achievement,
     rounds: at(champ.rounds, 'rooftop'),

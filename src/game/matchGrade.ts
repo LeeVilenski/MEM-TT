@@ -8,7 +8,7 @@
  *  - PERFECT contacts out of your graded strokes: 15%;
  *  - points won out of points played: 35%.
  *
- * S needs a win as well as the score: you can't be production-ready in a loss.
+ * S needs a win as well as the score.
  */
 
 export type MatchGrade = 'S' | 'A' | 'B' | 'C';
@@ -39,10 +39,10 @@ export const GRADE_THRESHOLDS = { S: 0.8, A: 0.65, B: 0.5 } as const;
 
 /** One-line verdicts for the match card. */
 export const GRADE_TEXT: Record<MatchGrade, string> = {
-  S: 'Production ready',
-  A: 'Approved with comments',
-  B: 'Needs another review',
-  C: 'Back to the backlog',
+  S: 'Outstanding',
+  A: 'Great match',
+  B: 'Solid',
+  C: 'Keep practising',
 };
 
 export function matchGrade(m: MatchGradeInput): MatchGradeResult {

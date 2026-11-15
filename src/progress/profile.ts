@@ -7,13 +7,13 @@
 import { betterGrade, type MatchGrade } from '../game/matchGrade';
 
 export const CAREER_LEVELS = [
-  { title: 'Intern', xp: 0 },
-  { title: 'Junior', xp: 150 },
-  { title: 'Mid-level', xp: 450 },
-  { title: 'Senior', xp: 1000 },
-  { title: 'Staff', xp: 2000 },
-  { title: 'Principal', xp: 3500 },
-  { title: 'CTO', xp: 6000 },
+  { title: 'Beginner', xp: 0 },
+  { title: 'Club Player', xp: 150 },
+  { title: 'League Player', xp: 450 },
+  { title: 'County Player', xp: 1000 },
+  { title: 'Regional Player', xp: 2000 },
+  { title: 'National Player', xp: 3500 },
+  { title: 'World Class', xp: 6000 },
 ] as const;
 
 export interface Stats {
@@ -59,23 +59,23 @@ export interface Achievement {
 }
 
 export const ACHIEVEMENTS: Achievement[] = [
-  { id: 'first-win', name: 'Hello, World', description: 'Win your first match', xp: 50 },
-  { id: 'ace', name: 'Zero-day', description: 'Serve an ace', xp: 30 },
-  { id: 'marathon', name: 'Marathon Standup', description: 'Play a rally of 15+ hits', xp: 60 },
-  { id: 'speed', name: 'Low Latency', description: 'Hit a shot faster than 25 m/s (90 km/h)', xp: 40 },
+  { id: 'first-win', name: 'First Win', description: 'Win your first match', xp: 50 },
+  { id: 'ace', name: 'Ace', description: 'Serve an ace', xp: 30 },
+  { id: 'marathon', name: 'Marathon Rally', description: 'Play a rally of 15+ hits', xp: 60 },
+  { id: 'speed', name: 'Speed Demon', description: 'Hit a shot faster than 25 m/s (90 km/h)', xp: 40 },
   { id: 'spin', name: 'Spin Doctor', description: 'Put 7,000+ rpm on the ball', xp: 40 },
-  { id: 'principal', name: 'Skip-level', description: 'Beat a Hard or Expert AI', xp: 120 },
-  { id: 'full-stack', name: 'Full Stack', description: 'Win a match with every player style', xp: 150 },
-  { id: 'online', name: 'Distributed System', description: 'Finish an online match', xp: 40 },
-  { id: 'drills', name: 'Continuous Integration', description: 'Earn 3 stars on every drill', xp: 200 },
-  { id: 'cup', name: 'Promotion Packet', description: 'Win the Department Cup', xp: 0 },
-  { id: 'championship', name: 'IPO', description: 'Win the Company Championship', xp: 0 },
-  { id: 'world-tour', name: 'Global Rollout', description: 'Win every stop of the World Tour', xp: 300 },
-  { id: 'clean-code', name: 'Clean Code', description: '10 clean contacts in a row', xp: 40 },
-  { id: 'social-engineering', name: 'Social Engineering', description: 'Win a point with a serve the AI misread', xp: 40 },
-  { id: 'grade-s', name: 'Production Ready', description: 'Earn an S grade in a match', xp: 80 },
-  { id: 'grade-a-hard', name: 'Code Review Passed', description: 'Earn an A or better against a Hard or Expert AI', xp: 60 },
-  { id: 'serve-reader', name: 'Packet Inspector', description: 'Earn 3 stars in Read the serve', xp: 40 },
+  { id: 'principal', name: 'Giant Killer', description: 'Beat a Hard or Expert AI', xp: 120 },
+  { id: 'full-stack', name: 'All-Rounder', description: 'Win a match with every player style', xp: 150 },
+  { id: 'online', name: 'Online Debut', description: 'Finish an online match', xp: 40 },
+  { id: 'drills', name: 'Training Complete', description: 'Earn 3 stars on every drill', xp: 200 },
+  { id: 'cup', name: 'Cup Winner', description: 'Win the Department Cup', xp: 0 },
+  { id: 'championship', name: 'Champion', description: 'Win the Company Championship', xp: 0 },
+  { id: 'world-tour', name: 'World Tour Champion', description: 'Win every stop of the World Tour', xp: 300 },
+  { id: 'clean-code', name: 'Clean Hitter', description: '10 clean contacts in a row', xp: 40 },
+  { id: 'social-engineering', name: 'Mind Games', description: 'Win a point with a serve the AI misread', xp: 40 },
+  { id: 'grade-s', name: 'Top Marks', description: 'Earn an S grade in a match', xp: 80 },
+  { id: 'grade-a-hard', name: 'Class Act', description: 'Earn an A or better against a Hard or Expert AI', xp: 60 },
+  { id: 'serve-reader', name: 'Serve Reader', description: 'Earn 3 stars in Read the serve', xp: 40 },
 ];
 
 export interface Storage {

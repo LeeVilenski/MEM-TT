@@ -373,7 +373,7 @@ export class Hud {
     });
 
     if (ret === undefined) {
-      if (r.result) rows.push(`<div class="hud-result ${r.result.toLowerCase()}">${r.result === 'IN' ? 'IN' : r.result === 'OUT' ? 'OUT · 404' : 'FAULT'}</div>`);
+      if (r.result) rows.push(`<div class="hud-result ${r.result.toLowerCase()}">${r.result === 'IN' ? 'IN' : r.result === 'OUT' ? 'OUT' : 'FAULT'}</div>`);
     } else if (ret === null) {
       rows.push(`<div class="hud-section">Your return</div><div class="hud-muted">Waiting… move the paddle to the ring and flick.</div>`);
     } else {
@@ -427,7 +427,7 @@ export interface ShotLine {
 /** The match grade on the end-of-match card. */
 export interface OverGrade {
   grade: 'S' | 'A' | 'B' | 'C';
-  /** The verdict, e.g. "Production ready". */
+  /** The verdict, e.g. "Outstanding". */
   text: string;
   /** e.g. "New best vs Ed (was B)". */
   note: string;

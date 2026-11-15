@@ -96,7 +96,7 @@ export class CareerScreen {
     this.el.innerHTML = `<div class="career-card">
       <div class="cs-head">
         <div><div class="cs-sub">Locker · career level</div><div class="cs-title">${esc(c.title)}</div></div>
-        <div class="cs-xp"><div class="cs-sub">${p.xp.toLocaleString()} XP${next ? ` · ${next.xp - p.xp} to ${next.title}` : ' · top of the org chart'}</div><div class="cs-bar"><div style="width:${Math.round(c.levelProgress * 100)}%"></div></div></div>
+        <div class="cs-xp"><div class="cs-sub">${p.xp.toLocaleString()} XP${next ? ` · ${next.xp - p.xp} to ${next.title}` : ' · top of the rankings'}</div><div class="cs-bar"><div style="width:${Math.round(c.levelProgress * 100)}%"></div></div></div>
         <button data-a="close" class="cs-close" aria-label="Close">✕</button>
       </div>
       ${this.banner ? `<div class="cs-banner">${this.banner}</div>` : ''}

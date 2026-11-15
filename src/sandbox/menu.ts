@@ -229,7 +229,7 @@ export class Menu {
     const st = STYLES[h.realism.style];
     return `
       <h1 class="menu-title">MEM <span>Table Tennis</span></h1>
-      <p class="menu-tag">Spin, pace and office politics.</p>
+      <p class="menu-tag">Spin, pace and placement.</p>
       <button data-a="go-characters" class="menu-player" aria-label="Playing as ${esc(st.character)}. Change player">
         <span class="mp-avatar" aria-hidden="true">${esc(st.character[0])}</span>
         <span class="mp-text"><small>Playing as</small><b>${esc(st.character)}</b><small>${esc(styleNote(st.id))}</small></span>
@@ -391,7 +391,7 @@ export class Menu {
           `${toggle('arcadeFx', 'Arcade effects', h.look.arcadeFx, 'Hit-stop, camera shake, sparks, crowd')}
            ${toggle('fullSpeedOut', 'Your shots at full speed', h.look.fullSpeedOut, 'The game slows down only for balls coming at you (offline)')}
            ${toggle('autoReplay', 'Auto-replay long rallies', h.look.autoReplay)}
-           ${toggle('callouts', 'Point call-outs', h.look.callouts, 'A joke after each point: 404, PACKET LOSS, SEGFAULT…')}`,
+           ${toggle('callouts', 'Point call-outs', h.look.callouts, 'A call after each point: NET, OUT, ACE…')}`,
         )}
         ${this.group(
           'Accessibility',

@@ -25,10 +25,10 @@ export interface Rubber {
 }
 
 export const RUBBERS: Record<string, Rubber> = {
-  inverted: { id: 'inverted', name: 'Standard Build', kind: 'Inverted', restitution: 0.86, restitutionSpeedLoss: 0.006, friction: 1.1, tangentialRestitution: 0.3 },
-  shortPips: { id: 'shortPips', name: 'Hotfix', kind: 'Short pips', restitution: 0.88, restitutionSpeedLoss: 0.006, friction: 0.55, tangentialRestitution: 0.05 },
-  longPips: { id: 'longPips', name: 'Legacy Code', kind: 'Long pips', restitution: 0.72, restitutionSpeedLoss: 0.008, friction: 0.1, tangentialRestitution: 0 },
-  anti: { id: 'anti', name: 'Air Gap', kind: 'Anti-spin', restitution: 0.62, restitutionSpeedLoss: 0.01, friction: 0.04, tangentialRestitution: 0 },
+  inverted: { id: 'inverted', name: 'Classic', kind: 'Inverted', restitution: 0.86, restitutionSpeedLoss: 0.006, friction: 1.1, tangentialRestitution: 0.3 },
+  shortPips: { id: 'shortPips', name: 'Rapid', kind: 'Short pips', restitution: 0.88, restitutionSpeedLoss: 0.006, friction: 0.55, tangentialRestitution: 0.05 },
+  longPips: { id: 'longPips', name: 'Twister', kind: 'Long pips', restitution: 0.72, restitutionSpeedLoss: 0.008, friction: 0.1, tangentialRestitution: 0 },
+  anti: { id: 'anti', name: 'Deadener', kind: 'Anti-spin', restitution: 0.62, restitutionSpeedLoss: 0.01, friction: 0.04, tangentialRestitution: 0 },
 };
 
 /** Blade face, approximated as a disc. ITTF has no size rule; typical blades are ~15 × 16 cm. */
