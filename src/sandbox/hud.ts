@@ -101,8 +101,8 @@ export class Hud {
   onReplaySpeed: (speed: number) => void = () => {};
   onReplaySkip: () => void = () => {};
   private replayCaption: HTMLDivElement | null = null;
-  private replaySpeedBtns: HTMLButtonElement[] = [];
-  static readonly REPLAY_SPEEDS = [0.1, 0.25, 0.5, 1];
+  private replaySlider: HTMLInputElement | null = null;
+  private replaySpeedLabel: HTMLSpanElement | null = null;
 
   /** Replay bar at the bottom of the screen (null hides it). */
   setReplay(info: { caption: string; speed: number } | null) {
@@ -113,17 +113,16 @@ export class Hud {
     if (!this.replayCaption) {
       this.replayCaption = el('div', 'hud-replay-caption');
       const row = el('div', 'hud-replay-row');
-      for (const sp of Hud.REPLAY_SPEEDS) {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.textContent = `×${sp}`;
-        b.addEventListener('pointerdown', (e) => {
-          e.stopPropagation();
-          this.onReplaySpeed(sp);
-        });
-        this.replaySpeedBtns.push(b);
-        row.append(b);
-      }
+      const slider = document.createElement('input');
+      slider.type = 'range';
+      slider.min = '0.05';
+      slider.max = '1';
+      slider.step = '0.05';
+      slider.setAttribute('aria-label', 'Replay speed');
+      for (const ev of ['pointerdown', 'touchstart', 'mousedown']) slider.addEventListener(ev, (e) => e.stopPropagation());
+      slider.addEventListener('input', () => this.onReplaySpeed(Number(slider.value)));
+      const label = document.createElement('span');
+      label.className = 'hud-replay-speed';
       const skip = document.createElement('button');
       skip.type = 'button';
       skip.className = 'skip';
@@ -133,12 +132,15 @@ export class Hud {
         e.stopPropagation();
         this.onReplaySkip();
       });
-      row.append(skip);
+      row.append(slider, label, skip);
       this.replayEl.append(this.replayCaption, row);
+      this.replaySlider = slider;
+      this.replaySpeedLabel = label;
     }
     const text = `▶ REPLAY · ${info.caption}`;
     if (this.replayCaption.textContent !== text) this.replayCaption.textContent = text;
-    Hud.REPLAY_SPEEDS.forEach((sp, i) => this.replaySpeedBtns[i].classList.toggle('on', sp === info.speed));
+    if (document.activeElement !== this.replaySlider) this.replaySlider!.value = String(info.speed);
+    this.replaySpeedLabel!.textContent = `×${info.speed.toFixed(2)}`;
     this.replayEl.style.display = 'flex';
   }
   private playing = false;

@@ -865,7 +865,31 @@ export class Sandbox implements MenuHost {
     this.markers.forEach((mk, i) => ((mk.material as THREE.MeshBasicMaterial).opacity = 0.25 + (0.65 * (i + 1)) / this.markers.length));
   }
 
+  /** Seconds left before the bounce marks are gone (null: not fading). */
+  private markerFade: number | null = null;
+  private static readonly MARKER_FADE = 1.2;
+
+  /** Point over: fade the bounce marks out instead of leaving them until the next serve. */
+  fadeMarkers() {
+    if (this.markers.length) this.markerFade = Sandbox.MARKER_FADE;
+  }
+
+  private updateMarkerFade(dt: number) {
+    if (this.markerFade === null) return;
+    this.markerFade -= dt;
+    if (this.markerFade <= 0) {
+      this.clearMarkers();
+      return;
+    }
+    const k = this.markerFade / Sandbox.MARKER_FADE;
+    for (const m of this.markers) {
+      const mat = m.material as THREE.MeshBasicMaterial;
+      mat.opacity = Math.min(mat.opacity, 0.9 * k);
+    }
+  }
+
   clearMarkers() {
+    this.markerFade = null;
     for (const m of this.markers) {
       this.scene.remove(m);
       m.geometry.dispose();
@@ -885,6 +909,7 @@ export class Sandbox implements MenuHost {
     // Hit-stop pauses the game clock briefly; online the clock is the server's, so never.
     this.juice.allowHitStop = !this.online;
     const fxScale = this.online || this.replay ? 1 : this.juice.gameScale(realDt);
+    this.updateMarkerFade(realDt);
     if (this.replay) {
       // Online the match carries on underneath (it can't be paused for one player).
       if (this.online) this.onlineFrame(realDt);
@@ -1022,6 +1047,7 @@ export class Sandbox implements MenuHost {
           this.recorder.end(this.clock());
           break;
         case 'point': {
+          this.fadeMarkers();
           this.recorder.end(this.clock());
           this.sfx.point(e.result.winner === 'near', e.game);
           this.updateVenueScreen();
