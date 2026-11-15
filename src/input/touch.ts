@@ -133,7 +133,7 @@ export class TouchControls {
   private onStart(e: TouchEvent) {
     if (!this.enabled) return;
     // Let the settings panel and other UI handle their own touches.
-    if ((e.target as HTMLElement).closest('.lil-gui, .lobby, .mhud-over, .hud-start, .mhud-serves')) return;
+    if ((e.target as HTMLElement).closest('.lil-gui, .lobby, .mhud-over, .hud-start, .mhud-serves, .hud-replay')) return;
     e.preventDefault();
     for (const t of Array.from(e.changedTouches)) {
       const id = this.buttonAt(t);
@@ -152,7 +152,7 @@ export class TouchControls {
 
   private onMove(e: TouchEvent) {
     if (!this.enabled) return;
-    if ((e.target as HTMLElement).closest('.lil-gui, .lobby, .mhud-over, .mhud-serves')) return;
+    if ((e.target as HTMLElement).closest('.lil-gui, .lobby, .mhud-over, .mhud-serves, .hud-replay')) return;
     e.preventDefault();
     for (const t of Array.from(e.changedTouches)) this.swipe.move(t.identifier, t.clientX, t.clientY);
   }
