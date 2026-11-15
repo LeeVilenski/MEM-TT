@@ -823,9 +823,19 @@ kbd {
   cursor: pointer;
 }
 
-.hud-replay-row button.on {
-  background: rgb(47, 124, 246);
-  border-color: rgb(47, 124, 246);
+.hud-replay-row {
+  align-items: center;
+}
+
+.hud-replay-row input[type='range'] {
+  width: min(200px, 45vw);
+  accent-color: rgb(47, 124, 246);
+  touch-action: none;
+}
+
+.hud-replay-speed {
+  min-width: 4.5em;
+  font-weight: 700;
 }
 
 .hud-replay-row button.skip {
