@@ -119,7 +119,7 @@ export class Hud {
       slider.max = '1';
       slider.step = '0.05';
       slider.setAttribute('aria-label', 'Replay speed');
-      for (const ev of ['pointerdown', 'touchstart', 'mousedown']) slider.addEventListener(ev, (e) => e.stopPropagation());
+      for (const ev of ['pointerdown', 'pointermove', 'touchstart', 'touchmove', 'mousedown']) slider.addEventListener(ev, (e) => e.stopPropagation());
       slider.addEventListener('input', () => this.onReplaySpeed(Number(slider.value)));
       const label = document.createElement('span');
       label.className = 'hud-replay-speed';
