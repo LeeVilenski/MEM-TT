@@ -32,6 +32,9 @@ export class Sfx {
   private master: GainNode | null = null;
   private noise: AudioBuffer | null = null;
   private music: Music | null = null;
+  private musicKind: Ambience = 'none';
+  private amb: { stop: () => void } | null = null;
+  musicOn = true;
   private ambKind: Ambience = 'none';
   volume = 0.7;
   muted = false;
@@ -51,6 +54,7 @@ export class Sfx {
       for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
       this.applyVolume();
       this.setAmbience(this.ambKind);
+      this.setMusic(this.musicKind);
     }
     void this.ctx.resume();
   }
@@ -267,10 +271,66 @@ export class Sfx {
   }
 
   /** Background music for a venue (procedural songs; see music.ts). */
-  setAmbience(kind: Ambience) {
-    this.ambKind = kind;
+  setMusic(kind: Ambience) {
+    this.musicKind = kind;
     if (!this.ctx || !this.noise || !this.master) return;
     this.music ??= new Music(this.ctx, this.master, this.noise);
-    this.music.play(this.ambienceOn ? kind : 'none');
+    this.music.play(this.musicOn ? kind : 'none');
+  }
+
+  /** Looping background bed for a venue (very quiet, darkened so it reads as room tone, not static). */
+  setAmbience(kind: Ambience) {
+    this.ambKind = kind;
+    this.amb?.stop();
+    this.amb = null;
+    const ctx = this.ctx;
+    if (!ctx || !this.noise || kind === 'none' || !this.ambienceOn) return;
+    const src = ctx.createBufferSource();
+    src.buffer = this.noise;
+    src.loop = true;
+    const f = ctx.createBiquadFilter();
+    const g = ctx.createGain();
+    const nodes: AudioNode[] = [];
+    switch (kind) {
+      case 'office': // HVAC hum + distant chatter-ish band
+        f.type = 'lowpass';
+        f.frequency.value = 220;
+        g.gain.value = 0.015;
+        break;
+      case 'servers': // fan roar
+        f.type = 'bandpass';
+        f.frequency.value = 350;
+        f.Q.value = 0.5;
+        g.gain.value = 0.02;
+        break;
+      case 'room':
+        f.type = 'lowpass';
+        f.frequency.value = 160;
+        g.gain.value = 0.012;
+        break;
+      case 'wind': {
+        f.type = 'bandpass';
+        f.frequency.value = 400;
+        f.Q.value = 0.8;
+        g.gain.value = 0.018;
+        // Gusts: slowly modulate the filter.
+        const lfo = ctx.createOscillator();
+        lfo.frequency.value = 0.15;
+        const lg = ctx.createGain();
+        lg.gain.value = 200;
+        lfo.connect(lg).connect(f.frequency);
+        lfo.start();
+        nodes.push(lfo);
+        break;
+      }
+    }
+    src.connect(f).connect(g).connect(this.master!);
+    src.start();
+    this.amb = {
+      stop: () => {
+        src.stop();
+        nodes.forEach((n) => (n as OscillatorNode).stop?.());
+      },
+    };
   }
 }

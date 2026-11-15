@@ -24,7 +24,7 @@ export interface MenuHost {
   saveDoublesPicks(): void;
   onlineSettings: { name: string; code: string; mode: 'singles' | 'doubles'; bestOf: number };
   realism: { percent: number; style: StyleId };
-  look: { venue: VenueId; volume: number; muted: boolean; ambience: boolean; autoReplay: boolean; arcadeFx: boolean; bloom: boolean; fullSpeedOut: boolean; callouts: boolean };
+  look: { venue: VenueId; volume: number; muted: boolean; ambience: boolean; music: boolean; autoReplay: boolean; arcadeFx: boolean; bloom: boolean; fullSpeedOut: boolean; callouts: boolean };
   quality: { setting: QualitySetting };
   devTools: boolean;
   /** null if unlocked, otherwise how to unlock it. */
@@ -51,6 +51,7 @@ export interface MenuHost {
   setVolume(v: number): void;
   setMuted(m: boolean): void;
   setAmbience(a: boolean): void;
+  setMusic(m: boolean): void;
   setAutoReplay(a: boolean): void;
   setArcadeFx(a: boolean): void;
   setQuality(q: QualitySetting): void;
@@ -327,6 +328,7 @@ export class Menu {
           'Sound',
           `<label class="menu-slider"><span>Volume</span><input type="range" data-k="volume" min="0" max="1" step="0.05" value="${h.look.volume}" aria-label="Volume"><output>${Math.round(h.look.volume * 100)}%</output></label>
            ${toggle('muted', 'Mute', h.look.muted)}
+           ${toggle('music', 'Music', h.look.music, 'A background song for each venue')}
            ${toggle('ambience', 'Venue ambience', h.look.ambience, 'Office hum, server fans, wind')}`,
         )}
         ${this.group(
@@ -532,6 +534,7 @@ export class Menu {
     } else if (e.type === 'change') {
       if (k === 'muted') h.setMuted(t.checked);
       else if (k === 'ambience') h.setAmbience(t.checked);
+      else if (k === 'music') h.setMusic(t.checked);
       else if (k === 'arcadeFx') h.setArcadeFx(t.checked);
       else if (k === 'autoReplay') h.setAutoReplay(t.checked);
       else if (k === 'bloom') h.setBloom(t.checked);

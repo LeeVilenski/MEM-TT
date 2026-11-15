@@ -315,6 +315,7 @@ export class Sandbox implements MenuHost {
     volume: Number(loadPref('mem.volume', '0.7')),
     muted: loadPref('mem.muted', '0') === '1',
     ambience: loadPref('mem.ambience', '1') === '1',
+    music: loadPref('mem.music', '1') === '1',
     autoReplay: loadPref('mem.autoReplay', '1') === '1',
     replaySpeed: Number(loadPref('mem.replaySpeed', '0.4')) || 0.4,
     arcadeFx: loadPref('mem.arcadeFx', '1') === '1',
@@ -513,6 +514,7 @@ export class Sandbox implements MenuHost {
     this.sfx.volume = this.look.volume;
     this.sfx.muted = this.look.muted;
     this.sfx.ambienceOn = this.look.ambience;
+    this.sfx.musicOn = this.look.music;
     // Browsers only allow audio after a user gesture.
     const unlock = () => this.sfx.unlock();
     window.addEventListener('pointerdown', unlock);
@@ -1541,6 +1543,14 @@ export class Sandbox implements MenuHost {
     this.gui.controllersRecursive().forEach((c) => c.updateDisplay());
   }
 
+  setMusic(m: boolean) {
+    this.look.music = m;
+    this.sfx.musicOn = m;
+    this.sfx.setMusic(VENUES[this.look.venue].ambience);
+    savePref('mem.music', m ? '1' : '0');
+    this.gui.controllersRecursive().forEach((c) => c.updateDisplay());
+  }
+
   setAutoReplay(a: boolean) {
     this.look.autoReplay = a;
     savePref('mem.autoReplay', a ? '1' : '0');
@@ -1634,6 +1644,7 @@ export class Sandbox implements MenuHost {
     this.look.venue = id;
     this.venue = setVenue(this.scene, id, this.venue);
     this.sfx.setAmbience(this.look.ambience ? VENUES[id].ambience : 'none');
+    this.sfx.setMusic(VENUES[id].ambience);
     savePref('mem.venue', id);
     this.updateVenueScreen();
     this.gui?.controllersRecursive().forEach((c) => c.updateDisplay());
@@ -2444,8 +2455,11 @@ export class Sandbox implements MenuHost {
       .name('Mute')
       .onChange((m: boolean) => this.setMuted(m));
     lf.add(this.look, 'ambience')
-      .name('Music')
+      .name('Venue ambience')
       .onChange((a: boolean) => this.setAmbience(a));
+    lf.add(this.look, 'music')
+      .name('Music')
+      .onChange((m: boolean) => this.setMusic(m));
     lf.add(this.look, 'autoReplay')
       .name('Auto-replay long rallies')
       .onChange((a: boolean) => this.setAutoReplay(a));
