@@ -327,6 +327,8 @@ export class Sandbox implements MenuHost {
     fullSpeedOut: loadPref('mem.fullSpeedOut', '1') === '1',
     /** The IT-joke call-out after each point / practice return (404, PACKET LOSS…). Off by default. */
     callouts: loadPref('mem.callouts', '0') === '1',
+    /** MJ mode: a falsetto pop-star yelp on each of your smashes. Off by default. */
+    mjMode: loadPref('mem.mjMode', '0') === '1',
   };
   /** Arcade effects: hit-stop, shake, comet tail, sparks (see render/juice). */
   private juice!: Juice;
@@ -1731,6 +1733,12 @@ export class Sandbox implements MenuHost {
     if (this.look.callouts) this.hud.flash(title, sub);
   }
 
+  setMjMode(on: boolean) {
+    this.look.mjMode = on;
+    savePref('mem.mjMode', on ? '1' : '0');
+    if (on) this.sfx.yelp(); // a taste of it
+  }
+
   setCallouts(on: boolean) {
     this.look.callouts = on;
     savePref('mem.callouts', on ? '1' : '0');
@@ -1857,6 +1865,9 @@ export class Sandbox implements MenuHost {
       this.cleanStreak = g === 'PERFECT' || g === 'GOOD' ? this.cleanStreak + 1 : 0;
       if (this.cleanStreak >= 10) this.career.award('clean-code');
     }
+    // MJ mode: your smash gets a yelp (and its caption, unless PERFECT has the spot).
+    const yelp = this.look.mjMode && mine && !serve && this.player.lastContactSmash ? this.sfx.yelp(pos.x) : '';
+    if (yelp && !perfect) this.hud.grade(yelp, 'gold');
     if (perfect && this.look.arcadeFx) {
       this.sfx.perfect();
       this.hud.perfect();

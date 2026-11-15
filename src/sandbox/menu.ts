@@ -25,7 +25,7 @@ export interface MenuHost {
   saveDoublesPicks(): void;
   onlineSettings: { name: string; code: string; mode: 'singles' | 'doubles'; bestOf: number };
   realism: { percent: number; style: StyleId };
-  look: { venue: VenueId; volume: number; muted: boolean; ambience: boolean; music: boolean; autoReplay: boolean; arcadeFx: boolean; bloom: boolean; fullSpeedOut: boolean; callouts: boolean };
+  look: { venue: VenueId; volume: number; muted: boolean; ambience: boolean; music: boolean; autoReplay: boolean; arcadeFx: boolean; bloom: boolean; fullSpeedOut: boolean; callouts: boolean; mjMode: boolean };
   quality: { setting: QualitySetting };
   devTools: boolean;
   /** null if unlocked, otherwise how to unlock it. */
@@ -73,6 +73,7 @@ export interface MenuHost {
   setBloom(on: boolean): void;
   setFullSpeedOut(on: boolean): void;
   setCallouts(on: boolean): void;
+  setMjMode(on: boolean): void;
   camMode: 'classic' | 'close' | 'dynamic';
   setCamMode(mode: 'classic' | 'close' | 'dynamic'): void;
   setDevTools(on: boolean): void;
@@ -386,7 +387,8 @@ export class Menu {
           `${toggle('arcadeFx', 'Arcade effects', h.look.arcadeFx, 'Hit-stop, camera shake, sparks, crowd')}
            ${toggle('fullSpeedOut', 'Your shots at full speed', h.look.fullSpeedOut, 'The game slows down only for balls coming at you (offline)')}
            ${toggle('autoReplay', 'Auto-replay long rallies', h.look.autoReplay)}
-           ${toggle('callouts', 'Point call-outs', h.look.callouts, 'A joke after each point: 404, PACKET LOSS, SEGFAULT…')}`,
+           ${toggle('callouts', 'Point call-outs', h.look.callouts, 'A joke after each point: 404, PACKET LOSS, SEGFAULT…')}
+           ${toggle('mjMode', 'MJ mode', h.look.mjMode, 'Your smashes come with a falsetto yelp. Hee-hee!')}`,
         )}
         ${this.group('Camera', `<div class="menu-choices">${this.choice('cam', 'dynamic', 'Dynamic', h.camMode === 'dynamic', 'Follows the play (recommended)')}${this.choice('cam', 'close', 'Close', h.camMode === 'close', 'Behind you, more depth')}${this.choice('cam', 'classic', 'Classic', h.camMode === 'classic', 'High and steady, like TV')}</div>`)}
         ${this.group('Graphics quality', `<div class="menu-choices">${quality}</div>${toggle('bloom', 'Glow effects', h.look.bloom, 'Bloom on the ball trail, sparks and lights (High quality only)')}`)}
@@ -602,6 +604,7 @@ export class Menu {
       else if (k === 'bloom') h.setBloom(t.checked);
       else if (k === 'fullSpeedOut') h.setFullSpeedOut(t.checked);
       else if (k === 'callouts') h.setCallouts(t.checked);
+      else if (k === 'mjMode') h.setMjMode(t.checked);
       else if (k === 'devTools') h.setDevTools(t.checked);
     }
   }
