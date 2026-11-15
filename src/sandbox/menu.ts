@@ -40,6 +40,10 @@ export interface MenuHost {
   createOnline(): void;
   joinOnline(code: string): void;
   resume(): void;
+  /** A rally has been recorded that can be replayed from the pause menu. */
+  readonly canReplay: boolean;
+  /** Watch the last rally (from the pause menu). */
+  watchReplay(): void;
   restart(): void;
   quitToTitle(): void;
   /** Developer free camera. */
@@ -236,6 +240,7 @@ export class Menu {
       ${this.pause.detail ? `<p class="menu-tag">${this.pause.detail}</p>` : ''}
       <div class="menu-buttons">
         <button data-a="resume" class="primary big c-blue">${ico('play')}<span class="mb-t">Resume</span></button>
+        ${this.host.canReplay ? `<button data-a="replay">Watch last rally${this.host.isTouch ? '' : ' <kbd>R</kbd>'}</button>` : ''}
         ${restart ? `<button data-a="restart">${restart}</button>` : ''}
         <button data-a="howto">How to play</button>
         <button data-a="go-settings">Settings</button>
@@ -445,6 +450,8 @@ export class Menu {
           return h.joinOnline(h.onlineSettings.code);
         case 'resume':
           return h.resume();
+        case 'replay':
+          return h.watchReplay();
         case 'restart':
           return h.restart();
         case 'quit':
@@ -553,6 +560,11 @@ export class Menu {
     if (e.key === 'Escape') {
       e.preventDefault();
       this.back();
+      return;
+    }
+    if (this.screen === 'pause' && e.code === 'KeyR' && !e.repeat && this.host.canReplay) {
+      e.preventDefault();
+      this.host.watchReplay();
       return;
     }
     if (target.tagName === 'INPUT' && (target as HTMLInputElement).type === 'text') {

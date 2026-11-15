@@ -1431,6 +1431,17 @@ export class Sandbox implements MenuHost {
     this.requestPlay();
   }
 
+  get canReplay() {
+    return !!this.recorder.last;
+  }
+
+  /** From the pause menu: hide it and play the last rally; the menu comes back when it ends. */
+  watchReplay() {
+    if (!this.recorder.last) return;
+    this.menu.hide();
+    this.startReplay();
+  }
+
   restart() {
     if (this.offlineDoubles) this.startDoubles();
     else if (this.tutorial) this.startTutorial();
@@ -1485,7 +1496,7 @@ export class Sandbox implements MenuHost {
 
   /** Whenever nothing else is on screen and you're not playing, show the title or pause menu. */
   private syncMenu() {
-    if (this.playing || this.menu.visible || this.inspecting) return;
+    if (this.playing || this.menu.visible || this.inspecting || this.replay) return;
     if (this.careerScreen.visible || this.howTo.visible || this.lobby.visible || this.matchHud.overVisible || this.coach.finishVisible) return;
     if (this.inSession()) this.menu.show('pause', this.pauseContext());
     else this.menu.show('title');
@@ -2349,6 +2360,11 @@ export class Sandbox implements MenuHost {
       return;
     }
     if (down && !e.repeat && e.code !== 'Escape' && this.playing && this.drillGo()) return;
+    // Esc during a replay watched while paused ends it (and the pause menu comes back).
+    if (down && e.code === 'Escape' && !this.playing && this.replay) {
+      this.stopReplay();
+      return;
+    }
     // Esc in the developer free-camera view brings the menu back.
     if (down && e.code === 'Escape' && !this.playing && this.inspecting) {
       this.inspecting = false;
