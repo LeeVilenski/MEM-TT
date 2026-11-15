@@ -178,6 +178,8 @@ export class Menu {
 
   private render() {
     const s = this.screen;
+    // Entry animations play only when a screen opens, not on every re-render.
+    this.card.classList.toggle('entering', this.el.dataset.screen !== (s ?? ''));
     this.el.dataset.screen = s ?? '';
     if (s === 'title') this.card.innerHTML = this.titleHtml();
     else if (s === 'pause') this.card.innerHTML = this.pauseHtml();

@@ -3242,3 +3242,91 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .menu-buttons button:active { transform: none; }
 }
+
+/* ---- colour per section: each option group gets its own block colour */
+.menu-group { --g: var(--c-blue); }
+.menu-group:nth-of-type(5n + 2) { --g: var(--c-orange); }
+.menu-group:nth-of-type(5n + 3) { --g: var(--c-green); }
+.menu-group:nth-of-type(5n + 4) { --g: var(--c-purple); }
+.menu-group:nth-of-type(5n + 5) { --g: var(--c-yellow); }
+.menu-group > .menu-label {
+  align-self: flex-start;
+  padding: 2px 8px;
+  color: #fff;
+  background: var(--g);
+  border: 2px solid var(--ink);
+  box-shadow: 2px 2px 0 var(--ink);
+}
+.menu-group .menu-choice { border-left: 6px solid var(--g); }
+.menu-group .menu-choice.on { background: var(--g); border-color: var(--ink); }
+.menu-split section:nth-of-type(1) { --g: var(--c-orange); }
+.menu-split section:nth-of-type(2) { --g: var(--c-purple); }
+.menu-split h3 { align-self: flex-start; padding: 2px 8px; color: #fff; background: var(--g); border: 2px solid var(--ink); }
+.menu-split .menu-choice.on { background: var(--g); }
+.menu-split button:not(.menu-choice) { background: var(--g); }
+.menu-group > .menu-label { color: #fff; }
+.menu-group:nth-of-type(5n + 5) > .menu-label,
+.menu-group:nth-of-type(5n + 5) .menu-choice.on { color: var(--ink); }
+.menu-group:nth-of-type(5n + 5) .menu-choice.on small { color: rgba(11, 18, 32, 0.75); }
+
+/* Coloured header strip on sub-menu cards */
+.menu-card:has(> .menu-head) { border-top: 10px solid var(--c-orange); }
+.menu[data-screen='settings'] .menu-card { border-top-color: var(--c-green); }
+.menu[data-screen='online'] .menu-card { border-top-color: var(--c-purple); }
+.menu[data-screen='characters'] .menu-card { border-top-color: var(--c-yellow); }
+.menu-actions .primary { background: var(--c-orange) !important; }
+
+/* ---- motion */
+@keyframes block-in {
+  from { opacity: 0; transform: translateX(-24px) rotate(-1.5deg); }
+  70% { transform: translateX(3px); }
+}
+@keyframes pop-in {
+  from { opacity: 0; transform: scale(0.7) rotate(-4deg); }
+  70% { transform: scale(1.06) rotate(1deg); }
+}
+@keyframes wiggle {
+  25% { transform: rotate(-10deg) scale(1.1); }
+  75% { transform: rotate(8deg) scale(1.1); }
+}
+@keyframes bob {
+  50% { transform: translateY(-3px) rotate(-2deg); }
+}
+@keyframes tile-in {
+  from { opacity: 0; transform: translateY(10px); }
+}
+.entering .menu-title { animation: pop-in 0.45s cubic-bezier(0.3, 1.4, 0.5, 1) both; }
+.menu-title span { animation: bob 2.6s ease-in-out 0.6s infinite; }
+.entering .menu-player,
+.entering .menu-buttons > button,
+.entering .menu-buttons > .menu-row > button { animation: block-in 0.4s cubic-bezier(0.3, 1.3, 0.5, 1) both; }
+.menu-player { animation-delay: 0.05s; }
+.menu-buttons > button:nth-child(1) { animation-delay: 0.1s; }
+.menu-buttons > button:nth-child(2) { animation-delay: 0.16s; }
+.menu-buttons > button:nth-child(3) { animation-delay: 0.22s; }
+.menu-buttons > button:nth-child(4) { animation-delay: 0.28s; }
+.menu-buttons > button:nth-child(5) { animation-delay: 0.34s; }
+.menu-buttons > .menu-row > button { animation-delay: 0.4s; }
+.menu-buttons button:hover .mb-ico { animation: wiggle 0.4s ease-in-out; }
+.menu-buttons button:hover,
+.menu-actions button:hover,
+.menu-split button:hover,
+.menu .menu-player:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 5px 5px 0 var(--ink);
+}
+.menu button.big .mb-ico { animation: bob 1.8s ease-in-out infinite; }
+.entering .menu-group { animation: tile-in 0.35s ease-out both; }
+.menu-group:nth-of-type(2) { animation-delay: 0.05s; }
+.menu-group:nth-of-type(3) { animation-delay: 0.1s; }
+.menu-group:nth-of-type(4) { animation-delay: 0.15s; }
+.menu-group:nth-of-type(n + 5) { animation-delay: 0.2s; }
+.menu-choice { transition: transform 0.1s, box-shadow 0.1s, background 0.15s; }
+.menu-choice:hover { transform: translate(-1px, -1px); box-shadow: 3px 3px 0 var(--ink); }
+.menu-choice.on { animation: pop-in 0.25s ease-out; }
+
+@media (prefers-reduced-motion: reduce) {
+  .menu-title, .menu-title span, .menu-player, .menu-buttons button, .menu-group,
+  .menu-choice.on, .mb-ico { animation: none !important; }
+  .menu-buttons button:hover, .menu-choice:hover { transform: none; }
+}
