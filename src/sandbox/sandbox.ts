@@ -528,6 +528,11 @@ export class Sandbox implements MenuHost {
     this.sfx.musicOn = this.look.music;
     // Browsers only allow audio after a user gesture.
     const unlock = () => this.sfx.unlock();
+    // No background audio: pause all sound while the game is minimised or in another tab.
+    // (pagehide/pageshow cover iOS, which doesn't always fire visibilitychange when backgrounded.)
+    document.addEventListener('visibilitychange', () => this.sfx.setHidden(document.hidden));
+    window.addEventListener('pagehide', () => this.sfx.setHidden(true));
+    window.addEventListener('pageshow', () => this.sfx.setHidden(document.hidden));
     window.addEventListener('pointerdown', unlock);
     window.addEventListener('keydown', unlock);
     this.updateMachineVisuals();

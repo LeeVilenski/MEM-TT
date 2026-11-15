@@ -40,6 +40,21 @@ export class Sfx {
   muted = false;
   ambienceOn = true;
 
+  /** The page is hidden (minimised, another app or tab): all audio is paused. */
+  private hidden = false;
+
+  /**
+   * Pause all sound while the page is hidden and pick up again when it's back. Suspending
+   * the audio context stops music, ambience and effects together (on phones, audio
+   * otherwise carries on playing with the game minimised).
+   */
+  setHidden(hidden: boolean) {
+    this.hidden = hidden;
+    if (!this.ctx) return;
+    if (hidden) void this.ctx.suspend();
+    else void this.ctx.resume();
+  }
+
   /** Must be called from a user gesture (browsers block audio until then). */
   unlock() {
     if (!this.ctx) {
@@ -56,7 +71,7 @@ export class Sfx {
       this.setAmbience(this.ambKind);
       this.setMusic(this.musicKind);
     }
-    void this.ctx.resume();
+    if (!this.hidden) void this.ctx.resume();
   }
 
   applyVolume() {
