@@ -380,15 +380,15 @@ export class Menu {
           `<label class="menu-slider"><span>Volume</span><input type="range" data-k="volume" min="0" max="1" step="0.05" value="${h.look.volume}" aria-label="Volume"><output>${Math.round(h.look.volume * 100)}%</output></label>
            ${toggle('muted', 'Mute', h.look.muted)}
            ${toggle('music', 'Music', h.look.music, 'A background song for each venue')}
-           ${toggle('ambience', 'Venue ambience', h.look.ambience, 'Office hum, server fans, wind')}`,
+           ${toggle('ambience', 'Venue ambience', h.look.ambience, 'Office hum, server fans, wind')}
+           ${toggle('mjMode', 'MJ mode', h.look.mjMode, 'Every smash, yours or the AI’s, comes with a grunt. Hee-hee!')}`,
         )}
         ${this.group(
           'Gameplay & effects',
           `${toggle('arcadeFx', 'Arcade effects', h.look.arcadeFx, 'Hit-stop, camera shake, sparks, crowd')}
            ${toggle('fullSpeedOut', 'Your shots at full speed', h.look.fullSpeedOut, 'The game slows down only for balls coming at you (offline)')}
            ${toggle('autoReplay', 'Auto-replay long rallies', h.look.autoReplay)}
-           ${toggle('callouts', 'Point call-outs', h.look.callouts, 'A joke after each point: 404, PACKET LOSS, SEGFAULT…')}
-           ${toggle('mjMode', 'MJ mode', h.look.mjMode, 'Your smashes come with a grunt. Hee-hee!')}`,
+           ${toggle('callouts', 'Point call-outs', h.look.callouts, 'A joke after each point: 404, PACKET LOSS, SEGFAULT…')}`,
         )}
         ${this.group('Camera', `<div class="menu-choices">${this.choice('cam', 'dynamic', 'Dynamic', h.camMode === 'dynamic', 'Follows the play (recommended)')}${this.choice('cam', 'close', 'Close', h.camMode === 'close', 'Behind you, more depth')}${this.choice('cam', 'classic', 'Classic', h.camMode === 'classic', 'High and steady, like TV')}</div>`)}
         ${this.group('Graphics quality', `<div class="menu-choices">${quality}</div>${toggle('bloom', 'Glow effects', h.look.bloom, 'Bloom on the ball trail, sparks and lights (High quality only)')}`)}

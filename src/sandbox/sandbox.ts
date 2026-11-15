@@ -1054,7 +1054,8 @@ export class Sandbox implements MenuHost {
           const name = e.serve ? 'Serve' : info.name;
           this.matchHud.addShot({ who, name, speed: info.speed, rpm: info.rpm, top: info.top });
           this.hitSound(h.impactSpeed + length(h.paddleVel), e.side === 'near' ? this.player.rubbers[this.player.swing.side].kind : ai.rubber.kind, h.pos.x);
-          this.fxHit(h.pos, h.velOut, h.spinOut, e.side === 'near', e.serve);
+          // The AI's plan (its chosen stroke) is still set when its hit is reported.
+          this.fxHit(h.pos, h.velOut, h.spinOut, e.side === 'near', e.serve, e.side === 'far' && ai.plan?.stroke === 'smash');
           if (e.side === 'near') {
             this.keyContact('me', this.playerView, h.pos, h.velIn, h.velOut, h.spinOut);
             this.playerView.strike(h.paddleVel);
@@ -1853,7 +1854,8 @@ export class Sandbox implements MenuHost {
   private cleanStreak = 0;
 
   /** Arcade effects for a paddle hit (render coordinates). `mine` = the local player. */
-  private fxHit(pos: Vec3, velOut: Vec3, spinOut: Vec3, mine: boolean, serve: boolean) {
+  /** `otherSmash`: someone else's hit (the AI, a partner, an online opponent) was a smash. */
+  private fxHit(pos: Vec3, velOut: Vec3, spinOut: Vec3, mine: boolean, serve: boolean, otherSmash = false) {
     this.lastHitPower = serve ? 0 : hitPower(length(velOut));
     const perfect = mine && !serve && this.player.lastContactPerfect;
     this.juice.hit(pos, velOut, spinOut, { perfect, serve });
@@ -1867,9 +1869,11 @@ export class Sandbox implements MenuHost {
       this.cleanStreak = g === 'PERFECT' || g === 'GOOD' ? this.cleanStreak + 1 : 0;
       if (this.cleanStreak >= 10) this.career.award('clean-code');
     }
-    // MJ mode: your smash gets a yelp (and its caption, unless PERFECT has the spot).
-    const yelp = this.look.mjMode && mine && !serve && this.player.lastContactSmash ? this.sfx.yelp(pos.x) : '';
-    if (yelp && !perfect) this.hud.grade(yelp, 'gold');
+    // MJ mode: every smash, yours or theirs, gets a grunt (a yelp's caption only on yours,
+    // unless PERFECT has the spot).
+    const smashed = !serve && (mine ? this.player.lastContactSmash : otherSmash);
+    const yelp = this.look.mjMode && smashed ? this.sfx.yelp(pos.x) : '';
+    if (yelp && mine && !perfect) this.hud.grade(yelp, 'gold');
     if (perfect && this.look.arcadeFx) {
       this.sfx.perfect();
       this.hud.perfect();
@@ -2159,7 +2163,8 @@ export class Sandbox implements MenuHost {
         this.matchHud.addShot({ who, name, speed: info.speed, rpm: info.rpm, top: info.top });
         const rubber = e.by === c.seat ? this.player.rubbers[this.player.swing.side].kind : 'Inverted';
         this.hitSound(length(e.velOut) + length(e.paddleVel), rubber, mapVec(c.side, e.pos).x);
-        this.fxHit(mapVec(c.side, e.pos), mapVec(c.side, e.velOut), mapVec(c.side, e.spinOut), e.by === c.seat, e.serve);
+        // Others' strokes aren't sent: a hit that plays like a smash counts as one.
+        this.fxHit(mapVec(c.side, e.pos), mapVec(c.side, e.velOut), mapVec(c.side, e.spinOut), e.by === c.seat, e.serve, info.name === 'Smash');
         {
           const mine = e.by === c.seat;
           const view = mine ? this.playerView : this.remoteViews.get(e.by);
