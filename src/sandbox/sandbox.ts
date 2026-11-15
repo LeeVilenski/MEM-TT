@@ -1143,7 +1143,7 @@ export class Sandbox implements MenuHost {
     this.playerView.setMarker(this.settings.showIntercept ? match.interceptFor('near') : null, this.markerEta());
     const pose = ai.worldPose;
     const body = ai.worldBody;
-    this.aiView.updatePose(pose, body, pose.pos.x <= body.x ? 'forehand' : 'backhand');
+    this.aiView.updatePose(pose, body, ai.wing);
     const state = match.sim?.state ?? { pos: match.ballRenderPos(), vel: v3(), spin: v3() };
     if (running && match.sim) this.ball.rotate(state.spin, realDt * this.settings.timeScale);
     this.ball.update(match.ballRenderPos(), state);

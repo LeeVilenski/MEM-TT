@@ -454,7 +454,7 @@ export class RoomCore {
         if (!ai) continue;
         const p = ai.worldPose;
         const b = ai.worldBody;
-        const pose: WirePose = { p: toV(p.pos), n: toV(p.normal), b: [b.x, b.z], wing: 'forehand' };
+        const pose: WirePose = { p: toV(p.pos), n: toV(p.normal), b: [b.x, b.z], wing: ai.wing };
         this.broadcast({ t: 'pose', seat: seat as Seat, pose });
       }
     }

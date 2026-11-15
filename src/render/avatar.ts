@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { StyleId } from '../game/styles';
+import { STYLES, type StyleId } from '../game/styles';
 
 /**
  * Characters built from smooth primitives: a tapered torso, jointed arms and legs,
@@ -421,6 +421,8 @@ export class Avatar {
   private firstPerson = false;
   /** Seated in a wheelchair (lower body, legs on the footplate, wheels that roll). */
   private seated = false;
+  /** Bat hand: +1 right (local +x), −1 left. */
+  private batHand: 1 | -1 = 1;
   /** Chair, legs and hips: turns (yaws) as she wheels about, under the upper body. */
   private chair = new THREE.Group();
   /** Rear wheels, left then right: spin group (rolls) and camber group (the push rim's frame). */
@@ -438,6 +440,7 @@ export class Avatar {
 
   constructor(style: StyleId, opacity = 1) {
     const look = LOOKS[style];
+    this.batHand = STYLES[style].leftHanded ? -1 : 1;
     const solid = opacity >= 1;
     const cache = new Map<number, THREE.MeshStandardMaterial>();
     const mat = (c: number) => {
@@ -749,9 +752,9 @@ export class Avatar {
     this.group.position.set(body.x, 0, body.z);
     this.group.updateMatrixWorld();
     const local = this.group.worldToLocal(hand.clone());
-    // The bat stays in the right hand (+x: the character faces local −z): backhands are
-    // played across the body rather than swapping the bat to the other hand.
-    const side = 1;
+    // The bat stays in one hand (right is +x: the character faces local −z): backhands
+    // are played across the body rather than swapping the bat to the other hand.
+    const side = this.batHand;
     this.lastFreeSide = -side;
     this.animate(dt, now, body, local, side);
     this.group.updateMatrixWorld(true);
