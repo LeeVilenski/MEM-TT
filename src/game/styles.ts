@@ -1,11 +1,11 @@
 import { RUBBERS, type Rubber } from '../physics';
 
 /**
- * Player styles: the characters (Lee, Ryan, Ed, Will, Dan and a Sysadmin), each with an IT job. A style changes handling (not the
+ * Player styles: the characters (Lee, Ryan, Ed, Will, Dan, Paul, Bryony and a Sysadmin), each with an IT job. A style changes handling (not the
  * physics): swing power, reach, footwork speed, where you stand, and your default
  * rubbers. For the AI it also sets stroke preferences and playing distance.
  */
-export type StyleId = 'allround' | 'looper' | 'chopper' | 'blocker' | 'penhold' | 'pusher';
+export type StyleId = 'allround' | 'looper' | 'chopper' | 'blocker' | 'penhold' | 'pusher' | 'patient' | 'wheelchair';
 
 /** AI stroke kinds that styles can weight (see ai.ts), serves included. */
 export type StyleStroke = 'loop' | 'drive' | 'push' | 'block' | 'smash' | 'flick' | 'chop' | 'serve-short' | 'serve-long' | 'serve-side';
@@ -28,6 +28,12 @@ export interface Personality {
   placement?: number;
   /** Multiplier on brush (spin) for loops and serves. */
   spin?: number;
+  /** 0–1: takes the brush out of every stroke (1 = dead flat: straight through the ball, no spin). */
+  flat?: number;
+  /** 0–1: patience. Aims further inside the lines, hits a little softer and makes fewer errors. */
+  steady?: number;
+  /** Multiplier on how fast it moves about (a wheelchair player covers less ground sideways). */
+  mobility?: number;
 }
 
 export interface PlayStyle {
@@ -138,9 +144,43 @@ export const STYLES: Record<StyleId, PlayStyle> = {
     ai: { push: 4, chop: 1.6, block: 1.4, loop: 0.5, drive: 0.4, smash: 0.3, flick: 0.4, 'serve-short': 3, 'serve-side': 1, 'serve-long': 0.3 },
     personality: { slice: 0.85, placement: 0.6, smashHeight: 0.6, smashAppetite: 0.4 },
   },
+  patient: {
+    id: 'patient',
+    character: 'Paul',
+    role: 'Paul',
+    label: 'Patient flat hitter',
+    description: 'Never puts spin on anything. Pats every ball back flat and safe, all day, until you miss.',
+    power: 0.9,
+    reach: 1.05,
+    footwork: 1.05,
+    distance: 0.7,
+    // Short pips both sides: the flat hitter's rubber (fast, flat, little affected by spin).
+    rubbers: { forehand: RUBBERS.shortPips, backhand: RUBBERS.shortPips },
+    ai: { block: 4, drive: 2, push: 1.5, flick: 0.2, smash: 0.2, loop: 0.05, chop: 0.05, 'serve-long': 2, 'serve-short': 2, 'serve-side': 0.05 },
+    personality: { flat: 1, steady: 0.85, smashHeight: 0.6, smashAppetite: 0.2 },
+  },
+  wheelchair: {
+    id: 'wheelchair',
+    character: 'Bryony',
+    role: 'Bryony',
+    label: 'Wheelchair counter-hitter',
+    description: 'Plays from her wheelchair, tight to the table: quick hands, early blocks and sharp angles that pull you wide.',
+    power: 1,
+    reach: 1.05,
+    footwork: 0.75,
+    distance: 0.3,
+    rubbers: { forehand: RUBBERS.inverted, backhand: RUBBERS.inverted },
+    ai: { block: 2, drive: 1.8, flick: 1.6, push: 1.2, loop: 0.8, smash: 0.8, chop: 0.05, 'serve-short': 2, 'serve-side': 1.5, 'serve-long': 0.8 },
+    // Close to the table she takes the ball early and works the angles; in the chair she
+    // covers less ground sideways than standing players.
+    personality: { placement: 0.75, blockPace: 0.5, smashHeight: 0.45, mobility: 0.7 },
+  },
 };
 
 export const STYLE_IDS = Object.keys(STYLES) as StyleId[];
 
-/** Characters offered in the "Your character" chooser (the Sysadmin stays an opponent only). */
-export const PLAYABLE_STYLE_IDS: StyleId[] = STYLE_IDS.filter((id) => id !== 'chopper');
+/** Characters you only meet as opponents in tournaments and the World Tour. */
+export const OPPONENT_ONLY_STYLE_IDS: StyleId[] = ['chopper', 'patient', 'wheelchair'];
+
+/** Characters offered in the "Your character" chooser and the AI opponent pickers. */
+export const PLAYABLE_STYLE_IDS: StyleId[] = STYLE_IDS.filter((id) => !OPPONENT_ONLY_STYLE_IDS.includes(id));

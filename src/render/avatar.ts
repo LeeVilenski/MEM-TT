@@ -4,7 +4,9 @@ import type { StyleId } from '../game/styles';
 /**
  * Characters built from smooth primitives: a tapered torso, jointed arms and legs,
  * hands and a proper head. One look per player style; four are modelled on real
- * people (Lee, Ed, Ryan, Will) from their clothes, hair and build. The racket arm is
+ * people (Lee, Ed, Ryan, Will, Dan, Paul, Bryony) from their clothes, hair and build.
+ * Bryony plays seated in a table tennis wheelchair: the upper body sits lower and the
+ * legs rest on the footplate. The racket arm is
  * a two-bone chain (shoulder, elbow, hand) solved each frame to hold the paddle handle.
  */
 type Mat = (c: number) => THREE.Material;
@@ -37,6 +39,14 @@ interface Look {
   beard?: number;
   /** Rectangular glasses frames, by colour. */
   glasses?: number;
+  /** Tinted lenses in the glasses (sunglasses), by colour. */
+  lenses?: number;
+  /** A goatee and moustache (instead of a full beard), by colour. */
+  goatee?: number;
+  /** Sleeves down to the wrist (instead of short sleeves). */
+  longSleeves?: boolean;
+  /** Plays seated in a sports wheelchair: frame and tyre colours. */
+  wheelchair?: { frame: number; tyre: number };
   /** A watch on the free wrist. */
   watch?: number;
   /** Something held in the free hand (a water bottle), by colour. */
@@ -180,6 +190,121 @@ const LOOKS: Record<StyleId, Look> = {
       g.add(v, under);
     },
   },
+  // Paul: navy Hawaiian shirt with a pink, teal and orange flower print, open collar,
+  // jeans, dark sunglasses, short dark hair and a goatee.
+  patient: {
+    shirt: 0x1c2442,
+    legs: { kind: 'trousers', color: 0x3b5b8f },
+    skin: 0xe9b996,
+    hair: 0x3a2a20,
+    shoes: 0x1f2937,
+    height: 1.0,
+    build: 1.0,
+    glasses: 0x111111,
+    lenses: 0x1b2230,
+    goatee: 0x4a3426,
+    accessory: (g, m, t) => {
+      // A busy flower print front and back: big blossoms (petals round a yellow centre) among leaves.
+      const petals = [0xf06292, 0x2bb3a3, 0xf59e0b, 0xf8fafc, 0xec4899];
+      const disc = new THREE.CircleGeometry(1, 10);
+      const leaf = new THREE.CircleGeometry(1, 6);
+      const place = (o: THREE.Object3D, i: number, back: boolean, x: number, y: number) => {
+        const z = t.front(y, x) - 0.002 - (i % 3) * 0.0003;
+        o.position.set(x, y, back ? -z : z);
+        o.rotation.y = back ? 0 : Math.PI;
+        g.add(o);
+      };
+      // A jittered grid over the front and back, so the print covers the shirt evenly.
+      const COLS = 5;
+      const ROWS = 6;
+      const jitter = (n: number) => ((Math.sin(n * 12.9898) * 43758.5453) % 1 + 1) % 1 - 0.5;
+      for (let i = 0; i < COLS * ROWS * 2; i++) {
+        const back = i >= COLS * ROWS;
+        const cell = i % (COLS * ROWS);
+        const col = cell % COLS;
+        const row = Math.floor(cell / COLS);
+        const x = ((col + 0.5) / COLS - 0.5 + jitter(i) * 0.12) * t.halfW * 1.6;
+        const y = 0.93 + ((row + 0.5) / ROWS + jitter(i + 99) * 0.08) * 0.45;
+        if (i % 3 === 0) {
+          // A leaf.
+          const l = new THREE.Mesh(leaf, m(i % 2 ? 0x15803d : 0x0e7490));
+          l.scale.set(0.012, 0.028, 1);
+          l.rotation.z = i;
+          const w = new THREE.Group();
+          w.add(l);
+          place(w, i, back, x, y);
+          continue;
+        }
+        const r = 0.022 + (i % 4) * 0.005;
+        const flower = new THREE.Group();
+        for (let k = 0; k < 5; k++) {
+          const petal = new THREE.Mesh(disc, m(petals[i % petals.length]));
+          petal.scale.setScalar(r * 0.5);
+          const a = (k * Math.PI * 2) / 5 + i;
+          petal.position.set(Math.cos(a) * r * 0.5, Math.sin(a) * r * 0.5, 0);
+          flower.add(petal);
+        }
+        const centre = new THREE.Mesh(disc, m(0xfde047));
+        centre.scale.setScalar(r * 0.25);
+        centre.position.z = -0.0005;
+        flower.add(centre);
+        place(flower, i, back, x, y);
+      }
+      // Open collar: two lapels either side of the neck.
+      for (const side of [-1, 1]) {
+        const lapel = new THREE.Mesh(new THREE.CircleGeometry(0.04, 3), m(0x141a33));
+        lapel.position.set(side * 0.03, 1.415, t.front(1.415, side * 0.03) - 0.004);
+        lapel.rotation.set(0, Math.PI, side * 0.6 - Math.PI / 2);
+        lapel.scale.set(1.2, 0.7, 1);
+        g.add(lapel);
+      }
+      const neck = new THREE.Mesh(new THREE.CircleGeometry(0.03, 3), m(0xe9b996));
+      neck.position.set(0, 1.43, t.front(1.43) - 0.005);
+      neck.rotation.set(0, Math.PI, -Math.PI / 2);
+      neck.scale.set(1.2, 0.8, 1);
+      g.add(neck);
+    },
+  },
+  // Bryony: in a sports wheelchair; long light-brown hair in a ponytail, thin dark
+  // glasses, a berry long-sleeved top with a small white star print, dark trousers.
+  wheelchair: {
+    shirt: 0x8e1d55,
+    longSleeves: true,
+    legs: { kind: 'trousers', color: 0x1c1d22 },
+    skin: 0xf0c6ae,
+    hair: 0x8a6142,
+    shoes: 0x1f2937,
+    height: 1.0,
+    build: 1.08,
+    glasses: 0x2b1d1d,
+    wheelchair: { frame: 0xc3c8cf, tyre: 0x1b1d22 },
+    accessory: (g, m, t) => {
+      // Star print: small white (and a few gold) stars front and back.
+      const star = new THREE.CircleGeometry(1, 5);
+      const jitter = (n: number) => ((Math.sin(n * 78.233) * 43758.5453) % 1 + 1) % 1 - 0.5;
+      for (let i = 0; i < 90; i++) {
+        const back = i % 2 === 1;
+        const col = (i >> 1) % 6;
+        const row = Math.floor((i >> 1) / 6);
+        const x = ((col + 0.5) / 6 - 0.5 + jitter(i) * 0.14) * t.halfW * 1.6;
+        const y = 0.9 + ((row + 0.5) / 8 + jitter(i + 7) * 0.06) * 0.5;
+        const z = t.front(y, x) - 0.002;
+        const s = new THREE.Mesh(star, m(i % 7 === 0 ? 0xfacc15 : 0xf8fafc));
+        s.scale.setScalar(0.007 + (i % 3) * 0.002);
+        s.position.set(x, y, back ? -z : z);
+        s.rotation.set(0, back ? 0 : Math.PI, i);
+        g.add(s);
+      }
+      // Ponytail: a hair tie at the back of the head and the tail hanging down.
+      const tie = new THREE.Mesh(new THREE.TorusGeometry(0.022, 0.008, 6, 12), m(0x1f2937));
+      tie.position.set(0, 1.62, 0.1);
+      g.add(tie);
+      const tail = new THREE.Mesh(new THREE.CapsuleGeometry(0.026, 0.16, 4, 10), m(0x8a6142));
+      tail.position.set(0, 1.52, 0.115);
+      tail.rotation.x = 0.18;
+      g.add(tail);
+    },
+  },
 };
 
 /** Exported for tests: every style has a look. */
@@ -201,6 +326,10 @@ const COMFORT = 0.6;
 /** Leg segments. */
 const THIGH = 0.42;
 const SHIN = 0.37;
+/** Seated (wheelchair): how far the hips sit below standing hip height, m. */
+const SEAT_DROP = 0.31;
+/** Wheelchair rear wheel radius, m. */
+const WHEEL_R = 0.3;
 
 /** Torso outline: [radius (fraction of the half width), height]. Waist, chest, shoulders, neckline. */
 const TORSO: [number, number][] = [
@@ -281,6 +410,10 @@ export class Avatar {
   private materials: THREE.MeshStandardMaterial[] = [];
   private shoulderX = 0.2;
   private firstPerson = false;
+  /** Seated in a wheelchair (lower body, legs on the footplate, wheels that roll). */
+  private seated = false;
+  private wheelSpin: THREE.Group[] = [];
+  private rolled = 0;
 
   constructor(style: StyleId, opacity = 1) {
     const look = LOOKS[style];
@@ -345,6 +478,10 @@ export class Avatar {
     // Hips and waistband move with the legs, not the twisting upper body.
     this.pelvis = new THREE.Mesh(lathe(PELVIS, halfW * 0.98, halfD * 0.98), mat(look.legs.color));
     this.group.add(this.pelvis);
+    if (look.wheelchair) {
+      this.seated = true;
+      this.buildWheelchair(look.wheelchair, mat);
+    }
 
     // ---- torso, shoulders, neck, head
     const torso: TorsoShape = {
@@ -406,6 +543,75 @@ export class Avatar {
     this.group.scale.setScalar(look.height ?? 1);
   }
 
+  /**
+   * A table tennis wheelchair: big cambered rear wheels with push rims, a low back, a
+   * cushion, side rails down to small front casters, a footplate and an anti-tip wheel.
+   * The character faces local −z; the hips sit at HIP − SEAT_DROP.
+   */
+  private buildWheelchair(c: { frame: number; tyre: number }, mat: Mat) {
+    const g = new THREE.Group();
+    const metal = new THREE.MeshStandardMaterial({ color: c.frame, metalness: 0.75, roughness: 0.35 });
+    this.materials.push(metal);
+    const fabric = mat(0x15161a);
+    const tube = (a: THREE.Vector3, b: THREE.Vector3, r = 0.013) => {
+      const len = a.distanceTo(b);
+      const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 8), metal);
+      m.position.copy(a).add(b).multiplyScalar(0.5);
+      m.quaternion.setFromUnitVectors(Y_AXIS, b.clone().sub(a).normalize());
+      g.add(m);
+    };
+    const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+    const seatY = HIP - SEAT_DROP - 0.1;
+    // Cushion and the low backrest.
+    const cushion = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.05, 0.44), fabric);
+    cushion.position.set(0, seatY, -0.14);
+    const back = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.22, 0.025), fabric);
+    back.position.set(0, seatY + 0.17, 0.11);
+    g.add(cushion, back);
+    for (const sx of [-1, 1]) {
+      const x = sx * 0.2;
+      tube(v(x, seatY - 0.03, 0.12), v(x, seatY - 0.03, -0.4)); // side rail
+      tube(v(x, seatY - 0.03, 0.12), v(x, seatY + 0.3, 0.12)); // backrest upright
+      tube(v(x, seatY - 0.03, -0.4), v(x * 0.75, 0.13, -0.5)); // down to the footplate
+      // Front caster: a fork and a small wheel.
+      tube(v(x * 0.85, 0.13, -0.5), v(x * 0.85, 0.06, -0.52), 0.01);
+      const caster = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.022, 14).rotateZ(Math.PI / 2), mat(c.tyre));
+      caster.position.set(x * 0.85, 0.035, -0.53);
+      g.add(caster);
+      // Rear wheel: cambered (tops lean in), with a push rim, hub and spokes; spins as she rolls.
+      const camber = new THREE.Group();
+      camber.position.set(sx * 0.3, WHEEL_R, 0.02);
+      camber.rotation.z = sx * 0.14;
+      const spin = new THREE.Group();
+      camber.add(spin);
+      const tyre = new THREE.Mesh(new THREE.TorusGeometry(WHEEL_R - 0.016, 0.017, 10, 40).rotateY(Math.PI / 2), mat(c.tyre));
+      const rim = new THREE.Mesh(new THREE.TorusGeometry(WHEEL_R - 0.034, 0.008, 6, 40).rotateY(Math.PI / 2), metal);
+      const push = new THREE.Mesh(new THREE.TorusGeometry(WHEEL_R - 0.05, 0.007, 6, 40).rotateY(Math.PI / 2), metal);
+      push.position.x = sx * 0.035;
+      const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.05, 14).rotateZ(Math.PI / 2), metal);
+      spin.add(tyre, rim, push, hub);
+      for (let k = 0; k < 10; k++) {
+        const spoke = new THREE.Mesh(new THREE.BoxGeometry(0.004, WHEEL_R - 0.04, 0.004), metal);
+        const a = (k / 10) * Math.PI * 2;
+        spoke.position.set(0, Math.cos(a) * (WHEEL_R - 0.04) * 0.5, Math.sin(a) * (WHEEL_R - 0.04) * 0.5);
+        spoke.rotation.x = a; // along (0, cos a, sin a): hub to rim
+        spin.add(spoke);
+      }
+      this.wheelSpin.push(spin);
+      g.add(camber);
+    }
+    tube(v(-0.3, WHEEL_R, 0.02), v(0.3, WHEEL_R, 0.02), 0.016); // axle bar
+    // Footplate, and the anti-tip wheel out behind.
+    const plate = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.02, 0.14), metal);
+    plate.position.set(0, 0.12, -0.5);
+    g.add(plate);
+    tube(v(0, seatY - 0.03, 0.1), v(0, 0.06, 0.34), 0.011);
+    const tip = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.02, 12).rotateZ(Math.PI / 2), mat(c.tyre));
+    tip.position.set(0, 0.04, 0.36);
+    g.add(tip);
+    this.group.add(g);
+  }
+
   private buildHead(look: Look, add: (geo: THREE.BufferGeometry, color: number, x: number, y: number, z: number) => THREE.Mesh) {
     const HY = 1.615;
     const head = add(new THREE.SphereGeometry(0.1, 24, 18), look.skin, 0, HY, 0);
@@ -449,6 +655,15 @@ export class Avatar {
         add(new THREE.BoxGeometry(0.004, 0.004, 0.1), c, s * 0.091, y + 0.012, z + 0.05);
       }
       add(new THREE.BoxGeometry(0.018, 0.004, 0.004), c, 0, HY + 0.02, z);
+      if (look.lenses !== undefined) for (const s of [-1, 1]) add(new THREE.BoxGeometry(0.04, 0.025, 0.002), look.lenses, s * 0.036, HY + 0.012, z + 0.001);
+    }
+    if (look.goatee !== undefined) {
+      // Chin patch, the strip down from the lip, and a moustache.
+      const chin = add(new THREE.SphereGeometry(0.03, 12, 8), look.goatee, 0, HY - 0.082, -0.084);
+      chin.scale.set(1, 0.75, 0.6);
+      add(new THREE.BoxGeometry(0.014, 0.022, 0.006), look.goatee, 0, HY - 0.06, -0.097);
+      const tache = add(new THREE.BoxGeometry(0.05, 0.009, 0.008), look.goatee, 0, HY - 0.03, -0.098);
+      tache.rotation.x = 0.1;
     }
     if (look.cap) {
       const crown = add(new THREE.SphereGeometry(0.108, 22, 12, 0, Math.PI * 2, 0, Math.PI / 2), look.cap.color, 0, HY + 0.035, 0.004);
@@ -466,7 +681,10 @@ export class Avatar {
 
   private buildArm(look: Look, mat: Mat, sleeveColor: number | null): ArmRig {
     const upper = new THREE.Group();
-    const upperMesh = new THREE.Mesh(limb(0.043, 0.035), mat(look.skin));
+    // Long sleeves cover the arm down to the wrist (a touch thicker than bare skin).
+    const armColor = look.longSleeves && sleeveColor !== null ? sleeveColor : look.skin;
+    const thick = armColor === look.skin ? 1 : 1.15;
+    const upperMesh = new THREE.Mesh(limb(0.043 * thick, 0.035 * thick), mat(armColor));
     upper.add(upperMesh);
     if (sleeveColor !== null) {
       // A short sleeve over the top of the upper arm (not stretched with it).
@@ -476,9 +694,9 @@ export class Avatar {
       upper.add(sleeve);
     }
     const fore = new THREE.Group();
-    const elbow = new THREE.Mesh(new THREE.SphereGeometry(0.036, 12, 8), mat(look.skin));
+    const elbow = new THREE.Mesh(new THREE.SphereGeometry(0.036 * thick, 12, 8), mat(armColor));
     fore.add(elbow);
-    const foreMesh = new THREE.Mesh(limb(0.035, 0.027), mat(look.skin));
+    const foreMesh = new THREE.Mesh(limb(0.035 * thick, 0.027 * thick), mat(armColor));
     fore.add(foreMesh);
     const hand = new THREE.Mesh(new THREE.SphereGeometry(0.036, 12, 10), mat(look.skin));
     hand.scale.set(0.85, 1.15, 0.7);
@@ -585,6 +803,13 @@ export class Avatar {
     let speed = 0;
     if (this.lastBody && dt > 0) speed = Math.hypot(body.x - this.lastBody.x, body.z - this.lastBody.z) / dt;
     this.lastBody = { x: body.x, z: body.z };
+    // Seated: the shoulders are lower, and moving rolls the wheels (no steps).
+    const drop0 = this.seated ? SEAT_DROP : 0;
+    if (this.seated) {
+      this.rolled += speed * dt;
+      for (const w of this.wheelSpin) w.rotation.x = -this.rolled / WHEEL_R;
+      speed = 0;
+    }
     this.stride = approach(this.stride, clamp(speed * 0.35, 0, 0.32), 12, dt);
     this.walkPhase += dt * (4 + speed * 9);
     const step = Math.sin(this.walkPhase) * this.stride;
@@ -596,13 +821,13 @@ export class Avatar {
     // Turn toward the paddle side and into the swing; lean over low or far-forward balls.
     const twistTarget = clamp(-hand.x * 0.55 - this.swingVel * 0.06, -0.7, 0.7);
     this.twist = approach(this.twist, twistTarget, 10, dt);
-    const reachDown = clamp((1.15 - hand.y) * 0.5, 0, 0.3);
+    const reachDown = clamp((1.15 - drop0 - hand.y) * 0.5, 0, 0.3);
     const reachForward = clamp((-hand.z - 0.3) * 0.25, 0, 0.15);
     this.lean = approach(this.lean, 0.1 + reachDown + reachForward, 8, dt);
 
     // Reaching for a ball beyond the arm: bend sideways toward it and lean in.
     const sx = side * this.shoulderX;
-    const far = Math.max(0, Math.hypot(hand.x - sx, hand.y - SHOULDER_Y, hand.z) - COMFORT);
+    const far = Math.max(0, Math.hypot(hand.x - sx, hand.y - (SHOULDER_Y - drop0), hand.z) - COMFORT);
     const sideways = Math.min(1, Math.abs(hand.x - sx) / Math.max(0.01, Math.hypot(hand.x - sx, hand.z)));
     this.sideLean = approach(this.sideLean, -Math.sign(hand.x - sx || 1) * clamp(far * 1.5 * sideways, 0, 0.5), 18, dt);
     this.reachLean = approach(this.reachLean, clamp(far * 1.1 * (1 - sideways * 0.6), 0, 0.35), 18, dt);
@@ -641,13 +866,25 @@ export class Avatar {
       if (r.t >= REACT_TIME) this.reaction = null;
     }
 
+    if (this.seated) {
+      // In the chair: no knee bend or hop; the hips stay on the cushion.
+      jump = 0;
+      bend = 0;
+    }
     // Bent knees lower the hips: thigh and shin each lose height to the bend.
-    const drop = THIGH * (1 - Math.cos(bend)) + SHIN * (1 - Math.cos(bend));
+    const drop = this.seated ? SEAT_DROP : THIGH * (1 - Math.cos(bend)) + SHIN * (1 - Math.cos(bend));
     this.upper.position.y = HIP - drop + jump;
     this.upper.rotation.set(-(lean + this.reachLean), twist, this.sideLean, 'YXZ');
     this.legs.forEach((leg, i) => {
       const s = i === 0 ? -1 : 1;
       leg.hip.position.y = HIP - drop + jump;
+      if (this.seated) {
+        // Thighs forward along the cushion, shins down to the footplate.
+        leg.hip.rotation.set(Math.PI / 2 - 0.04, 0, s * 0.05);
+        leg.knee.rotation.x = -Math.PI / 2 + 0.12;
+        leg.foot.rotation.x = -0.05;
+        return;
+      }
       leg.hip.rotation.set(bend + (i === 0 ? step : -step) * 0.5, 0, s * (Math.abs(step) * 0.9 + 0.05));
       leg.knee.rotation.x = -2 * bend;
       leg.foot.rotation.x = bend;
@@ -656,6 +893,12 @@ export class Avatar {
     // Free arm on the side away from the paddle.
     const fs = -side;
     this.freeArm.position.set(fs * this.shoulderX, SHOULDER_Y, 0);
+    // Seated, the free hand rests out by the wheel's push rim.
+    if (this.seated && !r) {
+      freeX = 0.25;
+      freeZ = 0.45;
+      elbow = 0.5;
+    }
     this.freeArm.rotation.set(freeX, 0, fs * freeZ, 'XYZ');
     this.freeElbow.rotation.set(elbow, 0, 0);
   }

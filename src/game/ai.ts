@@ -357,7 +357,8 @@ export class AiPlayer {
     // A sidespin serve can curve either way: try the mirrored brush if the first won't land.
     const attempts = choices.flatMap<{ stroke: StrokeKind; mirror: boolean }>((stroke) => (stroke === 'serve-side' ? [{ stroke, mirror: false }, { stroke, mirror: true }] : [{ stroke, mirror: false }]));
     for (const { stroke, mirror } of attempts) {
-      const halfW = TABLE.halfWidth - p.margin;
+      // Patient players aim further inside the sidelines.
+      const halfW = TABLE.halfWidth - p.margin - 0.12 * (pers.steady ?? 0);
       const diagonal = mode === 'serve' && this.doubles;
       // Receiver's right half-court is −x in the server's frame.
       let x = diagonal ? -(0.15 + this.rng() * (halfW - 0.15)) : (this.rng() * 2 - 1) * halfW;
@@ -378,7 +379,11 @@ export class AiPlayer {
       }
       if (spin !== 1 && stroke.startsWith('serve-')) vel = v3(vel.x * spin, vel.y * spin, vel.z * Math.sqrt(spin));
       // Occasionally hook the loop for sidespin.
-      if (stroke === 'loop' && this.rng() < 0.25 * p.aggression) vel = v3((this.rng() < 0.5 ? -1 : 1) * 3, vel.y, vel.z);
+      if (stroke === 'loop' && !pers.flat && this.rng() < 0.25 * p.aggression) vel = v3((this.rng() < 0.5 ? -1 : 1) * 3, vel.y, vel.z);
+      // Flat hitters brush nothing: the bat goes straight through the ball, so no spin.
+      if (pers.flat) vel = v3(vel.x * (1 - pers.flat), vel.y * (1 - pers.flat), vel.z);
+      // Patient players hit a little softer in the rally.
+      if (pers.steady && mode === 'rally') vel = scale(vel, 1 - 0.15 * pers.steady);
       const yaw = (Math.atan2(target.x - pos.x, -(target.z - pos.z)) * 180) / Math.PI;
       const pose: PaddlePose = { pos, normal: v3(0, 0, -1), vel };
 
@@ -411,6 +416,7 @@ export class AiPlayer {
       let personal = 1;
       if (stroke === 'smash') personal *= pers.smashError ?? 1;
       if (stroke === 'block' && opts.steady) personal *= 1 - 0.6 * opts.steady;
+      if (pers.steady) personal *= 1 - 0.4 * pers.steady;
       const pitch = bestPitch + this.gauss() * p.pitchError * errScale * personal;
       // (Aim and pace are rehearsed too: a doubles serve must also land in the right half.)
       const yawErr = yaw + this.gauss() * p.yawError * errScale * personal;
@@ -444,7 +450,8 @@ export class AiPlayer {
       const over = plan.pos.z < TABLE.halfLength;
       target = { x: plan.pos.x + (fh ? -0.4 : 0.3) * (over ? 0.6 : 1), z: Math.max(over ? MIN_BODY_Z : TABLE.halfLength + 0.15, plan.pos.z + ARM) };
     }
-    const move = (from: number, to: number) => from + Math.max(-p.moveSpeed * dt, Math.min(p.moveSpeed * dt, to - from));
+    const step = p.moveSpeed * (this.style.personality?.mobility ?? 1) * dt;
+    const move = (from: number, to: number) => from + Math.max(-step, Math.min(step, to - from));
     if (!plan || now >= this.moveFrom) {
       this.body.x = move(this.body.x, target.x);
       this.body.z = move(this.body.z, target.z);

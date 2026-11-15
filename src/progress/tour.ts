@@ -69,7 +69,7 @@ export const TOUR_STOPS: TourStop[] = [
     opponents: [
       { style: 'pusher', level: 'easy' },
       { style: 'looper', level: 'medium' },
-      { style: 'allround', level: 'easy' },
+      { style: 'patient', level: 'easy' },
     ],
     bestOf: 1,
     finalBestOf: 3,
@@ -97,7 +97,7 @@ export const TOUR_STOPS: TourStop[] = [
     blurb: 'Out of the office: concrete tables in the park, a round-robin group, then a best-of-3 final.',
     xp: 500,
     opponents: [
-      { style: 'penhold', level: 'medium' },
+      { style: 'wheelchair', level: 'medium' },
       { style: 'blocker', level: 'hard' },
       { style: 'chopper', level: 'medium' },
     ],
@@ -113,7 +113,7 @@ export const TOUR_STOPS: TourStop[] = [
     blurb: 'The executives clear the table for a knockout. Hard opponents, every match best of 3.',
     xp: 600,
     rounds: [
-      { name: 'Quarter-final', level: 'medium', style: 'pusher', bestOf: 3, venue: 'conference' },
+      { name: 'Quarter-final', level: 'medium', style: 'wheelchair', bestOf: 3, venue: 'conference' },
       { name: 'Semi-final', level: 'hard', style: 'allround', bestOf: 3, venue: 'conference' },
       { name: 'Final', level: 'hard', style: 'looper', bestOf: 3, venue: 'conference' },
     ],
@@ -129,7 +129,7 @@ export const TOUR_STOPS: TourStop[] = [
     opponents: [
       { style: 'looper', level: 'hard' },
       { style: 'penhold', level: 'hard' },
-      { style: 'pusher', level: 'hard' },
+      { style: 'patient', level: 'hard' },
     ],
     bestOf: 3,
     finalBestOf: 5,
