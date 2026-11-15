@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_PARAMS, TABLE, launchState, solveAim, v3 } from '../src/physics';
 import { AI_LEVELS, AiPlayer } from '../src/game/ai';
 import { Match } from '../src/game/match';
-import { STYLES, PLAYABLE_STYLE_IDS, type StyleId } from '../src/game/styles';
+import { STYLES, PLAYABLE_STYLE_IDS, FREE_PLAY_OPPONENT_IDS, type StyleId } from '../src/game/styles';
 import { TOUR_STOPS } from '../src/progress/tour';
 import { mulberry32 } from './helpers/rng';
 
@@ -28,9 +28,12 @@ function sidewaysSpeed(style: StyleId) {
 }
 
 describe('Bryony: wheelchair player', () => {
-  it('is a World Tour opponent (not in the chooser or AI pickers)', () => {
+  it('is an opponent only: not in the character chooser, but on the World Tour and in free play', () => {
     expect(STYLES.wheelchair.character).toBe('Bryony');
     expect(PLAYABLE_STYLE_IDS).not.toContain('wheelchair');
+    // …but you can pick them as an opponent in free play (Match vs AI, doubles, online AI seats).
+    expect(FREE_PLAY_OPPONENT_IDS).toContain('wheelchair');
+    expect(FREE_PLAY_OPPONENT_IDS).not.toContain('chopper');
     const inTour = TOUR_STOPS.filter((s) => (s.format === 'group' ? s.opponents.some((o) => o.style === 'wheelchair') : s.rounds.some((r) => r.style === 'wheelchair')));
     expect(inTour.length).toBeGreaterThanOrEqual(1);
   });

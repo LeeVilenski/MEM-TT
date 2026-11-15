@@ -3,7 +3,7 @@ import { BallSim, DEFAULT_PARAMS, TABLE, TICK_DT, cloneState, launchState, lengt
 import { landingOutcome } from '../src/game/assist';
 import { AI_LEVELS, AiPlayer } from '../src/game/ai';
 import { Match } from '../src/game/match';
-import { STYLES, PLAYABLE_STYLE_IDS, type StyleId } from '../src/game/styles';
+import { STYLES, PLAYABLE_STYLE_IDS, FREE_PLAY_OPPONENT_IDS, type StyleId } from '../src/game/styles';
 import { PRESETS } from '../src/sandbox/presets';
 import { TOUR_STOPS } from '../src/progress/tour';
 import { mulberry32 } from './helpers/rng';
@@ -40,9 +40,12 @@ function returns(style: StyleId, seeds = 6) {
 }
 
 describe('Paul: patient, flat (no spin of his own)', () => {
-  it('is an opponent only (World Tour), not in the chooser or AI pickers', () => {
+  it('is an opponent only: not in the character chooser, but on the World Tour and in free play', () => {
     expect(STYLES.patient.character).toBe('Paul');
     expect(PLAYABLE_STYLE_IDS).not.toContain('patient');
+    // …but you can pick them as an opponent in free play (Match vs AI, doubles, online AI seats).
+    expect(FREE_PLAY_OPPONENT_IDS).toContain('patient');
+    expect(FREE_PLAY_OPPONENT_IDS).not.toContain('chopper');
     expect(TOUR_STOPS.some((s) => (s.format === 'group' ? s.opponents.some((o) => o.style === 'patient') : s.rounds.some((r) => r.style === 'patient')))).toBe(true);
   });
 

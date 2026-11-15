@@ -182,5 +182,13 @@ export const STYLE_IDS = Object.keys(STYLES) as StyleId[];
 /** Characters you only meet as opponents in tournaments and the World Tour. */
 export const OPPONENT_ONLY_STYLE_IDS: StyleId[] = ['chopper', 'patient', 'wheelchair'];
 
-/** Characters offered in the "Your character" chooser and the AI opponent pickers. */
+/** Characters offered in the "Your character" chooser. */
 export const PLAYABLE_STYLE_IDS: StyleId[] = STYLE_IDS.filter((id) => !OPPONENT_ONLY_STYLE_IDS.includes(id));
+
+/**
+ * Characters you can pick (or get at random) as AI opponents and partners in free play:
+ * Match vs AI, doubles and online AI seats. Everyone but the Sysadmin, who stays a
+ * tournament-only opponent. Paul and Bryony are in for now, to try out how they play;
+ * to take them out again, add them back to the exclusion here.
+ */
+export const FREE_PLAY_OPPONENT_IDS: StyleId[] = STYLE_IDS.filter((id) => id !== 'chopper');
