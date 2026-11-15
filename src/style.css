@@ -3560,81 +3560,6 @@ body {
   white-space: nowrap;
 }
 
-/* ---------------------------------------------------------------- World Tour */
-.tr-route {
-  display: flex;
-  flex-direction: column;
-}
-.tr-num {
-  flex: none;
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  background: #172338;
-  border: 2px solid #26354d;
-  font-weight: 800;
-}
-.tr-stop.won .tr-num {
-  border-color: #facc15;
-}
-.tr-stop.here .tr-num {
-  border-color: var(--accent);
-  background: rgba(47, 124, 246, 0.25);
-}
-.tr-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-  margin-top: 6px;
-}
-.tr-table th {
-  color: var(--muted);
-  font-weight: 600;
-  text-align: left;
-  padding: 4px 6px;
-}
-.tr-table td {
-  padding: 5px 6px;
-  border-top: 1px solid #26354d;
-}
-.tr-table td small {
-  color: var(--muted);
-}
-.tr-table tr.top td:first-child {
-  color: #4ade80;
-  font-weight: 800;
-}
-.tr-table tr.you td {
-  color: #fff;
-  font-weight: 700;
-}
-.tr-note {
-  color: var(--muted);
-  font-size: 12px;
-  margin: 6px 0;
-}
-.tr-results {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 14px;
-  margin-top: 8px;
-  font-size: 12px;
-  color: var(--muted);
-}
-.tr-results b {
-  color: var(--text);
-}
-@media (max-width: 560px) {
-  .tr-num {
-    width: 28px;
-    height: 28px;
-  }
-  .tr-table {
-    font-size: 12px;
-  }
-}
 
 .md-cat {
   margin: 8px 0 0;
@@ -3702,8 +3627,7 @@ body {
 .cs-title,
 .lobby-title,
 .mover-title,
-.cs-item-title,
-.tr-num {
+.cs-item-title {
   font-family: var(--display);
 }
 .cs-title,
@@ -3806,18 +3730,6 @@ body {
 }
 
 /* Lists: rows become the menus' cards (World Tour route, like the drill list). */
-.tr-route {
-  gap: 6px;
-}
-.tr-stop.cs-item {
-  padding: 8px 12px;
-  background: rgba(22, 33, 52, 0.95);
-  border: 2px solid #26354d;
-  border-radius: 9px;
-}
-.tr-stop.here {
-  border-color: var(--c-blue);
-}
 .cs-bracket {
   background: #1b2a42;
   border-radius: 10px;
@@ -3846,5 +3758,394 @@ body {
   }
   .mover-card {
     padding: 14px 18px;
+  }
+}
+
+/* ================================================================ World Tour
+   A route map of the stops, then the selected stop: a venue-coloured hero with the event,
+   who you'll face (or the bracket / group table while it's on), and one main action. */
+
+.tw-card {
+  width: 820px;
+}
+.tw-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px 4px;
+}
+.tw-title h2 {
+  margin: 0;
+  font-family: var(--display);
+  font-weight: 900;
+  font-size: 30px;
+  color: #fff;
+}
+.tw-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.tw-stamps {
+  display: inline-flex;
+  gap: 4px;
+}
+.tw-stamps i {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid #3a4a63;
+}
+.tw-stamps i.on {
+  background: #facc15;
+  border-color: #facc15;
+}
+.tw-rank {
+  margin-left: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.1;
+}
+.tw-rank small {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.tw-rank b {
+  font-family: var(--display);
+  font-size: 18px;
+  color: #fff;
+}
+
+/* Route map: stops joined by a line. */
+.tw-route {
+  display: flex;
+  align-items: flex-start;
+  padding: 12px 18px 14px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+/* (As specific as the sheets' base button rule, which would otherwise make each node a blue block.) */
+.career button.tw-node:not(.cs-close):not([data-tab]) {
+  flex: none;
+  width: 84px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  background: none;
+  box-shadow: none;
+  font-weight: 700;
+}
+.career button.tw-node:not(.cs-close):not([data-tab]):hover,
+.career button.tw-node:not(.cs-close):not([data-tab]):active {
+  filter: none;
+  box-shadow: none;
+}
+.career .tw-node:hover .tw-dot {
+  transform: scale(1.06);
+}
+.tw-dot {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: #1b2a42;
+  border: 3px solid var(--v);
+  font-size: 22px;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.tw-node.won .tw-dot {
+  background: var(--v);
+  border-color: #facc15;
+}
+.tw-node.locked {
+  opacity: 0.45;
+}
+.tw-node.locked .tw-dot {
+  border-color: #3a4a63;
+  font-size: 18px;
+}
+.tw-node.playing .tw-dot {
+  animation: tw-pulse 1.6s ease-out infinite;
+}
+.career .tw-node.on .tw-dot {
+  transform: scale(1.14);
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.18);
+}
+@keyframes tw-pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--v) 70%, transparent); }
+  100% { box-shadow: 0 0 0 12px transparent; }
+}
+.tw-label {
+  max-width: 84px;
+  font-family: var(--display);
+  font-size: 12px;
+  line-height: 1.15;
+  color: #dfe6f2;
+  text-align: center;
+}
+.tw-node.on .tw-label {
+  color: #fff;
+}
+.tw-link {
+  flex: 1 1 12px;
+  min-width: 8px;
+  height: 4px;
+  margin-top: 21px;
+  border-radius: 2px;
+  background: #2a3a56;
+}
+
+/* The selected stop. */
+.tw-stop {
+  margin: 0 18px 18px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #1b2a42;
+}
+.tw-hero {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  color: #fff;
+  background: linear-gradient(100deg, var(--v), color-mix(in srgb, var(--v) 62%, #0b1220));
+}
+.tw-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.18);
+  font-size: 30px;
+}
+.tw-place {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.9;
+}
+.tw-hero h3 {
+  margin: 1px 0 6px;
+  font-family: var(--display);
+  font-weight: 900;
+  font-size: 26px;
+  line-height: 1.1;
+}
+.tw-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.tw-chips span {
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.24);
+  font-size: 12px;
+  font-weight: 700;
+}
+.tw-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 16px 16px;
+}
+.tw-blurb {
+  margin: 0;
+  color: #c5d0e2;
+  font-size: 15px;
+  line-height: 1.4;
+}
+.tw-news {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border-left: 4px solid var(--v, var(--c-blue));
+  background: rgba(255, 255, 255, 0.06);
+}
+.tw-news.top {
+  margin: 4px 18px 0;
+}
+.tw-sub {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #b4c3db;
+}
+.tw-sub small {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 500;
+  color: var(--muted);
+}
+.tw-opps {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 6px;
+}
+.tw-opp,
+.tw-round {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: 9px;
+  background: #142033;
+}
+.tw-ava {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  background: var(--l);
+  font-family: var(--display);
+  font-weight: 900;
+  color: #fff;
+}
+.tw-opp b,
+.tw-rn b {
+  display: block;
+  font-size: 14px;
+}
+.tw-opp small,
+.tw-rn small {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+}
+.tw-bracket {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.tw-round {
+  border-left: 4px solid transparent;
+}
+.tw-round.next {
+  border-left-color: var(--v);
+  background: #18253b;
+}
+.tw-rn {
+  flex: 1;
+  min-width: 0;
+}
+.tw-res {
+  font-family: var(--display);
+  font-weight: 800;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.tw-round.next .tw-res { color: #fff; }
+.tw-round.won .tw-res { color: #4ade80; }
+.tw-round.lost .tw-res { color: #f87171; }
+.tw-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.tw-table th {
+  padding: 2px 8px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.tw-table td {
+  padding: 6px 8px;
+  border-top: 1px solid #26354d;
+}
+.tw-table td small {
+  color: var(--muted);
+}
+.tw-table tr.top td:first-child {
+  color: #4ade80;
+  font-weight: 800;
+}
+.tw-table tr.you td {
+  color: #fff;
+  font-weight: 700;
+}
+.tw-results {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.tw-results b {
+  color: var(--text);
+}
+.tw-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 2px;
+}
+.career .tw-actions button.primary:not(.cs-close):not([data-tab]) {
+  flex: 1 1 auto;
+  min-height: 48px;
+  font-size: 17px;
+  background: var(--v);
+}
+.tw-locked {
+  padding: 10px 0 2px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+/* Phones (landscape): tighter. */
+@media (max-height: 500px), (max-width: 700px) {
+  .tw-head {
+    padding: 10px 14px 0;
+  }
+  .tw-title h2 {
+    font-size: 24px;
+  }
+  .tw-route {
+    padding: 8px 14px 10px;
+  }
+  .career button.tw-node:not(.cs-close):not([data-tab]) {
+    width: 70px;
+  }
+  .tw-dot {
+    width: 38px;
+    height: 38px;
+    font-size: 18px;
+  }
+  .tw-link {
+    margin-top: 17px;
+  }
+  .tw-label {
+    font-size: 11px;
+  }
+  .tw-stop {
+    margin: 0 14px 14px;
+  }
+  .tw-hero {
+    padding: 10px 14px;
+  }
+  .tw-icon {
+    width: 44px;
+    height: 44px;
+    font-size: 24px;
+  }
+  .tw-hero h3 {
+    font-size: 21px;
+  }
+  .tw-blurb {
+    font-size: 14px;
   }
 }

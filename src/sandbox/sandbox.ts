@@ -482,13 +482,13 @@ export class Sandbox implements MenuHost {
     this.unlocked = unlockedKeys(this.career.data, this.career.levelIndex);
     this.careerScreen = new CareerScreen(container, this.career);
     this.careerScreen.onClose = () => this.careerScreen.hide();
-    this.tourScreen = new TourScreen(container, this.career);
+    this.tourScreen = new TourScreen(container, this.career, () => this.tournament);
     this.tourScreen.onClose = () => this.tourScreen.hide();
     this.tourScreen.onEnter = (id) => this.startTournament(id);
     this.tourScreen.onPlay = () => this.playTournamentRound();
     this.tourScreen.onAbandon = () => {
       this.tournament = null;
-      this.tourScreen.run = null;
+      this.tourScreen.banner = '';
       this.tourScreen.render();
     };
     this.hud.onCareer = () => this.openCareer();
@@ -1245,7 +1245,6 @@ export class Sandbox implements MenuHost {
     if (document.pointerLockElement) document.exitPointerLock();
     this.setPlaying(false);
     this.menu.hide();
-    this.tourScreen.run = this.tournament;
     this.tourScreen.show(banner);
   }
 
@@ -1423,7 +1422,6 @@ export class Sandbox implements MenuHost {
   /** A match from the menu (not a tournament round: that would abandon the run). */
   startAiMatch() {
     this.tournament = null;
-    this.tourScreen.run = null;
     this.startMatch();
   }
 
