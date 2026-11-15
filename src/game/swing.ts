@@ -104,6 +104,8 @@ export interface SwingInput {
   dx: number;
   dy: number;
   drive: boolean;
+  /** Smash held (right mouse button / Smash button): a flat kill shot at contact. */
+  smash?: boolean;
   /** W held: close the face. */
   close: boolean;
   /** S held: open the face. */

@@ -50,6 +50,7 @@ export class HowToPlay {
           <table class="ht-shots">
             <tr><td>Topspin<br><small>loop / drive</small></td><td>${flickUp} through the ring. For a flatter, faster drive, ${drive} while you swing.</td></tr>
             <tr><td>Backspin<br><small>push / chop</small></td><td>${flickDown}, like slicing under the ball. The face opens by itself. Best against short balls and against backspin.</td></tr>
+            <tr><td>Smash<br><small>kill shot</small></td><td>Hold ${t ? '<b>Smash</b>' : 'the <b>right mouse button</b>'} as the ball arrives. The ring turns <b style="color:#ff4d6d">red</b> when the ball is high enough: a high ball is a near-certain winner, a low one a gamble.</td></tr>
             <tr><td>Block</td><td>Keep the paddle <b>still</b> on the ring. Great against fast topspin.</td></tr>
             <tr><td>Sidespin<br><small>hook</small></td><td>${hook} while you swing.</td></tr>
           </table>

@@ -62,6 +62,7 @@ const MATCH_HELP = '<kbd>Space</kbd> hold/release: toss (when serving)';
 const PLAY_HELP = [
   'mouse: move paddle · <b>flick</b> to swing (up = topspin, down = backspin)',
   '<kbd>LMB</kbd> hold: drive',
+  '<kbd>RMB</kbd> hold: smash (high balls)',
   '<kbd>W</kbd>/<kbd>S</kbd> close/open face',
   'wheel: base angle',
   '<kbd>A</kbd>/<kbd>D</kbd> hook left/right',
@@ -290,10 +291,10 @@ export class Hud {
     this.speedEl.classList.add('show');
   }
 
-  setPaddle(pitch: number, wing: StrokeSide, locked: boolean, drive: boolean) {
+  setPaddle(pitch: number, wing: StrokeSide, locked: boolean, drive: boolean, smash = false) {
     const p = Math.round(pitch);
     const face = p === 0 ? 'square' : p > 0 ? `${p}° open` : `${-p}° closed`;
-    this.paddleEl.innerHTML = `<span class="wing ${wing}">${wing === 'forehand' ? 'FH' : 'BH'}${locked ? ' 🔒' : ''}</span> Face <b>${face}</b>${drive ? ' <span class="drive">DRIVE</span>' : ''}`;
+    this.paddleEl.innerHTML = `<span class="wing ${wing}">${wing === 'forehand' ? 'FH' : 'BH'}${locked ? ' 🔒' : ''}</span> Face <b>${face}</b>${smash ? ' <span class="drive smash">SMASH</span>' : drive ? ' <span class="drive">DRIVE</span>' : ''}`;
   }
 
   setStats(s: PracticeStats) {
