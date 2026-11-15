@@ -5,6 +5,7 @@ import { VENUES, type VenueId } from '../render/venues';
 import type { QualitySetting } from '../render/quality';
 import type { UnlockKind } from '../progress/unlocks';
 import { CharacterPreview } from '../render/charPreview';
+import { canInstall, install, onInstallChange } from '../pwa/install';
 
 /** Which screen the menu shows (null: hidden). */
 export type MenuScreen = 'title' | 'pause' | 'vsai' | 'online' | 'settings' | 'characters';
@@ -123,6 +124,7 @@ export class Menu {
     this.el.addEventListener('input', (e) => this.onInput(e));
     this.el.addEventListener('change', (e) => this.onInput(e));
     this.el.addEventListener('keydown', (e) => this.onKeyDown(e));
+    onInstallChange(() => this.screen === 'settings' && this.refresh());
   }
 
   get visible() {
@@ -336,6 +338,7 @@ export class Menu {
         )}
         ${this.group('Camera', `<div class="menu-choices">${this.choice('cam', 'dynamic', 'Dynamic', h.camMode === 'dynamic', 'Follows the play (recommended)')}${this.choice('cam', 'close', 'Close', h.camMode === 'close', 'Behind you, more depth')}${this.choice('cam', 'classic', 'Classic', h.camMode === 'classic', 'High and steady, like TV')}</div>`)}
         ${this.group('Graphics quality', `<div class="menu-choices">${quality}</div>${toggle('bloom', 'Glow effects', h.look.bloom, 'Bloom on the ball trail, sparks and lights (High quality only)')}`)}
+        ${canInstall() ? this.group('App', '<div class="menu-choices"><button data-a="install" class="menu-choice">Install app</button></div>') : ''}
         ${this.group('Advanced', toggle('devTools', 'Developer tools', h.devTools, 'Physics tuning, ball machine and every assist. <kbd>`</kbd> toggles it too.'))}
       </div>`;
   }
@@ -420,6 +423,9 @@ export class Menu {
           return this.back();
         case 'quick':
           return h.startAiMatch();
+        case 'install':
+          void install();
+          return;
         case 'start':
           return h.matchSettings.doubles ? h.startDoubles() : h.startAiMatch();
         case 'practice':

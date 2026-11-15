@@ -1,0 +1,21 @@
+{
+  "packageId": "com.memtabletennis.app",
+  "host": "mem-table-tennis.vercel.app",
+  "name": "MEM Table Tennis",
+  "launcherName": "MEM TT",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "themeColor": "#0d1524",
+  "navigationColor": "#0d1524",
+  "backgroundColor": "#0d1524",
+  "enableNotifications": false,
+  "startUrl": "/",
+  "iconUrl": "https://mem-table-tennis.vercel.app/icons/icon-512.png",
+  "maskableIconUrl": "https://mem-table-tennis.vercel.app/icons/maskable-512.png",
+  "webManifestUrl": "https://mem-table-tennis.vercel.app/manifest.webmanifest",
+  "appVersionName": "1.0.0",
+  "appVersionCode": 1,
+  "signingKey": { "path": "./android.keystore", "alias": "android" },
+  "fallbackType": "customtabs",
+  "minSdkVersion": 21
+}
