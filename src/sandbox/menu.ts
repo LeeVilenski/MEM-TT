@@ -259,6 +259,7 @@ export class Menu {
       ${this.group('Opponent level', `<div class="menu-choices">${levels}</div>`)}
       ${m.doubles ? this.doublesLineupHtml() : this.group('Opponent', `<div class="menu-choices wrap">${styles}</div>`)}
       ${this.group('Format', `<div class="menu-choices">${formats}</div>`)}
+      ${this.group('Venue', `<div class="menu-choices wrap">${(Object.keys(VENUES) as VenueId[]).map((id) => this.choice('venue', id, VENUES[id].name, this.host.look.venue === id, undefined, this.host.lockReason('venue', id))).join('')}</div>`)}
       <div class="menu-actions"><button data-a="start" class="primary big">Start match</button></div>`;
   }
 
