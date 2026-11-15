@@ -207,6 +207,11 @@ kbd {
   opacity: 0;
   z-index: 6;
 }
+.hud-perfect[data-tone='bad'] {
+  color: #ff7a6b;
+  font-size: 16px;
+  text-shadow: 0 0 10px rgba(255, 80, 60, 0.6), 0 2px 6px rgba(0, 0, 0, 0.6);
+}
 .hud-perfect.show {
   animation: perfect-pop 0.7s ease-out;
 }
@@ -474,7 +479,16 @@ kbd {
   pointer-events: none;
 }
 
+.mhud-meter::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--illegal, 10%);
+  background: rgba(255, 90, 70, 0.55);
+  z-index: 1;
+}
 .mhud-meter-fill {
+  position: relative;
   height: 100%;
   width: 0;
   background: linear-gradient(90deg, #4ade80, #facc15, #2f7cf6);
@@ -3473,4 +3487,15 @@ body {
 @media (min-width: 820px) and (orientation: landscape) and (max-height: 640px) {
   .menu[data-screen='title'] .menu-card { gap: 10px; }
   .menu[data-screen='title'] .menu-title { font-size: 48px; }
+}
+
+.toast-grade {
+  margin-left: 6px;
+  font-family: var(--mono);
+  font-weight: 800;
+  font-size: 0.85em;
+  color: #ff7a6b;
+}
+.toast-grade.gold {
+  color: #ffc83d;
 }

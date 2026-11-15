@@ -423,7 +423,7 @@ export class RoomCore {
     if (out) return this.endRally(out);
 
     const ai = this.ais[this.next];
-    if (ai) ai.planReturn(post, at);
+    if (ai) ai.planReturn(post, at, { serve });
     this.startAiLive(post, at);
   }
 

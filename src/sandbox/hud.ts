@@ -1,6 +1,7 @@
 import type { Side, SpinComponents } from '../physics';
 import type { ShotInfo } from '../game/shots';
 import type { StrokeSide } from '../game/swing';
+import { TOSS_ILLEGAL_FRACTION } from '../game/serves';
 
 export interface BounceReport {
   side: Side;
@@ -282,6 +283,13 @@ export class Hud {
 
   /** A small gold "PERFECT" pop for a perfectly timed stroke. */
   perfect() {
+    this.grade('PERFECT', 'gold');
+  }
+
+  /** A contact-grade pop: gold PERFECT, or a red EARLY / EDGE / OVERHIT. */
+  grade(text: string, tone: 'gold' | 'good' | 'bad') {
+    this.perfectEl.textContent = text;
+    this.perfectEl.dataset.tone = tone;
     this.perfectEl.classList.remove('show');
     void this.perfectEl.offsetWidth; // restart the CSS animation
     this.perfectEl.classList.add('show');
@@ -562,6 +570,8 @@ export class MatchHud {
   /** Toss meter while holding Space: 0–1, null hides it. */
   setMeter(v: number | null) {
     this.meter.style.display = v === null ? 'none' : 'block';
+    // The start of the meter is an illegal toss (under 16 cm).
+    this.meter.style.setProperty('--illegal', `${(TOSS_ILLEGAL_FRACTION * 100).toFixed(1)}%`);
     if (v !== null) this.meterFill.style.width = `${Math.round(Math.min(1, v) * 100)}%`;
   }
 

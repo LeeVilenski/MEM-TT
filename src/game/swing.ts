@@ -187,6 +187,20 @@ export class SwingController {
   private heldGesture = { x: 0, y: 0 };
   /** Seconds since the last frame of flick movement. */
   private flickAge = Infinity;
+  /** How long the current flick has been going, seconds. */
+  private flickLen = 0;
+  /** Peak speed of the current flick (m/s, mouse plane, lateral discounted in rallies). */
+  private flickPeak = 0;
+
+  /** How long the live flick has been going (s). */
+  get flickLength(): number {
+    return this.flickLen;
+  }
+
+  /** Peak speed of the live flick (m/s, mouse plane; sideways discounted in rallies), 0 if none. */
+  get flickSpeed(): number {
+    return this.flickAge > this.params.strokeHold ? 0 : this.flickPeak;
+  }
 
   /** Seconds since the last flick movement (Infinity if no flick is live). */
   /** The live flick's mouse-plane velocity (m/s, before gain; +y up), for telling strokes from drags. */
@@ -272,6 +286,11 @@ export class SwingController {
     const thrNow = this.serving ? p.serveThreshold : p.swingThreshold;
     const rawGesture = this.serving ? Math.hypot(rawVx, rawVy) : Math.hypot(rawVx * p.lateralStroke, rawVy);
     if (rawGesture > thrNow) {
+      // A new flick (not a continuation of one still going a frame or two ago).
+      const fresh = this.flickAge > Math.max(0.05, 2.5 * dt);
+      if (fresh) ((this.flickLen = 0), (this.flickPeak = 0));
+      else this.flickLen += this.flickAge + dt;
+      this.flickPeak = Math.max(this.flickPeak, rawGesture);
       if (this.flickAge > p.strokeHold || Math.hypot(rawVx, rawVy) >= Math.hypot(this.heldGesture.x, this.heldGesture.y)) this.heldGesture = { x: rawVx, y: rawVy };
       this.flickAge = 0;
     } else this.flickAge += dt;
@@ -328,6 +347,8 @@ export class SwingController {
     this.held = v3();
     this.heldGesture = { x: 0, y: 0 };
     this.flickAge = Infinity;
+    this.flickLen = 0;
+    this.flickPeak = 0;
     this.pose = { pos: v3(bodyX + x, y, restZ), normal: v3(0, 0, -1), vel: v3() };
     this.visualPos = { ...this.pose.pos };
     this.prevPose = this.pose;

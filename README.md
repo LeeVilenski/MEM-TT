@@ -258,6 +258,10 @@ Play against the ball machine with a mouse-driven paddle. Click **▶ Play**: th
 - The type sets the face angle and the brush; the swipe's speed sets the spin (a hard backspin serve is nearly 5,000 rpm), and for sidespin its direction sets the curve. The assist finds a version that lands without taking the spin out.
 - While you swing, the bat meets the falling ball (a serve magnet); without a swing it holds back, so the ball doesn't just drop onto a still bat.
 - Free serves keep their spin too: the assist only trims the pace into the face, not the brush across it.
+- **Serves can go wrong:** serves are graded like rally shots (below). A mistimed or off-centre serve gets less help landing, keeps less spin and can fault.
+- **The toss is a skill:** the red start of the toss meter is an illegal toss (a quick tap, under 16 cm). A higher toss allows a little more spin, but the ball drops faster, so the timing window is tighter.
+- **Serve report:** after each serve a toast rates it, e.g. *Low · Short · 3,800 rpm backspin*. Low, short and spinny is hard to attack; a high serve invites a kill.
+- **The AI has to read your serve:** it sees where the ball goes but judges its spin with error (Easy badly, Expert well). Misjudged backspin goes into the net or pops up, and a no-spin serve can look like backspin. Repeating the same kind of serve in a match lets it read that serve better, so mix them up. Rally balls are read exactly.
 
 **Where you meet the ball:**
 - The ring shows the normal contact point: where the ball reaches your usual distance from the table. It's never below table level: if a ball would drop that low first (a short ball, or a long low one), you take it at the top of its bounce and the footwork assist steps you in.
@@ -268,7 +272,20 @@ Play against the ball machine with a mouse-driven paddle. Click **▶ Play**: th
 - **Visuals:** a glowing comet tail coloured by spin, sparks at contact, and puffs on hard bounces.
 - **Sound:** heavier hit sounds on hard shots, and colleagues who applaud long rallies, groan at errors and cheer the match.
 - **Finale:** the match-winning rally replays in slow motion.
-- **Perfect timing:** the cyan ring shrinks onto the ball and turns gold just before contact. A flick still moving within ~50 ms of contact is **PERFECT**: a gold spark burst and chime, plus 10% extra bat speed at 50% realism and above. The bonus is never on in Simulation.
+- **Perfect timing:** the cyan ring shrinks onto the ball and turns gold just before contact. A clean flick still moving within ~50–70 ms of contact is **PERFECT**: a gold spark burst and chime, plus 10% extra bat speed at 50% realism and above. The bonus is never on in Simulation.
+
+**Contact grading** (`src/game/contact.ts`): every stroke and serve is graded, so a swipe alone is no longer always a perfect shot.
+
+| Grade | Cause | Effect |
+|---|---|---|
+| **PERFECT / GOOD** | A flick through the ball, timed with its arrival | None: the full assist, and PERFECT's bonus |
+| **EARLY** | The flick peaked well before the ball arrived (it had faded) | Less pace and spin, less assist, the face strays |
+| **EDGE** | The swipe passed far from the ball; the bat magnet only just reached it | Less pace, less assist, the face strays |
+| **OVERHIT** | A swipe far harder than the power cap rewards | Full pace, but less assist and more face error: a gamble |
+
+- A bad grade pops up in red with a dull "thock"; the end-of-match card shows *Clean contacts*.
+- At Assisted (85%) a clean stroke is unaffected, and a sloppy one misses roughly 10–15% more often.
+- The windows come from the realism slider. Arcade widens them; Simulation grades for feedback only (the physics already punishes a bad stroke). Online, the room host's realism sets them for everyone.
 
 **How contact works**
 - The paddle is a real collider. It's swept between frames, so fast swings can't pass through the ball.

@@ -1,4 +1,4 @@
-import { TABLE, cloneState, length, normalize, paddleImpulse, radToRpm, spinComponents, v3, type BallState, type ContactAdjust, type PaddlePose, type PhysicsParams, type Rubber, type Vec3 } from '../physics';
+import { TABLE, cloneState, describeSpin, length, normalize, paddleImpulse, predict, radToRpm, spinComponents, v3, type BallState, type ContactAdjust, type PaddlePose, type PhysicsParams, type Rubber, type Vec3 } from '../physics';
 import { isDiagonal, landingOutcome } from './assist';
 import { faceNormal } from './swing';
 
@@ -48,6 +48,25 @@ const RECIPES: Record<Exclude<ServeType, 'auto'>, Recipe> = {
   fast: { dir: (s) => v3(s * 0.15, 0.05, -1), speed: [5, 10], pitch: [-25, 5], length: 'long', spin: false },
   float: { dir: () => v3(0, -0.3, -1), speed: [2.5, 5], pitch: [-10, 30], length: 'short', spin: false },
 };
+
+/**
+ * Toss height (m above the hand) for how far the toss meter was filled (0–1). A quick tap
+ * is under the 16 cm minimum, an illegal toss; a high toss gives more spin but a tighter
+ * timing window as it drops.
+ */
+export function tossHeightFor(fraction: number): number {
+  return 0.06 + 1.04 * Math.max(0, Math.min(1, fraction));
+}
+/** Meter fill below which the toss is illegal (under 16 cm). */
+export const TOSS_ILLEGAL_FRACTION = (0.16 - 0.06) / 1.04;
+
+/**
+ * How a toss's height changes serving: timing windows are tighter on a high toss (it's
+ * falling faster), and a high toss lets a serve carry a little more pace and spin.
+ */
+export function tossEffect(height: number): { window: number; power: number } {
+  return { window: Math.max(0.7, Math.min(1.1, 1.2 - 0.5 * height)), power: 1 + 0.12 * Math.max(0, Math.min(1, (height - 0.3) / 0.7)) };
+}
 
 /** Search time for a serve, ms: the best that lands by then is used… */
 const SEARCH_BUDGET_MS = 6;
@@ -156,4 +175,44 @@ export function serveContact(type: ServeType, ball: BallState, pose: PaddlePose,
   if (type === 'sidespin' && !flipped && side !== 0) return serveContact(type, ball, { ...pose, vel: v3(-pose.vel.x, pose.vel.y, pose.vel.z) }, rubber, params, strength, true, diagonal);
   // Otherwise leave it to the normal landing assist, with the player's own swing.
   return null;
+}
+
+export interface ServeReport {
+  /** Gap between ball and net tape as it crosses (m); null if it never crossed. */
+  clearance: number | null;
+  /** 'short': it would bounce twice on the receiver's half; 'long': once, then off the end. */
+  length: 'short' | 'long' | 'fault';
+  rpm: number;
+  spin: string;
+  /** 0–100: low, short and spinny is best. */
+  rating: number;
+  /** e.g. "Low · Short · 3,800 rpm backspin". */
+  text: string;
+}
+
+/**
+ * How good a serve is, from the ball as it leaves the bat (server's frame: server at +z).
+ * Low over the net, short (two bounces on the far half if left) and spinny is hard to attack;
+ * a serve that pops up high invites a kill.
+ */
+export function serveReport(ball: BallState, params: PhysicsParams): ServeReport {
+  const c = spinComponents(ball.vel, ball.spin);
+  const rpm = radToRpm(length(ball.spin));
+  const { events } = predict(ball, params, { maxTime: 2.5, sampleEvery: 1000, stop: (e) => e.type === 'floor' || e.type === 'net' });
+  const cross = events.find((e) => e.type === 'netCross' && e.direction === 'far');
+  const clearance = cross && cross.type === 'netCross' ? cross.clearance : null;
+  const bounces = events.filter((e) => e.type === 'table');
+  const far = bounces.filter((e) => e.type === 'table' && e.pos.z < 0).length;
+  const legal = bounces.length > 0 && bounces[0].type === 'table' && bounces[0].pos.z > 0 && far >= 1 && !events.some((e) => e.type === 'net');
+  const len: ServeReport['length'] = !legal ? 'fault' : far >= 2 ? 'short' : 'long';
+  const height = clearance === null ? 'Into the net' : clearance < 0.05 ? 'Low' : clearance < 0.12 ? 'Medium height' : 'High';
+  let rating = 0;
+  if (legal) {
+    const low = clearance === null ? 0 : Math.max(0, Math.min(1, (0.18 - clearance) / 0.14));
+    const spin = Math.min(1, rpm / 4000);
+    rating = Math.round(100 * (0.35 * low + 0.25 * (len === 'short' ? 1 : 0.4) + 0.4 * spin));
+  }
+  const spinText = rpm < 500 ? 'no spin' : `${(Math.round(rpm / 100) * 100).toLocaleString()} rpm ${describeSpin(c).toLowerCase()}`;
+  const text = len === 'fault' ? `Fault · ${spinText}` : `${height} · ${len === 'short' ? 'Short' : 'Long'} · ${spinText}`;
+  return { clearance, length: len, rpm, spin: describeSpin(c), rating, text };
 }

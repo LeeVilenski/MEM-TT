@@ -257,7 +257,9 @@ export function makeAngleAssist(
     // Too weak = falls short on our own side (not caught in the net, where more pace won't help).
     const r0 = landingOutcome(ball, pose, normal, rubber, params, m);
     const tooWeak = r0.outcome === 'short' && !r0.net;
-    const scales = (tooWeak ? [1.3, 1.6, 2.0, 2.4, 0.7, 0.4] : [0.7, 0.4, 1.3, 1.6]).filter((f) => f >= minScale - 1e-9 && f <= maxScale + 1e-9);
+    // A cut beyond what this strength allows is clamped to the strongest allowed one, rather
+    // than dropped (dropping it made a slightly weaker assist suddenly unable to land hard swings).
+    const scales = [...new Set((tooWeak ? [1.3, 1.6, 2.0, 2.4, 0.7, 0.4] : [0.7, 0.4, 1.3, 1.6]).map((f) => (f < 1 ? Math.max(f, minScale) : f)))].filter((f) => f < 1 - 1e-9 || f <= maxScale + 1e-9);
     let guess: ContactAdjust | null = null;
     // Serves: change only the pace into the face, not the brush across it, so a spinny
     // serve stays spinny (scaling the whole swing took most of the spin out).

@@ -63,9 +63,14 @@ describe('doubles', { timeout: 120000 }, () => {
       c.start(true);
       let served = 0;
       let diagonalFaults = 0;
+      let cleanServe = true;
       c.on((e) => {
-        if (e.type === 'hit' && e.serve && e.by === 'near1') served++;
-        if (e.type === 'point' && e.result.reason === 'serve-diagonal' && e.result.winner === 'far') diagonalFaults++;
+        if (e.type === 'hit' && e.serve && e.by === 'near1') {
+          served++;
+          cleanServe = player.lastContact?.grade === 'PERFECT' || player.lastContact?.grade === 'GOOD';
+        }
+        // A poorly struck serve (contact grading) may fault: the assist is judged on clean ones.
+        if (e.type === 'point' && e.result.reason === 'serve-diagonal' && e.result.winner === 'far' && cleanServe) diagonalFaults++;
       });
       for (let i = 0; i < FPS * 600 && served < 4; i++) step();
       expect(served, type).toBeGreaterThanOrEqual(3);

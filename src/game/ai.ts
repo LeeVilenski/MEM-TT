@@ -9,6 +9,7 @@ import {
   normalize,
   scale,
   spinComponents,
+  spinVector,
   v3,
   type BallState,
   type PaddleCollider,
@@ -48,16 +49,22 @@ export interface AiProfile {
   aggression: number;
   /** Distance from the edges it aims inside, metres. */
   margin: number;
+  /**
+   * How well it reads a serve's spin: the relative error (standard deviation) of the spin it
+   * plans against. It sees where the ball goes; it can misjudge how much it's spinning (and a
+   * no-spin serve can look like backspin).
+   */
+  spinRead: number;
 }
 
 export type AiLevel = 'easy' | 'medium' | 'hard' | 'expert';
 
 export const AI_LEVELS: Record<AiLevel, AiProfile> = {
-  easy: { name: 'Easy', reaction: 0.22, moveSpeed: 2.6, paddleSpeed: 4, pitchError: 4.5, yawError: 3.5, speedError: 0.12, aggression: 0.2, margin: 0.3 },
-  medium: { name: 'Medium', reaction: 0.16, moveSpeed: 3.4, paddleSpeed: 5, pitchError: 2.2, yawError: 2, speedError: 0.07, aggression: 0.5, margin: 0.2 },
-  hard: { name: 'Hard', reaction: 0.1, moveSpeed: 4.4, paddleSpeed: 6.5, pitchError: 1.0, yawError: 1, speedError: 0.04, aggression: 0.8, margin: 0.12 },
+  easy: { name: 'Easy', reaction: 0.22, moveSpeed: 2.6, paddleSpeed: 4, pitchError: 4.5, yawError: 3.5, speedError: 0.12, aggression: 0.2, margin: 0.3, spinRead: 0.5 },
+  medium: { name: 'Medium', reaction: 0.16, moveSpeed: 3.4, paddleSpeed: 5, pitchError: 2.2, yawError: 2, speedError: 0.07, aggression: 0.5, margin: 0.2, spinRead: 0.36 },
+  hard: { name: 'Hard', reaction: 0.1, moveSpeed: 4.4, paddleSpeed: 6.5, pitchError: 1.0, yawError: 1, speedError: 0.04, aggression: 0.8, margin: 0.12, spinRead: 0.22 },
   // Near-perfect: reads the ball instantly, covers the table and rarely misses.
-  expert: { name: 'Expert', reaction: 0.06, moveSpeed: 5.4, paddleSpeed: 8, pitchError: 0.45, yawError: 0.5, speedError: 0.02, aggression: 0.7, margin: 0.16 },
+  expert: { name: 'Expert', reaction: 0.06, moveSpeed: 5.4, paddleSpeed: 8, pitchError: 0.45, yawError: 0.5, speedError: 0.02, aggression: 0.7, margin: 0.16, spinRead: 0.12 },
 };
 
 type StrokeKind = 'loop' | 'drive' | 'push' | 'block' | 'smash' | 'flick' | 'chop' | 'serve-short' | 'serve-long' | 'serve-side';
@@ -173,7 +180,36 @@ export class AiPlayer {
       .map((x) => x.k);
   }
   private moveFrom = 0;
-  /** Where the last shot was aimed (x), for switching sides. */
+  /** Serves seen this match, by kind: each repeat of a kind is read better. */
+  private serveMemory: Record<string, number> = {};
+  /** The last ball's read: true and perceived topspin (rps), for tests and debugging. */
+  lastRead: { kind: string; top: number; seenTop: number } | null = null;
+
+  /**
+   * The ball as the AI perceives it when receiving a serve: the same position and velocity,
+   * but the spin read with error (and a no-spin serve may look like backspin). Each repeat of
+   * the same kind of serve in a match is read better. Rally balls are read exactly.
+   */
+  private perceive(at: BallState, serve: boolean): BallState {
+    if (!serve) return at;
+    const c = spinComponents(at.vel, at.spin);
+    const total = Math.hypot(c.top, c.side, c.cork);
+    const kind = total < 10 ? 'none' : Math.abs(c.side) > Math.abs(c.top) ? 'side' : c.top < 0 ? 'back' : 'top';
+    const seen = this.serveMemory[kind] ?? 0;
+    const sd = this.profile.spinRead * Math.max(0.35, Math.pow(0.7, seen));
+    for (const k of Object.keys(this.serveMemory)) this.serveMemory[k] = Math.max(0, this.serveMemory[k] - 0.5);
+    this.serveMemory[kind] = seen + 1;
+    let read: typeof c;
+    // A float looks like the backspin serve it's disguised as.
+    if (kind === 'none' && this.rng() < Math.min(0.8, sd * 1.2)) read = { top: -(25 + 20 * this.rng()), side: c.side, cork: c.cork };
+    else {
+      const f = (sd: number) => Math.max(0.2, Math.min(1.8, 1 + this.gauss() * sd));
+      read = { top: c.top * f(sd), side: c.side * f(sd), cork: c.cork * f(sd) };
+    }
+    this.lastRead = { kind, top: c.top, seenTop: read.top };
+    if (sd <= 0) return at;
+    return { pos: at.pos, vel: at.vel, spin: spinVector(at.vel, read) };
+  }
   private lastTargetX = 0;
   private pose: PaddlePose = { pos: v3(0.3, TABLE.height + 0.25, READY.z - ARM), normal: v3(0, 0, -1), vel: v3() };
   private prevPose: PaddlePose = this.pose;
@@ -190,7 +226,7 @@ export class AiPlayer {
   // ------------------------------------------------------------ planning
 
   /** Plan a return for a ball (world state at absolute time `now`) heading to this side. */
-  planReturn(world: BallState, now: number): AiPlan | null {
+  planReturn(world: BallState, now: number, opts: { serve?: boolean } = {}): AiPlan | null {
     const local = mapState(this.side, world);
     const pred = new IncomingPrediction(local, this.params, now);
     // Where it meets the ball depends on the style: blockers stay close, choppers deep.
@@ -218,8 +254,10 @@ export class AiPlayer {
     }
     if (!ic) return (this.plan = null);
 
-    const at = this.stateAt(local, now, ic.t);
-    if (!at) return (this.plan = null);
+    const real = this.stateAt(local, now, ic.t);
+    if (!real) return (this.plan = null);
+    // It plans its stroke against the spin it *thinks* the ball has.
+    const at = this.perceive(real, !!opts.serve);
     const c = spinComponents(at.vel, at.spin);
     const height = at.pos.y - TABLE.height;
     const overTable = at.pos.z < TABLE.halfLength;

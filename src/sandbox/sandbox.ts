@@ -21,6 +21,7 @@ import {
   length,
   v3,
   type BallEvent,
+  type BallState,
   type PhysicsParams,
   type Vec3,
 } from '../physics';
@@ -47,13 +48,14 @@ import { TiltControl } from '../input/tilt';
 import { AutoQuality, QUALITY_LEVELS, type QualitySetting } from '../render/quality';
 import { Career } from '../progress/profile';
 import { DRILLS, DrillSession, drillUnlocked } from '../progress/drills';
+import { GRADE_TEXT } from '../game/contact';
 import { TOURNAMENTS, TournamentRun, tournamentUnlocked } from '../progress/tournament';
 import { isUnlocked, newlyUnlocked, unlockedKeys, UNLOCKS, type UnlockKind } from '../progress/unlocks';
 import { CareerScreen } from './career';
 import { HowToPlay } from './howto';
 import { Coach } from './coach';
 import { Tutorial, tutorialHint } from '../progress/tutorial';
-import { SERVE_TYPES, type ServeType } from '../game/serves';
+import { SERVE_TYPES, serveReport, tossHeightFor, type ServeReport, type ServeType } from '../game/serves';
 import { Menu, type MenuHost, type PauseContext } from './menu';
 import { VENUES, setVenue, type Venue, type VenueId } from '../render/venues';
 import { OnlineClient } from '../net/client';
@@ -361,7 +363,7 @@ export class Sandbox implements MenuHost {
   private matchRecorded = false;
   private rallyHits = 0;
   /** This match so far, for the end-of-match card. */
-  private mstats = { won: 0, played: 0, longest: 0, fastest: 0, aces: 0, perfect: 0 };
+  private mstats = { won: 0, played: 0, longest: 0, fastest: 0, aces: 0, perfect: 0, clean: 0, strokes: 0 };
   private lastPhase = '';
   /** Doubles: the ball on our side is my partner's to play (the hit zone turns blue). */
   private partnerTurn = false;
@@ -1041,6 +1043,7 @@ export class Sandbox implements MenuHost {
           this.recorder.caption(this.clock(), `${who}: ${name} · ${info.speed.toFixed(1)} m/s · ${Math.round(info.rpm).toLocaleString()} rpm`);
           if (e.side === 'near' && !e.serve) this.career.recordShot(info.name, info.speed, info.rpm);
           if (e.side === 'near') this.noteMyShot(info.speed, e.serve);
+          if (e.side === 'near' && e.serve) this.reportMyServe({ pos: h.pos, vel: h.velOut, spin: h.spinOut });
           this.ball.clearTrail();
           break;
         }
@@ -1179,7 +1182,8 @@ export class Sandbox implements MenuHost {
     if (this.tossHoldStart === null || (!this.match && !this.online)) return;
     const held = Math.min(TOSS_HOLD_MAX, (performance.now() - this.tossHoldStart) / 1000);
     this.tossHoldStart = null;
-    const h = 0.2 + (held / TOSS_HOLD_MAX) * 0.9;
+    const h = tossHeightFor(held / TOSS_HOLD_MAX);
+    this.player.tossHeight = h;
     if (this.online) this.online.toss(h);
     else this.match!.toss(h);
   }
@@ -1715,14 +1719,31 @@ export class Sandbox implements MenuHost {
   }
 
   private resetMatchStats() {
-    this.mstats = { won: 0, played: 0, longest: 0, fastest: 0, aces: 0, perfect: 0 };
+    this.mstats = { won: 0, played: 0, longest: 0, fastest: 0, aces: 0, perfect: 0, clean: 0, strokes: 0 };
     this.lastPhase = '';
   }
 
   private noteMyShot(speed: number, serve: boolean) {
     if (!serve) this.mstats.fastest = Math.max(this.mstats.fastest, speed * 3.6);
-    if (!serve && this.player.lastContactPerfect) this.mstats.perfect++;
+    const g = !serve ? this.player.lastContact?.grade : undefined;
+    if (g) {
+      this.mstats.strokes++;
+      if (g === 'PERFECT') this.mstats.perfect++;
+      if (g === 'PERFECT' || g === 'GOOD') this.mstats.clean++;
+    }
   }
+
+  /** After your serve: how good it was (height over the net, length, spin), and its contact grade. */
+  private reportMyServe(ball: BallState) {
+    const r = serveReport(ball, this.params);
+    this.lastServe = r;
+    const g = this.player.lastContact?.grade;
+    const graded = g && g !== 'GOOD' ? ` <span class="toast-grade${g === 'PERFECT' ? ' gold' : ''}">${GRADE_TEXT[g].title}</span>` : '';
+    this.hud.toast(`🏓 Serve: <b>${r.text}</b>${graded}`);
+  }
+
+  /** The last serve you hit (for objectives and stats). */
+  lastServe: ServeReport | null = null;
 
   private notePoint(mine: boolean, hits: number, ace: boolean) {
     const m = this.mstats;
@@ -1739,7 +1760,7 @@ export class Sandbox implements MenuHost {
       ['Points won', `${m.won}/${m.played}${m.aces ? ` · ${m.aces} ace${m.aces > 1 ? 's' : ''}` : ''}`],
       ['Longest rally', `${m.longest} hits`],
       ['Fastest shot', m.fastest ? `${Math.round(m.fastest)} km/h` : '—'],
-      ['Perfect strokes', String(m.perfect)],
+      ['Clean contacts', m.strokes ? `${m.clean}/${m.strokes} · ${m.perfect} perfect` : '—'],
     ];
   }
 
@@ -1752,9 +1773,14 @@ export class Sandbox implements MenuHost {
     const kmh = length(velOut) * 3.6;
     if (this.look.arcadeFx && !serve && kmh >= 65) this.hud.speedPop(kmh, mine);
     if (this.look.arcadeFx && mine && !serve && kmh >= 45) this.matchHud.impact(Math.min(1, (kmh - 45) / 50));
+    // Contact grade: PERFECT (with the chime and sparks under arcade effects) or a mishit.
+    const g = mine && !serve ? this.player.lastContact?.grade : undefined;
     if (perfect && this.look.arcadeFx) {
       this.sfx.perfect();
       this.hud.perfect();
+    } else if (g && g !== 'PERFECT' && g !== 'GOOD') {
+      this.hud.grade(GRADE_TEXT[g].title, 'bad');
+      this.sfx.mishit();
     }
   }
 
@@ -2052,6 +2078,7 @@ export class Sandbox implements MenuHost {
         this.rallyHits++;
         if (e.by === c.seat && !e.serve) this.career.recordShot(info.name, info.speed, info.rpm);
         if (e.by === c.seat) this.noteMyShot(info.speed, e.serve);
+        if (e.by === c.seat && e.serve) this.reportMyServe({ pos: mapVec(c.side, e.pos), vel: mapVec(c.side, e.velOut), spin: mapVec(c.side, e.spinOut) });
         this.ball.clearTrail();
         if (c.next === c.seat) this.stopReplay();
         break;
