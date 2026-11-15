@@ -47,7 +47,7 @@ import { TouchControls, isTouchDevice } from '../input/touch';
 import { TiltControl } from '../input/tilt';
 import { AutoQuality, QUALITY_LEVELS, type QualitySetting } from '../render/quality';
 import { Career } from '../progress/profile';
-import { DRILLS, DrillSession, drillUnlocked } from '../progress/drills';
+import { DRILLS, DrillSession, drillUnlocked, type TargetZone } from '../progress/drills';
 import { GRADE_TEXT } from '../game/contact';
 import { TOUR_STOPS, TourRun, stopUnlocked, stopsWon } from '../progress/tour';
 import { TourScreen } from './tour';
@@ -660,9 +660,16 @@ export class Sandbox implements MenuHost {
     this.recorder.start(this.clock());
     this.recorder.caption(this.clock(), `Ball machine: ${this.machine.preset}`);
     if (this.drill) {
-      const name = this.drill.nextPreset();
-      if (!name) return this.finishDrill();
-      Object.assign(this.machine, this.settingsFromPreset(PRESETS.find((p) => p.name === name)!), { scatter: 0.12 });
+      const ball = this.drill.nextBall();
+      if (!ball) return this.finishDrill();
+      Object.assign(this.machine, this.settingsFromPreset(PRESETS.find((p) => p.name === ball.preset)!), { scatter: ball.x === undefined ? 0.12 : 0.05 });
+      if (ball.x !== undefined) this.machine.targetX = ball.x;
+      if (ball.call) {
+        // Call the side, and light up that half of the far side.
+        this.showDrillZone({ x0: ball.call === 'left' ? -TABLE.halfWidth : 0, x1: ball.call === 'left' ? 0 : TABLE.halfWidth, z0: -TABLE.halfLength, z1: 0 });
+        // (A toast, not the big centre call-out: that would sit on the incoming ball's path.)
+        this.hud.toast(`<b>${ball.call === 'left' ? '◀ LEFT' : 'RIGHT ▶'}</b> — put it on that side`);
+      }
       this.updateMachineVisuals();
       this.updateDrillHud();
     } else if (this.tutorial) {
@@ -1254,6 +1261,9 @@ export class Sandbox implements MenuHost {
   drillStars(id: string) {
     return this.career.data.drills[id] ?? 0;
   }
+  drillBest(id: string) {
+    return this.career.data.drillScores[id] ?? 0;
+  }
 
   startDrill(id: string) {
     const idx = DRILLS.findIndex((d) => d.id === id);
@@ -1268,15 +1278,7 @@ export class Sandbox implements MenuHost {
     this.machine.mix = false;
     this.clearMarkers();
     // Target zone, if the drill has one.
-    if (this.drillZone) this.scene.remove(this.drillZone);
-    this.drillZone = null;
-    const z = this.drill.drill.target;
-    if (z) {
-      this.drillZone = new THREE.Mesh(new THREE.PlaneGeometry(z.x1 - z.x0, z.z1 - z.z0), new THREE.MeshBasicMaterial({ color: 0x4ade80, transparent: true, opacity: 0.28, depthWrite: false }));
-      this.drillZone.rotation.x = -Math.PI / 2;
-      this.drillZone.position.set((z.x0 + z.x1) / 2, TABLE.height + 0.002, (z.z0 + z.z1) / 2);
-      this.scene.add(this.drillZone);
-    }
+    this.showDrillZone(this.drill.drill.target ?? null);
     // Instructions stay up until the player says go — no ball until then.
     const d = this.drill.drill;
     const touch = matchMedia('(pointer: coarse)').matches;
@@ -1288,11 +1290,25 @@ export class Sandbox implements MenuHost {
     this.requestPlay();
   }
 
+  /** Light up a zone on the far half (a drill's target, or the called side); null clears it. */
+  private showDrillZone(z: TargetZone | null) {
+    if (this.drillZone) this.scene.remove(this.drillZone);
+    this.drillZone = null;
+    if (!z) return;
+    this.drillZone = new THREE.Mesh(new THREE.PlaneGeometry(z.x1 - z.x0, z.z1 - z.z0), new THREE.MeshBasicMaterial({ color: 0x4ade80, transparent: true, opacity: 0.28, depthWrite: false }));
+    this.drillZone.rotation.x = -Math.PI / 2;
+    this.drillZone.position.set((z.x0 + z.x1) / 2, TABLE.height + 0.002, (z.z0 + z.z1) / 2);
+    this.scene.add(this.drillZone);
+  }
+
   private drillRegister(result: NonNullable<ReturnReport['result']>, landing?: Vec3) {
     if (!this.drill) return;
     const r = this.lastReturn;
-    const ok = this.drill.register({ result, shot: r?.name ?? '-', top: r?.top ?? 0, speed: r?.speed ?? 0, landing: landing && { x: landing.x, z: landing.z } });
+    // The contact grade, if the ball was hit at all.
+    const grade = result === 'MISSED' ? undefined : this.player.lastContact?.grade;
+    const ok = this.drill.register({ result, shot: r?.name ?? '-', top: r?.top ?? 0, speed: r?.speed ?? 0, landing: landing && { x: landing.x, z: landing.z }, grade });
     if (ok) this.sfx.point(true);
+    if (ok && this.drill.combo >= 5 && this.drill.combo % 5 === 0) this.hud.toast(`🔥 Combo ×${this.drill.combo}`);
     if (this.drill.done) setTimeout(() => this.finishDrill(), 900);
   }
 
@@ -1300,18 +1316,23 @@ export class Sandbox implements MenuHost {
     if (!this.drill) return;
     const d = this.drill;
     const marks = d.log.map((ok) => (ok ? '✓' : '✗')).join('');
-    this.hud.setStatsText(`<b>${d.drill.name}</b> · ball ${Math.min(d.fed, d.drill.balls)}/${d.drill.balls} · ${d.successes} ✓ · goal: ${d.drill.goal} <span style="letter-spacing:1px">${marks}</span>`);
+    const call = d.ball?.call ? ` · <b>${d.ball.call === 'left' ? '◀ LEFT' : 'RIGHT ▶'}</b>` : '';
+    this.hud.setStatsText(`<b>${d.drill.name}</b> · ball ${Math.min(d.fed, d.drill.balls)}/${d.drill.balls} · ${d.successes} ✓ · <b>${d.score.toLocaleString()}</b> pts${d.combo > 1 ? ` · combo ×${d.combo}` : ''}${call} · goal: ${d.drill.goal} <span style="letter-spacing:1px">${marks}</span>`);
   }
 
   private finishDrill() {
     const d = this.drill;
     if (!d) return;
-    this.career.recordDrill(d.drill.id, d.stars, DRILLS.map((x) => x.id));
+    const prevBest = this.career.data.drillScores[d.drill.id] ?? 0;
+    this.career.recordDrill(d.drill.id, d.stars, DRILLS.map((x) => x.id), d.score);
     this.stopDrill();
     if (document.pointerLockElement) document.exitPointerLock();
     this.setPlaying(false);
     const st = '★'.repeat(d.stars) + '☆'.repeat(3 - d.stars);
-    this.menu.banner = `<b>${d.drill.name}</b>: ${d.successes}/${d.drill.balls} <span class="stars">${st}</span>${d.stars === 0 ? ` — need ${d.drill.stars[0]} for a star. Try again!` : ''}`;
+    const rep = d.report();
+    const faults = [rep.early && `${rep.early} early`, rep.edge && `${rep.edge} off-centre`, rep.overhit && `${rep.overhit} over-hit`, rep.missed && `${rep.missed} missed`].filter(Boolean).join(', ');
+    this.menu.banner = `<b>${d.drill.name}</b>: ${d.successes}/${d.drill.balls} <span class="stars">${st}</span> · <b>${d.score.toLocaleString()}</b> pts${d.score > prevBest ? ' <b>(new best!)</b>' : ''} · best combo ×${d.bestCombo}${d.stars === 0 ? ` — need ${d.drill.stars[0]} for a star.` : ''}
+      <div class="menu-coach"><b>Coach:</b> ${rep.clean} clean contact${rep.clean === 1 ? '' : 's'}${faults ? ` · ${faults}` : ''}. ${rep.tip}</div>`;
     this.menu.show('training');
   }
 
@@ -2383,7 +2404,7 @@ export class Sandbox implements MenuHost {
         // Waiting on the player to read the drill.
       } else if (this.phase === 'done' || this.phase === 'idle') {
         this.sinceResolved += realDt;
-        if (this.sinceResolved > 0.9) this.fire();
+        if (this.sinceResolved > (this.drill?.drill.feedDelay ?? 0.9)) this.fire();
       } else if (this.sinceFire > 6) {
         this.resolve();
       }

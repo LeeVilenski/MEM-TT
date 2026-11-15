@@ -6,7 +6,7 @@ import type { QualitySetting } from '../render/quality';
 import type { UnlockKind } from '../progress/unlocks';
 import { CharacterPreview } from '../render/charPreview';
 import { canInstall, install, onInstallChange } from '../pwa/install';
-import type { Drill } from '../progress/drills';
+import { DRILL_CATEGORIES, type Drill } from '../progress/drills';
 
 /** Which screen the menu shows (null: hidden). */
 export type MenuScreen = 'title' | 'pause' | 'vsai' | 'online' | 'settings' | 'characters' | 'training';
@@ -45,6 +45,7 @@ export interface MenuHost {
   readonly drills: readonly Drill[];
   drillOpen(index: number): boolean;
   drillStars(id: string): number;
+  drillBest(id: string): number;
   startDrill(id: string): void;
   showHowTo(): void;
   createOnline(): void;
@@ -268,16 +269,21 @@ export class Menu {
   private trainingHtml() {
     const h = this.host;
     const stars = (n: number) => `<span class="stars" aria-label="${n} of 3 stars">${'★'.repeat(n)}<span class="off">${'★'.repeat(3 - n)}</span></span>`;
-    const drills = h.drills
-      .map((d, i) => {
-        const open = h.drillOpen(i);
-        const best = h.drillStars(d.id);
-        return `<button class="menu-drill${open ? '' : ' locked'}" data-a="drill" data-id="${d.id}"${open ? '' : ' aria-disabled="true"'}>
-          <span class="md-main"><b>${open ? '' : '🔒 '}${esc(d.name)}</b><small>${open ? esc(d.description) : 'Earn a star in the drill before'}</small></span>
-          <span class="md-side">${stars(best)}<small>${open ? (best ? 'Retry' : 'Start') : ''}</small></span>
+    const drill = (d: Drill) => {
+      const i = h.drills.indexOf(d);
+      const open = h.drillOpen(i);
+      const best = h.drillStars(d.id);
+      const score = h.drillBest(d.id);
+      const need = h.drills.find((x) => x.id === d.requires) ?? h.drills[i - 1];
+      return `<button class="menu-drill${open ? '' : ' locked'}" data-a="drill" data-id="${d.id}"${open ? '' : ' aria-disabled="true"'}>
+          <span class="md-main"><b>${open ? '' : '🔒 '}${esc(d.name)}</b><small>${open ? esc(d.description) : `Earn a star in “${esc(need?.name ?? '')}” first`}</small></span>
+          <span class="md-side">${stars(best)}<small>${open ? (score ? `best ${score.toLocaleString()}` : 'Start') : ''}</small></span>
         </button>`;
-      })
-      .join('');
+    };
+    const drills = DRILL_CATEGORIES.map((cat) => {
+      const list = h.drills.filter((d) => d.category === cat);
+      return list.length ? `<div class="md-cat">${cat}</div>${list.map(drill).join('')}` : '';
+    }).join('');
     return `
       ${this.header('Training')}
       ${this.banner ? `<div class="menu-banner">${this.banner}</div>` : ''}

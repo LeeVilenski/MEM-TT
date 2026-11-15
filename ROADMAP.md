@@ -1,6 +1,6 @@
 # MEM Table Tennis — Next Roadmap
 
-Follow-on to [PLAN.md](PLAN.md) (milestones 1–8 are done). Work through the phases in order:
+Follow-on to [PLAN.md](PLAN.md) (milestones 1–8 are done). **Status: all five phases are done.** Work went through the phases in order:
 contact grading is the foundation that serves, drills, objectives and match grades read from.
 
 ## Decisions

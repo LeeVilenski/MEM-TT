@@ -40,6 +40,8 @@ export interface ProfileData {
   achievements: string[];
   /** Best stars per drill id. */
   drills: Record<string, number>;
+  /** Best score per drill id. */
+  drillScores: Record<string, number>;
   /** Tournament ids won (and how many times). */
   tournaments: Record<string, number>;
   unlockAll: boolean;
@@ -115,6 +117,7 @@ function fresh(): ProfileData {
     },
     achievements: [],
     drills: {},
+    drillScores: {},
     tournaments: {},
     unlockAll: false,
   };
@@ -263,7 +266,8 @@ export class Career {
   }
 
   /** A drill finished with `stars` (0–3). XP only for improving your best. */
-  recordDrill(id: string, stars: number, allDrillIds: string[]) {
+  recordDrill(id: string, stars: number, allDrillIds: string[], score = 0) {
+    if (score > (this.data.drillScores[id] ?? 0)) this.data.drillScores[id] = score;
     const prev = this.data.drills[id] ?? 0;
     if (stars > prev) {
       this.data.drills[id] = stars;

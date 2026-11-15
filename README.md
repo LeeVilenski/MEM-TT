@@ -1,3 +1,19 @@
+**Training drills** (title screen → **Training**): ball-machine sessions with a goal, grouped by category. Successes give 1–3 stars; each successful ball also scores points (+50 for a PERFECT contact, +20 for GOOD), with a combo multiplier for a run of successes. Your best score is kept. After each drill a **coach report** counts your clean, early, off-centre and over-hit contacts and gives one tip.
+
+| Category | Drill | Goal |
+|---|---|---|
+| Fundamentals | Onboarding · Push back · Open up against backspin · The Firewall · On-call defence | Keep it on, backspin, topspin, block loops, chop loops |
+| Placement | Ship it to the corner | Land in a marked target zone |
+| Placement | Call your shot | A side is called before each ball (and lit up): land it there |
+| Footwork | Falkenberg | Backhand corner, backhand corner, wide forehand, repeat |
+| Footwork | Random corners | Wide balls to either corner at random |
+| Reading spin | Chop or float? | Heavy chops and no-spin floats that look the same |
+| Reading spin | Sidespin and gyro | Hook loops, corkscrews and banana flicks |
+| Consistency | On-call shift | 25 balls, multi-ball pace |
+| Timing | Timing trainer | Only clean (GOOD or PERFECT) contacts count |
+
+The fundamentals unlock in order; each other category opens with a star in Onboarding, then unlocks in order.
+
 # MEM Table Tennis
 
 A 3D browser table tennis game for 1–4 players, built around spin, pace and a full range of shots. See [PLAN.md](PLAN.md) for the full design and milestones.

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ACHIEVEMENTS, CAREER_LEVELS, Career, type Storage } from '../src/progress/profile';
-import { DRILLS, DrillSession, drillUnlocked, type DrillReturn } from '../src/progress/drills';
+import { DRILLS, DRILL_CATEGORIES, DrillSession, drillUnlocked, type DrillReturn } from '../src/progress/drills';
 import { TOURNAMENTS, TournamentRun, tournamentUnlocked } from '../src/progress/tournament';
 import { isUnlocked, newlyUnlocked, unlockedKeys } from '../src/progress/unlocks';
 import { TOUR_STOPS, TourRun, stopUnlocked, stopsWon } from '../src/progress/tour';
@@ -82,6 +82,55 @@ describe('drills', () => {
     expect(drillUnlocked(1, {})).toBe(false);
     expect(drillUnlocked(1, { onboarding: 1 })).toBe(true);
     expect(drillUnlocked(3, {}, true)).toBe(true);
+  });
+
+  it('new drills branch off Onboarding, by category', () => {
+    const idx = (id: string) => DRILLS.findIndex((d) => d.id === id);
+    expect(drillUnlocked(idx('falkenberg'), {})).toBe(false);
+    expect(drillUnlocked(idx('falkenberg'), { onboarding: 1 })).toBe(true);
+    expect(drillUnlocked(idx('read-spin'), { onboarding: 1 })).toBe(true);
+    expect(drillUnlocked(idx('random-corners'), { onboarding: 1 })).toBe(false);
+    expect(drillUnlocked(idx('random-corners'), { onboarding: 1, falkenberg: 1 })).toBe(true);
+    for (const d of DRILLS) expect(DRILL_CATEGORIES).toContain(d.category);
+  });
+
+  it('placements and called sides', () => {
+    const fk = new DrillSession(DRILLS.find((x) => x.id === 'falkenberg')!);
+    expect([fk.nextBall()!.x, fk.nextBall()!.x, fk.nextBall()!.x]).toEqual([-0.5, -0.5, 0.55]);
+    const call = new DrillSession(DRILLS.find((x) => x.id === 'call-shot')!, mulberry32(3));
+    const b = call.nextBall()!;
+    expect(b.call === 'left' || b.call === 'right').toBe(true);
+    const good = b.call === 'left' ? -0.4 : 0.4;
+    expect(call.register(ret({ landing: { x: good, z: -0.8 } }))).toBe(true);
+    call.nextBall();
+    const wrong = call.ball!.call === 'left' ? 0.4 : -0.4;
+    expect(call.register(ret({ landing: { x: wrong, z: -0.8 } }))).toBe(false);
+  });
+
+  it('scores clean contacts and combos, and the coach names the main fault', () => {
+    const s = new DrillSession(DRILLS[0]);
+    s.register(ret({ grade: 'PERFECT' }));
+    s.register(ret({ grade: 'GOOD' }));
+    expect(s.score).toBe(150 + Math.round(120 * 1.1));
+    expect(s.combo).toBe(2);
+    for (let i = 0; i < 3; i++) s.register(ret({ grade: 'EARLY', result: 'OUT' }));
+    expect(s.combo).toBe(0);
+    expect(s.bestCombo).toBe(2);
+    const rep = s.report();
+    expect(rep.early).toBe(3);
+    expect(rep.tip).toMatch(/early/);
+    // Only clean contacts count in the timing trainer.
+    const t = new DrillSession(DRILLS.find((x) => x.id === 'timing')!);
+    expect(t.register(ret({ grade: 'EDGE' }))).toBe(false);
+    expect(t.register(ret({ grade: 'GOOD' }))).toBe(true);
+  });
+
+  it('remembers the best score', () => {
+    const c = new Career(memoryStorage());
+    c.recordDrill('onboarding', 2, ['onboarding'], 900);
+    c.recordDrill('onboarding', 1, ['onboarding'], 400);
+    expect(c.data.drillScores.onboarding).toBe(900);
+    expect(c.data.drills.onboarding).toBe(2);
   });
 
   it('the first drills are achievable with a simple, human-speed swing', () => {
