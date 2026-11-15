@@ -77,4 +77,25 @@ describe('AI against short balls', () => {
     expect(made / valid).toBeGreaterThan(0.82);
     expect(doubleBounce / valid).toBeLessThan(0.06);
   }, 120000);
+
+  // Short topspin kicks on past the end line low: the AI should take it at the top of the
+  // bounce (flick, push or block), not loop it as it falls below the table.
+  it('Principal returns short topspin balls', () => {
+    const rng = mulberry32(9);
+    let valid = 0;
+    let made = 0;
+    for (const sid of STYLE_IDS) {
+      for (let k = 0; k < 16; k++) {
+        const ai = new AiPlayer('far', AI_LEVELS.hard, P, rng);
+        ai.setStyle(STYLES[sid]);
+        const top = 15 + rng() * 25;
+        const r = shortBall(ai, -(0.2 + rng() * 0.4), (rng() * 2 - 1) * 0.6, { top, side: 0, cork: 0 }, 3.8 + rng() * 2.5);
+        if (r === 'invalid') continue;
+        valid++;
+        if (r === 'in') made++;
+      }
+    }
+    expect(valid).toBeGreaterThan(50);
+    expect(made / valid).toBeGreaterThan(0.84);
+  }, 120000);
 });

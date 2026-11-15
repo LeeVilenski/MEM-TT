@@ -3,7 +3,7 @@
  *
  *  - One finger anywhere outside the buttons moves the paddle (like the mouse);
  *    a fast swipe is a stroke — swipe up for topspin, down for backspin.
- *  - Hold-buttons on the left: Close / Open face, Hook ← / →, Drive.
+ *  - Hold-buttons on the left: Close / Open face, Hook ← / →, Drive, Smash.
  *  - Serve (hold to toss, release to throw), Replay, and Menu (leave play mode).
  *
  * The swing finger's movement is reported as mouse-equivalent pixels, so the same
@@ -16,6 +16,7 @@ export interface TouchButtons {
   hookLeft: boolean;
   hookRight: boolean;
   drive: boolean;
+  smash: boolean;
 }
 
 /** Converts finger movement (CSS px) into mouse-equivalent px. Pure, for tests. */
@@ -68,13 +69,14 @@ const LAYOUT: { id: ButtonId; label: string; cls: string }[] = [
   { id: 'hookLeft', label: '↶<br><small>hook</small>', cls: 'tb-hook tb-hl' },
   { id: 'hookRight', label: '↷<br><small>hook</small>', cls: 'tb-hook tb-hr' },
   { id: 'drive', label: 'Drive', cls: 'tb-drive' },
+  { id: 'smash', label: 'Smash', cls: 'tb-smash' },
   { id: 'serve', label: 'Serve<br><small>hold</small>', cls: 'tb-serve' },
   { id: 'replay', label: '⟲', cls: 'tb-replay' },
   { id: 'menu', label: '☰', cls: 'tb-menu' },
 ];
 
 export class TouchControls {
-  readonly buttons: TouchButtons = { close: false, open: false, hookLeft: false, hookRight: false, drive: false };
+  readonly buttons: TouchButtons = { close: false, open: false, hookLeft: false, hookRight: false, drive: false, smash: false };
   readonly swipe = new SwipeTracker();
   private el: HTMLDivElement;
   private btnEls = new Map<ButtonId, HTMLElement>();
