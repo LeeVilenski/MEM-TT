@@ -415,15 +415,78 @@ export class MatchHud {
       this.over.style.display = 'none';
       this.shotLog = [];
       this.shots.innerHTML = '';
+      this.setRally(0);
+      this.lastPts = [-1, -1];
     }
   }
 
+  private scoreEls: { rows: HTMLDivElement[]; names: HTMLElement[]; pts: HTMLElement[]; pips: HTMLElement[]; badge: HTMLElement } | null = null;
+  private lastScore = '';
+  private lastPts: [number, number] = [-1, -1];
+  private rallyEl: HTMLDivElement | null = null;
+  private edgeEl: HTMLDivElement | null = null;
+
+  /** Broadcast-style scoreboard. Built once; only changed parts update, so animations play. */
   setScore(s: ScoreView) {
-    const serve = (mine: boolean) => (mine ? '<span class="serve-dot" title="Serving"></span>' : '<span class="serve-dot off"></span>');
-    this.board.innerHTML = `
-      <div class="mrow">${serve(s.youServe)}<span class="mname">${s.you}</span><span class="mgames">${s.games[0]}</span><span class="mpts">${s.points[0]}</span></div>
-      <div class="mrow">${serve(!s.youServe)}<span class="mname">${s.them}</span><span class="mgames">${s.games[1]}</span><span class="mpts">${s.points[1]}</span></div>
-      <div class="mfoot">Best of ${s.bestOf}${s.badge ? ` · <b>${s.badge}</b>` : ''}</div>`;
+    if (!this.scoreEls) {
+      this.board.innerHTML = `
+        <div class="sb-row you"><span class="sb-serve"></span><span class="sb-name"></span><span class="sb-pips"></span><span class="sb-pts"></span></div>
+        <div class="sb-row them"><span class="sb-serve"></span><span class="sb-name"></span><span class="sb-pips"></span><span class="sb-pts"></span></div>
+        <div class="sb-badge"></div>`;
+      const q = (c: string) => [...this.board.querySelectorAll<HTMLElement>(c)];
+      this.scoreEls = { rows: q('.sb-row') as HTMLDivElement[], names: q('.sb-name'), pts: q('.sb-pts'), pips: q('.sb-pips'), badge: this.board.querySelector('.sb-badge')! };
+    }
+    const key = JSON.stringify(s);
+    if (key === this.lastScore) return;
+    this.lastScore = key;
+    const e = this.scoreEls;
+    const toWin = Math.ceil(s.bestOf / 2);
+    [s.you, s.them].forEach((name, i) => {
+      if (e.names[i].textContent !== name) e.names[i].textContent = name;
+      e.rows[i].classList.toggle('serving', i === 0 ? s.youServe : !s.youServe);
+      e.pips[i].innerHTML = toWin > 1 ? Array.from({ length: toWin }, (_, k) => `<i class="${k < s.games[i] ? 'on' : ''}"></i>`).join('') : '';
+      const p = s.points[i];
+      if (p !== this.lastPts[i]) {
+        e.pts[i].textContent = String(p);
+        if (this.lastPts[i] >= 0 && p > this.lastPts[i]) {
+          e.pts[i].classList.remove('bump');
+          void e.pts[i].offsetWidth;
+          e.pts[i].classList.add('bump');
+        }
+      }
+    });
+    this.lastPts = [s.points[0], s.points[1]];
+    e.badge.textContent = s.badge ?? `Best of ${s.bestOf}`;
+    e.badge.classList.toggle('hot', !!s.badge);
+  }
+
+  /** Live rally length (hidden under 3 hits). */
+  setRally(hits: number) {
+    if (!this.rallyEl) {
+      this.rallyEl = el('div', 'mhud-rally');
+      this.board.parentElement!.append(this.rallyEl);
+    }
+    const show = hits >= 3;
+    this.rallyEl.classList.toggle('show', show);
+    if (show && this.rallyEl.dataset.n !== String(hits)) {
+      this.rallyEl.dataset.n = String(hits);
+      this.rallyEl.innerHTML = `<b>${hits}</b> hit rally`;
+      this.rallyEl.classList.toggle('long', hits >= 8);
+      this.rallyEl.classList.remove('tick');
+      void this.rallyEl.offsetWidth;
+      this.rallyEl.classList.add('tick');
+    }
+  }
+
+  /** A brief glow round the screen edge: green when you win the point, red when you lose it. */
+  pointGlow(mine: boolean) {
+    if (!this.edgeEl) {
+      this.edgeEl = el('div', 'mhud-edge');
+      this.board.parentElement!.append(this.edgeEl);
+    }
+    this.edgeEl.className = `mhud-edge ${mine ? 'win' : 'lose'}`;
+    void this.edgeEl.offsetWidth;
+    this.edgeEl.classList.add('show');
   }
 
   setPrompt(html: string | null) {

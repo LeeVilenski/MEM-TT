@@ -1021,6 +1021,7 @@ export class Sandbox implements MenuHost {
           this.career.recordPoint(e.result.winner === 'near', { ace: e.result.ace, rallyHits: match.referee?.hits });
           this.playerView.react(e.result.winner === 'near' ? 'celebrate' : 'dismay');
           this.aiView.react(e.result.winner === 'far' ? 'celebrate' : 'dismay');
+          this.matchHud.pointGlow(e.result.winner === 'near');
           this.fxPoint(e.result.reason, match.referee?.hits ?? 0, e.result.winner === 'near', e.match);
           const m = pointMessage(e.result, names);
           if (e.match) this.hud.flash(e.result.winner === 'near' ? 'SHIPPED TO PROD' : 'INCIDENT REPORT', e.result.winner === 'near' ? 'You won the match!' : `${ai.displayName} won the match`);
@@ -1082,6 +1083,7 @@ export class Sandbox implements MenuHost {
     this.ball.update(match.ballRenderPos(), state);
     if (!match.sim) this.ball.clearTrail();
 
+    this.matchHud.setRally(match.phase === 'rally' ? (match.referee?.hits ?? 0) : 0);
     // Scoreboard.
     const sc = match.score;
     const gp = sc.gamePoint();
@@ -1929,6 +1931,7 @@ export class Sandbox implements MenuHost {
         this.playerView.react(e.result.winner === c.side ? 'celebrate' : 'dismay');
         for (const [seat, view] of this.remoteViews) view.react(seatSide(seat) === e.result.winner ? 'celebrate' : 'dismay');
         this.fxPoint(e.result.reason, this.rallyHits, e.result.winner === c.side, e.match);
+        this.matchHud.pointGlow(e.result.winner === c.side);
         const names = { near: this.teamName('near'), far: this.teamName('far') };
         const m = pointMessage(e.result, names);
         const mine = e.result.winner === c.side;
@@ -1992,6 +1995,7 @@ export class Sandbox implements MenuHost {
       this.ball.clearTrail();
     }
 
+    this.matchHud.setRally(c.phase === 'rally' ? this.rallyHits : 0);
     // Scoreboard (my team first).
     const sc = c.score;
     if (sc && c.phase !== 'lobby') {
