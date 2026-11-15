@@ -203,6 +203,156 @@ function office(): Venue {
   return makeVenue('office', g, { background: 0xe8eef5, fog: [0xe8eef5, 14, 34], hemi: [0xffffff, 0x8a8f99, 1.1], key: [0xffffff, 2.0], env: 0.4, floor: carpet });
 }
 
+type FlagDraw = (ctx: CanvasRenderingContext2D) => void;
+const stripes = (cols: string[], vertical: boolean): FlagDraw => (ctx) =>
+  cols.forEach((c, i) => {
+    ctx.fillStyle = c;
+    if (vertical) ctx.fillRect((i * 96) / cols.length, 0, 96 / cols.length + 1, 64);
+    else ctx.fillRect(0, (i * 64) / cols.length, 96, 64 / cols.length + 1);
+  });
+const star = (ctx: CanvasRenderingContext2D, x: number, y: number, r: number, col: string) => {
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const a = -Math.PI / 2 + (i * Math.PI) / 5;
+    const rr = i % 2 ? r * 0.45 : r;
+    ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+  }
+  ctx.fill();
+};
+const unionJack: FlagDraw = (ctx) => {
+  ctx.fillStyle = '#012169';
+  ctx.fillRect(0, 0, 96, 64);
+  ctx.lineCap = 'butt';
+  for (const [w, c] of [
+    [12, '#ffffff'],
+    [5, '#c8102e'],
+  ] as const) {
+    ctx.strokeStyle = c;
+    ctx.lineWidth = w;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(96, 64);
+    ctx.moveTo(96, 0);
+    ctx.lineTo(0, 64);
+    ctx.stroke();
+  }
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(38, 0, 20, 64);
+  ctx.fillRect(0, 22, 96, 20);
+  ctx.fillStyle = '#c8102e';
+  ctx.fillRect(42, 0, 12, 64);
+  ctx.fillRect(0, 26, 96, 12);
+};
+/** Simplified national flags for the bunting (drawn at 96 × 64). */
+const FLAGS: FlagDraw[] = [
+  // Mexico
+  (ctx) => {
+    stripes(['#006847', '#ffffff', '#ce1126'], true)(ctx);
+    ctx.fillStyle = '#8a5a2b';
+    ctx.beginPath();
+    ctx.arc(48, 32, 7, 0, Math.PI * 2);
+    ctx.fill();
+  },
+  // Brazil
+  (ctx) => {
+    ctx.fillStyle = '#009c3b';
+    ctx.fillRect(0, 0, 96, 64);
+    ctx.fillStyle = '#ffdf00';
+    ctx.beginPath();
+    ctx.moveTo(48, 6);
+    ctx.lineTo(90, 32);
+    ctx.lineTo(48, 58);
+    ctx.lineTo(6, 32);
+    ctx.fill();
+    ctx.fillStyle = '#002776';
+    ctx.beginPath();
+    ctx.arc(48, 32, 14, 0, Math.PI * 2);
+    ctx.fill();
+  },
+  // Japan
+  (ctx) => {
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, 96, 64);
+    ctx.fillStyle = '#bc002d';
+    ctx.beginPath();
+    ctx.arc(48, 32, 17, 0, Math.PI * 2);
+    ctx.fill();
+  },
+  // Haiti
+  (ctx) => {
+    stripes(['#00209f', '#d21034'], false)(ctx);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(36, 22, 24, 20);
+    ctx.fillStyle = '#016a16';
+    ctx.fillRect(44, 28, 8, 10);
+  },
+  // Ghana
+  (ctx) => {
+    stripes(['#ce1126', '#fcd116', '#006b3f'], false)(ctx);
+    star(ctx, 48, 32, 10, '#000000');
+  },
+  // Australia
+  (ctx) => {
+    ctx.fillStyle = '#012169';
+    ctx.fillRect(0, 0, 96, 64);
+    ctx.save();
+    ctx.scale(0.5, 0.5);
+    unionJack(ctx);
+    ctx.restore();
+    star(ctx, 24, 48, 7, '#ffffff');
+    for (const [x, y] of [
+      [72, 12],
+      [62, 30],
+      [82, 26],
+      [72, 52],
+    ])
+      star(ctx, x, y, 4, '#ffffff');
+  },
+  // United Kingdom
+  unionJack,
+  // France
+  stripes(['#0055a4', '#ffffff', '#ef4135'], true),
+  // Germany
+  stripes(['#000000', '#dd0000', '#ffce00'], false),
+  // Italy
+  stripes(['#009246', '#ffffff', '#ce2b37'], true),
+  // Ireland
+  stripes(['#169b62', '#ffffff', '#ff883e'], true),
+  // Jamaica
+  (ctx) => {
+    ctx.fillStyle = '#009b3a';
+    ctx.fillRect(0, 0, 96, 64);
+    ctx.fillStyle = '#000000';
+    ctx.beginPath();
+    ctx.moveTo(0, 6);
+    ctx.lineTo(40, 32);
+    ctx.lineTo(0, 58);
+    ctx.moveTo(96, 6);
+    ctx.lineTo(56, 32);
+    ctx.lineTo(96, 58);
+    ctx.fill();
+    ctx.strokeStyle = '#fed100';
+    ctx.lineWidth = 9;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(96, 64);
+    ctx.moveTo(96, 0);
+    ctx.lineTo(0, 64);
+    ctx.stroke();
+  },
+  // Poland
+  stripes(['#ffffff', '#dc143c'], false),
+  // Sweden
+  (ctx) => {
+    ctx.fillStyle = '#006aa7';
+    ctx.fillRect(0, 0, 96, 64);
+    ctx.fillStyle = '#fecc00';
+    ctx.fillRect(28, 0, 12, 64);
+    ctx.fillRect(0, 26, 96, 12);
+  },
+];
+
 /**
  * MEM: the IT workshop. A low-ceilinged, cramped room of painted blockwork with red
  * window and door frames, benches buried in monitors, label printers and cable,
@@ -476,38 +626,170 @@ function mem(): Venue {
   doorSign.position.set(1.4, 1.5, nz - 0.13);
   doorSign.rotation.y = Math.PI;
   g.add(doorSign);
-  const dart = canvasTexture(128, 128, (ctx) => {
-    ctx.fillStyle = '#111';
+  // Electric dartboard (plastic segments, LCD and buttons) and a paper face cut-out,
+  // on the far wall where they're in view.
+  const dart = canvasTexture(256, 320, (ctx) => {
+    ctx.fillStyle = '#16181c';
     ctx.beginPath();
-    ctx.arc(64, 64, 62, 0, Math.PI * 2);
+    ctx.roundRect(0, 0, 256, 320, 40);
     ctx.fill();
-    for (let i = 0; i < 20; i++) {
-      ctx.fillStyle = i % 2 ? '#e7cf8f' : '#1a1a1a';
+    const cx = 128;
+    const cy = 120;
+    const ring = (r0: number, r1: number, even: string, odd: string) => {
+      for (let i = 0; i < 20; i++) {
+        const a0 = ((i - 0.5) / 20) * Math.PI * 2 - Math.PI / 2;
+        const a1 = ((i + 0.5) / 20) * Math.PI * 2 - Math.PI / 2;
+        ctx.fillStyle = i % 2 ? odd : even;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r1, a0, a1);
+        ctx.arc(cx, cy, r0, a1, a0, true);
+        ctx.fill();
+      }
+    };
+    ring(10, 100, '#e9c873', '#1c1c1c');
+    ring(88, 100, '#c81e1e', '#1f7a3a');
+    ring(52, 62, '#c81e1e', '#1f7a3a');
+    // Tiny holes in the plastic segments.
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    for (let r = 16; r < 100; r += 6) for (let k = 0; k < r * 0.9; k++) {
+      const t = (k / (r * 0.9)) * Math.PI * 2;
+      ctx.fillRect(cx + Math.cos(t) * r, cy + Math.sin(t) * r, 1.4, 1.4);
+    }
+    ctx.fillStyle = '#1f7a3a';
+    ctx.beginPath();
+    ctx.arc(cx, cy, 10, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#c81e1e';
+    ctx.beginPath();
+    ctx.arc(cx, cy, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#f2f2f2';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.textAlign = 'center';
+    [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5].forEach((n, i) => {
+      const t = (i / 20) * Math.PI * 2 - Math.PI / 2;
+      ctx.fillText(String(n), cx + Math.cos(t) * 110, cy + Math.sin(t) * 110 + 4);
+    });
+    // Control panel: LCD score and buttons.
+    ctx.fillStyle = '#2b2e35';
+    ctx.beginPath();
+    ctx.roundRect(28, 240, 200, 66, 14);
+    ctx.fill();
+    ctx.fillStyle = '#9fb59a';
+    ctx.fillRect(84, 250, 88, 30);
+    ctx.fillStyle = '#1d2a1b';
+    ctx.font = 'bold 24px ui-monospace, monospace';
+    ctx.fillText('501', 128, 274);
+    for (const [x, c] of [
+      [46, '#e53935'],
+      [62, '#e53935'],
+      [194, '#e53935'],
+      [210, '#fb8c00'],
+      [104, '#e53935'],
+      [128, '#e53935'],
+      [152, '#e53935'],
+    ] as const) {
+      ctx.fillStyle = c;
       ctx.beginPath();
-      ctx.moveTo(64, 64);
-      ctx.arc(64, 64, 50, (i / 20) * Math.PI * 2, ((i + 1) / 20) * Math.PI * 2);
+      ctx.arc(x, x > 90 && x < 170 ? 294 : 272, 5, 0, Math.PI * 2);
       ctx.fill();
     }
-    ctx.strokeStyle = '#c81e1e';
-    ctx.lineWidth = 5;
-    for (const r of [48, 30]) {
-      ctx.beginPath();
-      ctx.arc(64, 64, r, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-    ctx.fillStyle = '#22a34a';
-    ctx.beginPath();
-    ctx.arc(64, 64, 6, 0, Math.PI * 2);
-    ctx.fill();
   });
-  const dartboard = new THREE.Mesh(new THREE.CircleGeometry(0.24, 32), new THREE.MeshStandardMaterial({ map: dart, roughness: 0.8 }));
-  dartboard.position.set(-1.2, 1.65, nz - 0.05);
-  dartboard.rotation.y = Math.PI;
-  g.add(dartboard, box(0.7, 0.9, 0.03, std(0xa48a6a), -1.2, 1.55, nz - 0.02));
+  const dartboard = new THREE.Mesh(new THREE.PlaneGeometry(0.46, 0.575), new THREE.MeshStandardMaterial({ map: dart, roughness: 0.55, transparent: true, alphaTest: 0.5 }));
+  dartboard.position.set(1.05, 1.62, fz + 0.06);
+  g.add(dartboard, box(0.44, 0.55, 0.04, black, 1.05, 1.62, fz + 0.025));
+  // Cork board behind it, like the photo.
+  g.add(box(0.8, 0.95, 0.02, std(0xa48a6a), 1.05, 1.55, fz + 0.01));
+
+  // Paper cut-out face, stuck up with tape: a cartoon of a grinning TV presenter
+  // with a mop of curly grey hair and a denim collar.
+  const face = canvasTexture(256, 320, (ctx) => {
+    ctx.clearRect(0, 0, 256, 320);
+    // Paper edge.
+    ctx.fillStyle = '#fbfbf7';
+    ctx.beginPath();
+    ctx.ellipse(128, 160, 120, 152, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Denim shirt collar.
+    ctx.fillStyle = '#3d5f8f';
+    ctx.beginPath();
+    ctx.moveTo(30, 320);
+    ctx.lineTo(80, 260);
+    ctx.lineTo(128, 300);
+    ctx.lineTo(176, 260);
+    ctx.lineTo(226, 320);
+    ctx.fill();
+    // Face.
+    ctx.fillStyle = '#efc2a0';
+    ctx.beginPath();
+    ctx.ellipse(128, 168, 74, 96, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Curly grey hair.
+    ctx.fillStyle = '#9a958d';
+    for (let i = 0; i < 26; i++) {
+      const t = Math.PI + (i / 25) * Math.PI;
+      ctx.beginPath();
+      ctx.arc(128 + Math.cos(t) * 78, 120 + Math.sin(t) * 64, 20, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    for (let i = 0; i < 6; i++) {
+      ctx.beginPath();
+      ctx.arc(70 + i * 23, 76, 18, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // Eyebrows, eyes, nose and a big toothy grin.
+    ctx.strokeStyle = '#5a5048';
+    ctx.lineWidth = 6;
+    ctx.lineCap = 'round';
+    for (const s of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(128 + s * 18, 132);
+      ctx.lineTo(128 + s * 50, 124);
+      ctx.stroke();
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.ellipse(128 + s * 32, 150, 13, 8, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#3b4a5a';
+      ctx.beginPath();
+      ctx.arc(128 + s * 32, 151, 5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.strokeStyle = '#c99475';
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(128, 160);
+    ctx.lineTo(120, 196);
+    ctx.lineTo(134, 198);
+    ctx.stroke();
+    ctx.fillStyle = '#7a2a2a';
+    ctx.beginPath();
+    ctx.moveTo(84, 214);
+    ctx.quadraticCurveTo(128, 260, 172, 214);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(96, 214, 64, 12);
+    // Strips of tape on the corners.
+    ctx.fillStyle = 'rgba(240,240,220,0.85)';
+    for (const [x, y, r] of [
+      [40, 30, -0.6],
+      [216, 30, 0.6],
+    ] as const) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(r);
+      ctx.fillRect(-26, -8, 52, 16);
+      ctx.restore();
+    }
+  });
+  const clarkson = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.52), new THREE.MeshStandardMaterial({ map: face, roughness: 0.9, transparent: true, alphaTest: 0.5 }));
+  clarkson.position.set(0.15, 1.98, fz + 0.03);
+  clarkson.rotation.z = 0.08;
+  g.add(clarkson);
   for (const x of [-2.6, -3.0]) g.add(box(0.4, 1.0, 0.18, std(x < -2.8 ? 0x2b2f36 : 0x1e3a8a), x, 1.3, nz - 0.12));
 
   // ---- Bunting and fairy lights across the low ceiling.
-  const flagCols = [0x16a34a, 0xffffff, 0xdc2626, 0xfacc15, 0x1d4ed8, 0xf97316];
   const flags: THREE.Matrix4[] = [];
   const bulbs: THREE.Matrix4[] = [];
   const string = (a: THREE.Vector3, b: THREE.Vector3, n: number, out: THREE.Matrix4[], sag: number) => {
@@ -519,10 +801,19 @@ function mem(): Venue {
     }
   };
   string(new THREE.Vector3(-W / 2, H - 0.08, 2.0), new THREE.Vector3(W / 2, H - 0.08, 1.4), 12, flags, 0.18);
-  string(new THREE.Vector3(-W / 2, H - 0.08, -3.8), new THREE.Vector3(W / 2, H - 0.08, -3.4), 12, flags, 0.2);
-  const flagMesh = instances(new THREE.PlaneGeometry(0.15, 0.11).translate(0, -0.055, 0), std(0xffffff, { side: THREE.DoubleSide }), flags);
-  flags.forEach((_, i) => flagMesh.setColorAt(i, new THREE.Color(flagCols[i % flagCols.length])));
-  g.add(flagMesh);
+  string(new THREE.Vector3(-W / 2, H - 0.04, -4.2), new THREE.Vector3(W / 2, H - 0.04, -4.0), 12, flags, 0.12);
+  // Country flags: the front string is small, the back one (in view behind the
+  // opponent) is big.
+  const flagMats = FLAGS.map((draw) => new THREE.MeshStandardMaterial({ map: canvasTexture(96, 64, draw), side: THREE.DoubleSide, roughness: 0.8 }));
+  const small = new THREE.PlaneGeometry(0.18, 0.12).translate(0, -0.06, 0);
+  const big = new THREE.PlaneGeometry(0.36, 0.24).translate(0, -0.12, 0);
+  flags.forEach((m, i) => {
+    const back = i >= flags.length / 2;
+    const f = new THREE.Mesh(back ? big : small, flagMats[(i * 5) % flagMats.length]);
+    f.applyMatrix4(m);
+    f.rotation.x += (rnd() - 0.5) * 0.15;
+    g.add(f);
+  });
   string(new THREE.Vector3(-W / 2 + 0.05, H - 0.15, -D / 2), new THREE.Vector3(-W / 2 + 0.05, H - 0.15, D / 2), 30, bulbs, 0.25);
   string(new THREE.Vector3(W / 2 - 0.05, H - 0.15, -D / 2), new THREE.Vector3(W / 2 - 0.05, H - 0.15, D / 2), 30, bulbs, 0.25);
   const bulbMat = glow(0xfff1c2, 2.6);
@@ -543,6 +834,45 @@ function mem(): Venue {
     p.position.set(x, yy, z);
     return p;
   };
+  // Trailing vines (pothos style): strands draped along the top of the far wall and
+  // spilling off the high shelves and cupboard tops, swaying very slightly.
+  const leaves: THREE.Matrix4[] = [];
+  const stems: THREE.Matrix4[] = [];
+  const vine = (start: THREE.Vector3, along: THREE.Vector3, drop: number, n: number) => {
+    let p = start.clone();
+    for (let i = 0; i < n; i++) {
+      const t = i / n;
+      const next = start.clone().addScaledVector(along, t + 1 / n);
+      next.y -= Math.sin(t * Math.PI * 0.5) * drop + Math.sin(i * 1.7) * 0.03;
+      const mid = p.clone().lerp(next, 0.5);
+      const len = p.distanceTo(next);
+      stems.push(new THREE.Matrix4().compose(mid, new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), next.clone().sub(p).normalize()), new THREE.Vector3(1, len, 1)));
+      const side = i % 2 ? 1 : -1;
+      const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(rnd() * 1.2 - 0.6, rnd() * Math.PI * 2, side * (0.6 + rnd() * 0.5)));
+      const s = 0.7 + rnd() * 0.6;
+      leaves.push(new THREE.Matrix4().compose(mid.clone().add(new THREE.Vector3(side * 0.03, -0.02, 0.02)), q, new THREE.Vector3(s, s, s)));
+      p = next;
+    }
+  };
+  // Along the top of the far wall, from corner pot to corner pot.
+  for (const x0 of [-W / 2 + 0.2, W / 2 - 0.2]) {
+    const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.08, 0.15, 10), std(0x2f7d4f));
+    pot.position.set(x0, H - 0.35, fz + 0.15);
+    g.add(pot, box(0.3, 0.02, 0.22, white, x0, H - 0.43, fz + 0.12));
+    vine(new THREE.Vector3(x0, H - 0.3, fz + 0.1), new THREE.Vector3(-Math.sign(x0) * 2.6, 0, 0), 0.35, 26);
+    vine(new THREE.Vector3(x0, H - 0.3, fz + 0.12), new THREE.Vector3(0, -1.3, 0.05), 0, 14);
+    vine(new THREE.Vector3(x0, H - 0.3, fz + 0.16), new THREE.Vector3(-Math.sign(x0) * 0.5, -1.0, 0.1), 0, 12);
+  }
+  // Spilling off the left-hand shelves and down the side windows.
+  for (const z of [-3.2, -1.0, 0.8, 2.6]) vine(new THREE.Vector3(lx + 0.3, 2.04, z), new THREE.Vector3(0.05, -0.7 - rnd() * 0.5, (rnd() - 0.5) * 0.3), 0, 10);
+  for (const z of [-4.1, -2.4, 2.4]) vine(new THREE.Vector3(rx - 0.05, 2.3, z), new THREE.Vector3(-0.05, -0.9 - rnd() * 0.4, 0.25), 0, 11);
+  const leafGeo = new THREE.SphereGeometry(0.045, 8, 6).scale(1, 0.18, 1.3);
+  const vineLeaves = instances(leafGeo, std(0x3f8a3a, { roughness: 0.55 }), leaves);
+  const leafCols = [0x3f8a3a, 0x58a043, 0x2f6e30, 0x7bb85a];
+  leaves.forEach((_, i) => vineLeaves.setColorAt(i, new THREE.Color(leafCols[i % leafCols.length])));
+  const vines = new THREE.Group();
+  vines.add(vineLeaves, instances(new THREE.CylinderGeometry(0.004, 0.004, 1, 4), std(0x4b6b2a), stems));
+  g.add(vines);
   g.add(spider(lx + 0.2, 2.1, -2.2), spider(lx + 0.2, 2.1, 1.4), spider(lx + 0.2, 1.65, 3.8));
   g.add(plant(lx + 0.45, 4.5, 0.9));
   const lily = plant(0, 0, 0.75);
@@ -631,6 +961,7 @@ function mem(): Venue {
     update: (dt) => {
       spin += dt * 9;
       blades.rotation.y = spin;
+      vines.rotation.z = Math.sin(spin * 0.07) * 0.002;
       bulbMat.color.setHSL(0.12, 1, 0.82 + Math.sin(spin * 0.25) * 0.04);
     },
     setScore: (lines) => {
