@@ -1,17 +1,67 @@
 import * as THREE from 'three';
+import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
+import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
+import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { BALL, length, spinComponents, type BallState, type Vec3 } from '../physics';
 
-/** Colour for a spin: warm for topspin, cool for backspin, green tint for side/corkscrew. */
-export function spinColor(vel: Vec3, spin: Vec3, out = new THREE.Color()): THREE.Color {
+/** The kind of spin a ball predominantly carries. */
+export type SpinKind = 'top' | 'back' | 'side' | 'none';
+
+/** Which colours show the spin: the standard set, or one safe for colour-blind players. */
+export type SpinPalette = 'standard' | 'colourblind';
+
+/**
+ * Spin colours (sRGB hex). Standard: red topspin, green backspin, yellow sidespin.
+ * Colour-blind safe (Okabe–Ito): vermillion topspin, sky-blue backspin, yellow sidespin;
+ * they also differ in brightness, so they stay apart for red–green colour blindness.
+ */
+export const SPIN_PALETTES: Record<SpinPalette, Record<SpinKind, string>> = {
+  standard: { top: '#ff2a1a', back: '#1fe04a', side: '#ffd400', none: '#d4d4d4' },
+  colourblind: { top: '#d55e00', back: '#56b4e9', side: '#f0e442', none: '#d4d4d4' },
+};
+
+/** Below this (rps) a ball counts as no spin. */
+const NO_SPIN = 8;
+
+/**
+ * The predominant spin: sidespin (side or corkscrew) when it outweighs the top/back
+ * component, else topspin or backspin. `strength` 0–1 (full from 60 rps).
+ */
+export function spinKind(vel: Vec3, spin: Vec3): { kind: SpinKind; strength: number } {
   const c = spinComponents(vel, spin);
   const lateral = Math.hypot(c.side, c.cork);
   const total = Math.hypot(c.top, lateral);
-  if (total < 8) return out.setRGB(0.85, 0.85, 0.85);
-  const strength = Math.min(1, total / 140);
-  const base = c.top >= 0 ? new THREE.Color(1.0, 0.45, 0.1) : new THREE.Color(0.2, 0.55, 1.0);
-  const side = new THREE.Color(0.25, 1.0, 0.45);
-  out.copy(base).lerp(side, lateral / (Math.abs(c.top) + lateral));
-  return out.lerp(new THREE.Color(0.9, 0.9, 0.9), 1 - (0.35 + 0.65 * strength));
+  if (total < NO_SPIN) return { kind: 'none', strength: 0 };
+  const kind: SpinKind = lateral > Math.abs(c.top) ? 'side' : c.top >= 0 ? 'top' : 'back';
+  return { kind, strength: Math.min(1, total / 60) };
+}
+
+let palette: SpinPalette = 'standard';
+let paletteColors = paletteToColors(palette);
+function paletteToColors(p: SpinPalette): Record<SpinKind, THREE.Color> {
+  const hex = SPIN_PALETTES[p];
+  return { top: new THREE.Color(hex.top), back: new THREE.Color(hex.back), side: new THREE.Color(hex.side), none: new THREE.Color(hex.none) };
+}
+
+export function setSpinPalette(p: SpinPalette) {
+  palette = p;
+  paletteColors = paletteToColors(p);
+}
+
+export function spinPalette(): SpinPalette {
+  return palette;
+}
+
+const GREY = new THREE.Color('#d4d4d4');
+
+/**
+ * Colour for a spin, from the palette: one clear colour per kind of spin (topspin,
+ * backspin, sidespin), only a little paler when the spin is light.
+ */
+export function spinColor(vel: Vec3, spin: Vec3, out = new THREE.Color()): THREE.Color {
+  const { kind, strength } = spinKind(vel, spin);
+  out.copy(paletteColors[kind]);
+  return kind === 'none' ? out : out.lerp(GREY, 0.4 * (1 - strength));
 }
 
 function ballTexture(): THREE.Texture {
@@ -35,6 +85,8 @@ function ballTexture(): THREE.Texture {
 }
 
 const TRAIL_POINTS = 900;
+/** Trail width on screen, pixels. */
+const TRAIL_WIDTH = 3.5;
 
 /**
  * The ball mesh, its spin-axis indicator and a colour-coded trail.
@@ -44,7 +96,10 @@ const TRAIL_POINTS = 900;
 export class BallView {
   readonly mesh: THREE.Mesh;
   private axis: THREE.Line;
-  private trail: THREE.Line;
+  private trail: LineSegments2;
+  private trailMaterial: LineMaterial;
+  private lastTrail = new Float32Array(3);
+  private lastTrailColor = new Float32Array(3);
   private trailPositions: Float32Array;
   private trailColors: Float32Array;
   private trailCount = 0;
@@ -65,13 +120,16 @@ export class BallView {
     this.axis = new THREE.Line(axisGeo, new THREE.LineBasicMaterial({ color: 0xffffff }));
     scene.add(this.axis);
 
-    this.trailPositions = new Float32Array(TRAIL_POINTS * 3);
-    this.trailColors = new Float32Array(TRAIL_POINTS * 3);
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(this.trailPositions, 3));
-    g.setAttribute('color', new THREE.BufferAttribute(this.trailColors, 3));
-    g.setDrawRange(0, 0);
-    this.trail = new THREE.Line(g, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.9 }));
+    // A wide (screen-space) line so the spin colour reads at a glance. Segments are written
+    // into fixed buffers as the ball flies; instanceCount sets how many are drawn.
+    const g = new LineSegmentsGeometry();
+    g.setPositions(new Float32Array((TRAIL_POINTS - 1) * 6));
+    g.setColors(new Float32Array((TRAIL_POINTS - 1) * 6));
+    this.trailPositions = (g.attributes.instanceStart as THREE.InterleavedBufferAttribute).data.array as Float32Array;
+    this.trailColors = (g.attributes.instanceColorStart as THREE.InterleavedBufferAttribute).data.array as Float32Array;
+    g.instanceCount = 0;
+    this.trailMaterial = new LineMaterial({ vertexColors: true, linewidth: TRAIL_WIDTH, transparent: true, opacity: 0.95, worldUnits: false });
+    this.trail = new LineSegments2(g, this.trailMaterial);
     this.trail.frustumCulled = false;
     scene.add(this.trail);
 
@@ -97,7 +155,7 @@ export class BallView {
 
   clearTrail() {
     this.trailCount = 0;
-    this.trail.geometry.setDrawRange(0, 0);
+    this.trail.geometry.instanceCount = 0;
   }
 
   /** Advance the visual orientation by the simulated spin over dt seconds. */
@@ -142,19 +200,37 @@ export class BallView {
     }
 
     if (this.trailCount < TRAIL_POINTS) {
-      const i = this.trailCount * 3;
-      this.trailPositions[i] = pos.x;
-      this.trailPositions[i + 1] = pos.y;
-      this.trailPositions[i + 2] = pos.z;
       const col = spinColor(state.vel, state.spin, this.tmpColor);
-      this.trailColors[i] = col.r;
-      this.trailColors[i + 1] = col.g;
-      this.trailColors[i + 2] = col.b;
+      if (this.trailCount > 0) {
+        // Segment from the previous point to this one: [start xyz, end xyz].
+        const i = (this.trailCount - 1) * 6;
+        const P = this.trailPositions;
+        const C = this.trailColors;
+        P.set(this.lastTrail, i);
+        P[i + 3] = pos.x;
+        P[i + 4] = pos.y;
+        P[i + 5] = pos.z;
+        C.set(this.lastTrailColor, i);
+        C[i + 3] = col.r;
+        C[i + 4] = col.g;
+        C[i + 5] = col.b;
+        const g = this.trail.geometry;
+        g.instanceCount = this.trailCount;
+        (g.attributes.instanceStart as THREE.InterleavedBufferAttribute).data.needsUpdate = true;
+        (g.attributes.instanceColorStart as THREE.InterleavedBufferAttribute).data.needsUpdate = true;
+      }
+      this.lastTrail[0] = pos.x;
+      this.lastTrail[1] = pos.y;
+      this.lastTrail[2] = pos.z;
+      this.lastTrailColor[0] = col.r;
+      this.lastTrailColor[1] = col.g;
+      this.lastTrailColor[2] = col.b;
       this.trailCount++;
-      const g = this.trail.geometry;
-      g.setDrawRange(0, this.trailCount);
-      g.attributes.position.needsUpdate = true;
-      g.attributes.color.needsUpdate = true;
     }
+  }
+
+  /** The wide trail is sized in screen pixels: call when the canvas size changes. */
+  setResolution(width: number, height: number) {
+    this.trailMaterial.resolution.set(width, height);
   }
 }

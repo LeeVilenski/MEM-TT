@@ -100,6 +100,34 @@ export class Hud {
     this.fpsEl.textContent = text;
   }
 
+  private spinTagEl: HTMLDivElement | null = null;
+  private spinTagKind = '';
+
+  /**
+   * A label on the incoming ball naming its spin (▲ TOPSPIN, ▼ BACKSPIN, ↻ SIDESPIN,
+   * • NO SPIN), so the spin can be read without the colours. `x`, `y`: the ball on screen
+   * (CSS pixels). null hides it.
+   */
+  spinTag(tag: { kind: 'top' | 'back' | 'side' | 'none'; color: string; x: number; y: number } | null) {
+    if (!tag) {
+      if (this.spinTagEl) this.spinTagEl.style.display = 'none';
+      return;
+    }
+    if (!this.spinTagEl) {
+      this.spinTagEl = el('div', 'hud-spintag');
+      this.spinTagEl.setAttribute('aria-hidden', 'true');
+      this.replayEl.parentElement!.append(this.spinTagEl);
+    }
+    const t = this.spinTagEl;
+    if (this.spinTagKind !== tag.kind) {
+      this.spinTagKind = tag.kind;
+      t.textContent = { top: '▲ TOPSPIN', back: '▼ BACKSPIN', side: '↻ SIDESPIN', none: '• NO SPIN' }[tag.kind];
+    }
+    t.style.display = 'block';
+    t.style.setProperty('--c', tag.color);
+    t.style.transform = `translate(${Math.round(tag.x)}px, ${Math.round(tag.y)}px) translate(-50%, -100%) translateY(-18px)`;
+  }
+
   onReplaySpeed: (speed: number) => void = () => {};
   onReplaySkip: () => void = () => {};
   private replayCaption: HTMLDivElement | null = null;

@@ -35,7 +35,7 @@ import { Match } from '../game/match';
 import { LET_MESSAGE, pointMessage } from '../game/messages';
 import { classifyShot } from '../game/shots';
 import { NO_INPUT, type SwingInput } from '../game/swing';
-import { BallView, spinColor } from '../render/ballView';
+import { BallView, SPIN_PALETTES, setSpinPalette, spinColor, spinKind, type SpinPalette } from '../render/ballView';
 import { Juice, hitPower } from '../render/juice';
 import { PlayerView } from '../render/playerView';
 import { createScene } from '../render/scene';
@@ -334,6 +334,12 @@ export class Sandbox implements MenuHost {
     callouts: loadPref('mem.callouts', '0') === '1',
     /** MJ mode: a falsetto pop-star yelp on each of your smashes. Off by default. */
     mjMode: loadPref('mem.mjMode', '0') === '1',
+    /** Spin colours on the trail, comet tail and sparks. */
+    spinPalette: (loadPref('mem.spinPalette', 'standard') === 'colourblind' ? 'colourblind' : 'standard') as SpinPalette,
+    /** A label naming the spin of the ball coming at you. Off by default. */
+    spinLabel: loadPref('mem.spinLabel', '0') === '1',
+    /** No camera shake, zoom kick, hit-stop or screen flash. Defaults to the system setting. */
+    reduceMotion: loadPref('mem.reduceMotion', typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches ? '1' : '0') === '1',
   };
   /** Arcade effects: hit-stop, shake, comet tail, sparks (see render/juice). */
   private juice!: Juice;
@@ -429,6 +435,8 @@ export class Sandbox implements MenuHost {
     this.ball = new BallView(this.scene);
     this.ball.visible = false;
     this.juice = new Juice(this.scene);
+    this.juice.reduceMotion = this.look.reduceMotion;
+    setSpinPalette(this.look.spinPalette);
     this.juice.enabled = this.look.arcadeFx;
     this.sfx.heavyHits = this.look.arcadeFx;
     this.sfx.wantGrunts = this.look.mjMode;
@@ -985,6 +993,7 @@ export class Sandbox implements MenuHost {
     this.controls.update();
     const b = this.ball.last;
     this.juice.update(realDt, this.ball.isVisible && b ? { pos: b.pos, state: b.state, visible: true } : null);
+    this.updateSpinTag();
     // Shake and zoom kick are applied for this render only.
     const shake = this.playing && !this.replay ? this.juice.cameraOffset : null;
     if (shake) {
@@ -1754,6 +1763,37 @@ export class Sandbox implements MenuHost {
     if (this.look.callouts) this.hud.flash(title, sub);
   }
 
+  /** The spin label on the incoming ball (while playing, not in replays). */
+  private updateSpinTag() {
+    const b = this.ball.last;
+    // Render coordinates always put you at the near (+z) end: incoming = moving toward +z.
+    if (!this.look.spinLabel || !this.playing || this.replay || !b || !this.ball.isVisible || b.state.vel.z <= 0.5 || this.menu.screen) return this.hud.spinTag(null);
+    const p = new THREE.Vector3(b.pos.x, b.pos.y, b.pos.z).project(this.camera);
+    if (p.z > 1 || Math.abs(p.x) > 1.1 || Math.abs(p.y) > 1.1) return this.hud.spinTag(null);
+    const { kind } = spinKind(b.state.vel, b.state.spin);
+    const w = this.container.clientWidth;
+    const h = this.container.clientHeight;
+    this.hud.spinTag({ kind, color: SPIN_PALETTES[this.look.spinPalette][kind], x: ((p.x + 1) / 2) * w, y: ((1 - p.y) / 2) * h });
+  }
+
+  setSpinPalette(p: SpinPalette) {
+    this.look.spinPalette = p;
+    savePref('mem.spinPalette', p);
+    setSpinPalette(p);
+    this.ball.clearTrail();
+  }
+
+  setSpinLabel(on: boolean) {
+    this.look.spinLabel = on;
+    savePref('mem.spinLabel', on ? '1' : '0');
+  }
+
+  setReduceMotion(on: boolean) {
+    this.look.reduceMotion = on;
+    savePref('mem.reduceMotion', on ? '1' : '0');
+    this.juice.reduceMotion = on;
+  }
+
   setMjMode(on: boolean) {
     this.look.mjMode = on;
     savePref('mem.mjMode', on ? '1' : '0');
@@ -1895,7 +1935,7 @@ export class Sandbox implements MenuHost {
     // Speed call-out on a fast shot (its real speed).
     const kmh = length(velOut) * 3.6;
     if (this.look.arcadeFx && !serve && kmh >= 65) this.hud.speedPop(kmh, mine);
-    if (this.look.arcadeFx && mine && !serve && kmh >= 45) this.matchHud.impact(Math.min(1, (kmh - 45) / 50));
+    if (this.look.arcadeFx && !this.look.reduceMotion && mine && !serve && kmh >= 45) this.matchHud.impact(Math.min(1, (kmh - 45) / 50));
     // Contact grade: PERFECT (with the chime and sparks under arcade effects) or a mishit.
     const g = mine && !serve ? this.player.lastContact?.grade : undefined;
     if (g) {
@@ -2397,7 +2437,7 @@ export class Sandbox implements MenuHost {
 
   /** Called when the local player strikes the ball (dynamic camera reacts). */
   private camOnHit(speed: number) {
-    this.camKick = Math.min(1, speed / 25);
+    this.camKick = this.look.reduceMotion ? 0 : Math.min(1, speed / 25);
   }
 
   private updatePlayCamera(dt: number) {
@@ -2624,6 +2664,7 @@ export class Sandbox implements MenuHost {
     const h = this.container.clientHeight;
     this.renderer.setSize(w, h);
     this.post.setSize(w, h, this.renderer.getPixelRatio());
+    this.ball.setResolution(w, h);
     this.camera.aspect = w / h;
     this.frameAroundMenu();
   }

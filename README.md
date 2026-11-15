@@ -33,6 +33,13 @@ The game opens on a **title screen** over a slowly orbiting view of the venue: *
 
 **Characters move:** side-step shuffles when moving, a bouncy ready stance, the upper body turning into strokes and leaning for low balls, and after each point a hop and fist pump or a slump.
 
+**Spin colours:** the ball's trail (now a thick line), comet tail, sparks and bounce marks are coloured by the ball's predominant spin: **red topspin, green backspin, yellow sidespin** (side or corkscrew outweighing top/back), white for no spin. Light spin is a little paler.
+
+**Accessibility** (Settings → Accessibility):
+- **Colour-blind safe colours:** orange topspin, blue backspin, yellow sidespin (the Okabe–Ito palette; the three also differ in brightness).
+- **Spin label:** a tag on the ball coming at you names its spin (▲ TOPSPIN, ▼ BACKSPIN, ↻ SIDESPIN, • NO SPIN), so you don't need the colours at all.
+- **Reduce motion:** no camera shake, zoom kick, post-shot camera lift, hit-stop or screen flash. On by default if your system asks for reduced motion.
+
 **Glow (bloom)** at High quality: lamps, LEDs, string lights, the ball's comet tail and sparks glow softly; lit surfaces don't. Toggle under Settings → Graphics quality.
 
 The old tuning panel is now **Developer tools**: off by default, toggled with <kbd>`</kbd> or **Settings → Advanced**. With it on, the menus also offer a free camera (the inspect view with the ball-machine controls below).

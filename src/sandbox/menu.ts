@@ -25,7 +25,7 @@ export interface MenuHost {
   saveDoublesPicks(): void;
   onlineSettings: { name: string; code: string; mode: 'singles' | 'doubles'; bestOf: number };
   realism: { percent: number; style: StyleId };
-  look: { venue: VenueId; volume: number; muted: boolean; ambience: boolean; music: boolean; autoReplay: boolean; arcadeFx: boolean; bloom: boolean; fullSpeedOut: boolean; callouts: boolean; mjMode: boolean };
+  look: { venue: VenueId; volume: number; muted: boolean; ambience: boolean; music: boolean; autoReplay: boolean; arcadeFx: boolean; bloom: boolean; fullSpeedOut: boolean; callouts: boolean; mjMode: boolean; spinPalette: 'standard' | 'colourblind'; spinLabel: boolean; reduceMotion: boolean };
   quality: { setting: QualitySetting };
   devTools: boolean;
   /** null if unlocked, otherwise how to unlock it. */
@@ -74,6 +74,9 @@ export interface MenuHost {
   setFullSpeedOut(on: boolean): void;
   setCallouts(on: boolean): void;
   setMjMode(on: boolean): void;
+  setSpinPalette(p: 'standard' | 'colourblind'): void;
+  setSpinLabel(on: boolean): void;
+  setReduceMotion(on: boolean): void;
   camMode: 'classic' | 'close' | 'dynamic';
   setCamMode(mode: 'classic' | 'close' | 'dynamic'): void;
   setDevTools(on: boolean): void;
@@ -390,6 +393,13 @@ export class Menu {
            ${toggle('autoReplay', 'Auto-replay long rallies', h.look.autoReplay)}
            ${toggle('callouts', 'Point call-outs', h.look.callouts, 'A joke after each point: 404, PACKET LOSS, SEGFAULT…')}`,
         )}
+        ${this.group(
+          'Accessibility',
+          `<p class="menu-note">The ball's trail is coloured by its spin.</p>
+           <div class="menu-choices">${this.choice('spinPalette', 'standard', 'Standard colours', h.look.spinPalette === 'standard', 'Red topspin · green backspin · yellow sidespin')}${this.choice('spinPalette', 'colourblind', 'Colour-blind safe', h.look.spinPalette === 'colourblind', 'Orange topspin · blue backspin · yellow sidespin')}</div>
+           ${toggle('spinLabel', 'Spin label', h.look.spinLabel, 'Names the spin of the ball coming at you (▲ topspin, ▼ backspin, ↻ sidespin), so you don’t need the colours')}
+           ${toggle('reduceMotion', 'Reduce motion', h.look.reduceMotion, 'No camera shake, zoom kick, hit-stop or screen flash')}`,
+        )}
         ${this.group('Camera', `<div class="menu-choices">${this.choice('cam', 'dynamic', 'Dynamic', h.camMode === 'dynamic', 'Follows the play (recommended)')}${this.choice('cam', 'close', 'Close', h.camMode === 'close', 'Behind you, more depth')}${this.choice('cam', 'classic', 'Classic', h.camMode === 'classic', 'High and steady, like TV')}</div>`)}
         ${this.group('Graphics quality', `<div class="menu-choices">${quality}</div>${toggle('bloom', 'Glow effects', h.look.bloom, 'Bloom on the ball trail, sparks and lights (High quality only)')}`)}
         ${canInstall() ? this.group('App', '<div class="menu-choices"><button data-a="install" class="menu-choice">Install app</button></div>') : ''}
@@ -574,6 +584,9 @@ export class Menu {
       case 'cam':
         h.setCamMode(v as 'classic' | 'close' | 'dynamic');
         break;
+      case 'spinPalette':
+        h.setSpinPalette(v === 'colourblind' ? 'colourblind' : 'standard');
+        break;
       case 'quality':
         h.setQuality(v === 'auto' ? 'auto' : (Number(v) as QualitySetting));
         break;
@@ -605,6 +618,8 @@ export class Menu {
       else if (k === 'fullSpeedOut') h.setFullSpeedOut(t.checked);
       else if (k === 'callouts') h.setCallouts(t.checked);
       else if (k === 'mjMode') h.setMjMode(t.checked);
+      else if (k === 'spinLabel') h.setSpinLabel(t.checked);
+      else if (k === 'reduceMotion') h.setReduceMotion(t.checked);
       else if (k === 'devTools') h.setDevTools(t.checked);
     }
   }

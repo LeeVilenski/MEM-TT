@@ -4284,3 +4284,22 @@ body {
   color: var(--muted);
   font-size: 12px !important;
 }
+
+/* Spin label on the incoming ball (Settings → Accessibility). */
+.hud-spintag {
+  position: absolute;
+  left: 0;
+  top: 0;
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 2px solid var(--c, #ddd);
+  background: rgba(10, 14, 22, 0.82);
+  color: #fff;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 3;
+}
