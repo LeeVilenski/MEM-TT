@@ -48,7 +48,7 @@ export class CharacterPreview {
     sc.right = sc.top = 1.5;
     this.scene.add(key);
     // Warm rim light from behind, in the game's accent colour.
-    const rim = new THREE.DirectionalLight(0xff8a5c, 1.6);
+    const rim = new THREE.DirectionalLight(0x6ab8ff, 1.6);
     rim.position.set(1.5, 2, 3);
     this.scene.add(rim);
 
@@ -56,7 +56,7 @@ export class CharacterPreview {
     const plinth = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.66, 0.06, 48), new THREE.MeshStandardMaterial({ color: 0x1f232c, roughness: 0.6, metalness: 0.2 }));
     plinth.position.y = -0.03;
     plinth.receiveShadow = true;
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.64, 0.008, 8, 64), new THREE.MeshBasicMaterial({ color: 0xe8562a }));
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.64, 0.008, 8, 64), new THREE.MeshBasicMaterial({ color: 0x3b8cff }));
     ring.rotation.x = Math.PI / 2;
     ring.position.y = 0.001;
     this.scene.add(plinth, ring, this.turntable);

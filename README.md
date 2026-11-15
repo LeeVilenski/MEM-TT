@@ -113,17 +113,17 @@ In first person you see only your paddle, so nothing hides the ball. Replays and
 
 ### Milestone 5 — depth: realism, styles, rubbers, AI per style
 
-**Realism slider** (panel → **Realism**; set by the host for an online room). It runs from 0% (Simulation) to 100% (Arcade). The default is **Assisted (75%)** on desktop and 85% on phones. It sets:
+**Realism slider** (panel → **Realism**; set by the host for an online room). It runs from 0% (Simulation) to 100% (Arcade). The default is **Assisted (85%)** on every device, and your choice is remembered. It sets:
 
 | Setting | Simulation | Balanced | Assisted | Arcade |
 |---|---|---|---|---|
-| Game speed | 1.0× | 0.78× | 0.7× | 0.6× |
-| Timing window | 60 ms | 137 ms | 165 ms | 200 ms |
+| Game speed | 1.0× | 0.78× | 0.66× | 0.6× |
+| Timing window | 60 ms | 137 ms | 179 ms | 200 ms |
 | Angle assist | off | corrects ≤ 46° | always lands if possible | always lands if possible |
 | Auto face angle | off | 70% | full | full |
-| Hit area | +0 cm | +3.9 cm | +5.3 cm | +7 cm |
-| Footwork assist | 25% | 69% | 85% | 100% |
-| Spin curve | real | ×1.04 | ×1.2 | ×1.4 |
+| Hit area | +0 cm | +3.9 cm | +6 cm | +7 cm |
+| Footwork assist | 25% | 69% | 93% | 100% |
+| Spin curve | real | ×1.04 | ×1.28 | ×1.4 |
 | Backspin can bring the ball back over the net | yes | no | no | no |
 
 **Auto face angle:** a downward stroke opens the face (push or chop) and an upward one closes it (loop), as real players do. So flicking down gives backspin and flicking up gives topspin, with no keys needed.

@@ -38,7 +38,7 @@ describe('realism slider', () => {
 
   it('the default is the more assisted setting, with auto face angle on', () => {
     const d = realismSettings(DEFAULT_REALISM);
-    expect(DEFAULT_REALISM).toBe(0.75);
+    expect(DEFAULT_REALISM).toBe(0.85);
     expect(d.angleAssist).toBe(1);
     expect(d.autoFace).toBe(1);
     expect(realismSettings(0).autoFace).toBe(0);
