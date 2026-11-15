@@ -82,6 +82,16 @@ const QUALITY: [string, QualitySetting][] = [
  * settings) and the pause menu. Plain DOM, keyboard- and touch-friendly.
  * The developer panel (lil-gui) stays available behind Settings → Developer tools.
  */
+/** Small flat glyphs for the title buttons' icon tiles. */
+const ICONS: Record<string, string> = {
+  play: '<path d="M8 5v14l11-7z"/>',
+  bat: '<circle cx="10" cy="10" r="6.5"/><path d="M14 14l5.5 5.5" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/>',
+  ball: '<circle cx="12" cy="12" r="7"/>',
+  cup: '<path d="M7 4h10v5a5 5 0 0 1-10 0zM4 5h3v3H5.5A1.5 1.5 0 0 1 4 6.5zM20 5h-3v3h1.5A1.5 1.5 0 0 0 20 6.5zM11 14h2v4h3v2H8v-2h3z"/>',
+  net: '<path d="M3 9h18v2H3zM5 11h2v8H5zM17 11h2v8h-2z"/><path d="M7 13h10M7 16h10M10 11v8M14 11v8" stroke="currentColor" stroke-width="1.2" fill="none"/>',
+};
+const ico = (k: string) => `<span class="mb-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor">${ICONS[k]}</svg></span>`;
+
 export class Menu {
   private el: HTMLDivElement;
   private card: HTMLDivElement;
@@ -189,7 +199,6 @@ export class Menu {
     const h = this.host;
     const st = STYLES[h.realism.style];
     return `
-      <div class="menu-logo" aria-hidden="true"><span class="menu-ball"></span></div>
       <h1 class="menu-title">MEM <span>Table Tennis</span></h1>
       <p class="menu-tag">Spin, pace and office politics.</p>
       <button data-a="go-characters" class="menu-player" aria-label="Playing as ${esc(st.character)}. Change player">
@@ -198,11 +207,11 @@ export class Menu {
         <span class="mp-change">Change ›</span>
       </button>
       <div class="menu-buttons">
-        <button data-a="quick" class="primary big">▶ Quick match <small>vs ${AI_LEVELS[h.matchSettings.level].name} AI · best of ${h.matchSettings.bestOf}</small></button>
-        <button data-a="go-vsai">Match vs AI <small>Choose opponent and format</small></button>
-        <button data-a="practice">Practice <small>Ball machine, no score</small></button>
-        <button data-a="career">Career <small>Drills, tournaments, stats</small></button>
-        <button data-a="go-online">Online <small>Play friends: singles or doubles</small></button>
+        <button data-a="quick" class="primary big c-blue">${ico('play')}<span class="mb-t">Quick match <small>vs ${AI_LEVELS[h.matchSettings.level].name} AI · best of ${h.matchSettings.bestOf}</small></span></button>
+        <button data-a="go-vsai" class="c-orange">${ico('bat')}<span class="mb-t">Match vs AI <small>Choose opponent and format</small></span></button>
+        <button data-a="practice" class="c-green">${ico('ball')}<span class="mb-t">Practice <small>Ball machine, no score</small></span></button>
+        <button data-a="career" class="c-yellow">${ico('cup')}<span class="mb-t">Career <small>Drills, tournaments, stats</small></span></button>
+        <button data-a="go-online" class="c-purple">${ico('net')}<span class="mb-t">Online <small>Play friends: singles or doubles</small></span></button>
         <div class="menu-row three">
           <button data-a="tutorial" class="secondary">Tutorial</button>
           <button data-a="howto" class="secondary">Controls</button>
@@ -221,7 +230,7 @@ export class Menu {
       <h2 class="menu-title small">Paused</h2>
       ${this.pause.detail ? `<p class="menu-tag">${this.pause.detail}</p>` : ''}
       <div class="menu-buttons">
-        <button data-a="resume" class="primary big">▶ Resume</button>
+        <button data-a="resume" class="primary big c-blue">${ico('play')}<span class="mb-t">Resume</span></button>
         ${restart ? `<button data-a="restart">${restart}</button>` : ''}
         <button data-a="howto">How to play</button>
         <button data-a="go-settings">Settings</button>
@@ -246,7 +255,7 @@ export class Menu {
       ${this.group('Opponent level', `<div class="menu-choices">${levels}</div>`)}
       ${m.doubles ? this.doublesLineupHtml() : this.group('Opponent', `<div class="menu-choices wrap">${styles}</div>`)}
       ${this.group('Format', `<div class="menu-choices">${formats}</div>`)}
-      <div class="menu-actions"><button data-a="start" class="primary big">▶ Start match</button></div>`;
+      <div class="menu-actions"><button data-a="start" class="primary big">Start match</button></div>`;
   }
 
   /**

@@ -3025,3 +3025,220 @@ body {
     font-size: 13px;
   }
 }
+
+/* ================================================================ theme: flat block colours
+   Solid fills, hard edges, chunky type. No gradients, glows or glass. */
+
+:root {
+  --ink: #0b1220;
+  --c-blue: #2f7cf6;
+  --c-orange: #ef7d32;
+  --c-green: #3fa34d;
+  --c-yellow: #f5b80b;
+  --c-purple: #7a5cd6;
+  --c-slate: #3a4a63;
+}
+
+.menu {
+  background: rgba(6, 12, 22, 0.55);
+}
+.menu[data-screen='title'] {
+  background: linear-gradient(90deg, rgba(6, 12, 22, 0.7) 0%, rgba(6, 12, 22, 0.25) 40%, rgba(6, 12, 22, 0) 60%);
+}
+
+.menu-card {
+  background: #121c2e;
+  border: 3px solid var(--ink);
+  border-radius: 6px;
+  box-shadow: 6px 6px 0 var(--ink);
+  backdrop-filter: none;
+}
+.menu[data-screen='title'] .menu-card {
+  width: 340px;
+  box-shadow: none;
+}
+
+/* Title: big blocky wordmark with a hard drop shadow. */
+.menu-title {
+  font-size: 64px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+  color: #fff;
+  text-shadow: 4px 4px 0 var(--ink);
+}
+.menu-title span {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 3px 10px;
+  font-size: 0.36em;
+  letter-spacing: 0.08em;
+  color: var(--ink);
+  background: var(--c-yellow);
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+  text-shadow: none;
+  box-shadow: 3px 3px 0 var(--ink);
+}
+.menu-title.small {
+  font-size: 30px;
+  text-transform: none;
+  text-shadow: none;
+}
+.menu-tag {
+  color: #dfe6f2;
+  font-weight: 600;
+  text-shadow: 1px 1px 0 var(--ink);
+}
+
+/* Buttons: flat colour blocks with a hard edge that presses down. */
+.menu-buttons button,
+.menu-actions button,
+.menu-split button {
+  min-height: 42px;
+  padding: 8px 14px;
+  font-size: 16px;
+  background: var(--c-slate);
+  border: 2px solid var(--ink);
+  border-radius: 4px;
+  box-shadow: 3px 3px 0 var(--ink);
+  transition: transform 0.08s, box-shadow 0.08s, filter 0.08s;
+}
+.menu-buttons button:hover,
+.menu-actions button:hover,
+.menu-split button:hover {
+  background: var(--c-slate);
+  filter: brightness(1.1);
+  transform: none;
+}
+.menu-buttons button:active,
+.menu-actions button:active,
+.menu-split button:active {
+  transform: translate(3px, 3px);
+  box-shadow: 0 0 0 var(--ink);
+}
+.menu button.primary,
+.menu button.primary:hover {
+  background: var(--c-blue);
+  box-shadow: 3px 3px 0 var(--ink);
+}
+.menu button.big {
+  font-size: 18px;
+  min-height: 50px;
+}
+.menu button.secondary,
+.menu button.secondary:hover {
+  background: #1b273b;
+  font-size: 14px;
+  min-height: 36px;
+  padding: 6px 8px;
+}
+.menu-buttons button small,
+.menu-actions button small {
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.menu .c-blue,
+.menu .c-blue:hover { background: var(--c-blue); }
+.menu .c-orange,
+.menu .c-orange:hover { background: var(--c-orange); }
+.menu .c-green,
+.menu .c-green:hover { background: var(--c-green); }
+.menu .c-yellow,
+.menu .c-yellow:hover { background: var(--c-yellow); color: var(--ink); }
+.menu .c-yellow small { color: rgba(11, 18, 32, 0.75) !important; }
+.menu .c-purple,
+.menu .c-purple:hover { background: var(--c-purple); }
+
+/* Icon tile on the left of a title button, like a sticker on the block. */
+.menu-buttons button:has(.mb-ico) {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  padding-left: 6px;
+}
+.mb-ico {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.12);
+}
+.c-yellow .mb-ico { border-color: rgba(11, 18, 32, 0.7); }
+.mb-ico svg { width: 20px; height: 20px; }
+.big .mb-ico { width: 38px; height: 38px; }
+.big .mb-ico svg { width: 24px; height: 24px; }
+.mb-t {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+/* Option choices: flat tiles; the selected one fills solid. */
+.menu-choice {
+  background: #1b273b;
+  border: 2px solid var(--ink);
+  border-radius: 4px;
+  box-shadow: 2px 2px 0 var(--ink);
+}
+.menu-choice:hover {
+  border-color: var(--ink);
+  filter: brightness(1.15);
+}
+.menu-choice.on {
+  background: var(--c-blue);
+  border-color: var(--ink);
+}
+.menu-choice.on small { color: rgba(255, 255, 255, 0.85); }
+
+.menu-label,
+.menu-split h3 {
+  color: var(--c-yellow);
+}
+
+.menu-back {
+  border-radius: 4px;
+  border: 2px solid var(--ink) !important;
+  background: var(--c-slate);
+  box-shadow: 2px 2px 0 var(--ink);
+}
+
+/* Player chip */
+.menu .menu-player {
+  background: #121c2e;
+  border: 2px solid var(--ink);
+  border-radius: 4px;
+  box-shadow: 3px 3px 0 var(--ink);
+}
+.menu .menu-player:hover {
+  background: #1b273b;
+  border-color: var(--ink);
+}
+.mp-avatar {
+  background: var(--c-orange) !important;
+  border-radius: 4px;
+  border: 2px solid var(--ink);
+}
+.mp-change { color: var(--c-yellow); }
+
+.menu input[type='text'] {
+  border-radius: 4px;
+  border-color: var(--ink);
+  background: #0e1626;
+}
+
+@media (max-height: 500px) {
+  .menu[data-screen='title'] .menu-card { width: 520px; }
+  .menu-title { font-size: 40px; }
+  .menu-buttons button:has(.mb-ico) .mb-ico { width: 28px; height: 28px; }
+}
+@media (max-width: 560px) {
+  .menu-title { font-size: 48px; }
+  .menu-card { border-radius: 6px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .menu-buttons button:active { transform: none; }
+}
