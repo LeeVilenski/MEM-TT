@@ -21,6 +21,7 @@ import {
   length,
   v3,
   type BallEvent,
+  type BallState,
   type PhysicsParams,
   type Vec3,
 } from '../physics';
@@ -46,14 +47,16 @@ import { TouchControls, isTouchDevice } from '../input/touch';
 import { TiltControl } from '../input/tilt';
 import { AutoQuality, QUALITY_LEVELS, type QualitySetting } from '../render/quality';
 import { Career } from '../progress/profile';
-import { DRILLS, DrillSession, drillUnlocked } from '../progress/drills';
-import { TOURNAMENTS, TournamentRun, tournamentUnlocked } from '../progress/tournament';
+import { DRILLS, DrillSession, drillUnlocked, type TargetZone } from '../progress/drills';
+import { GRADE_TEXT } from '../game/contact';
+import { TOUR_STOPS, TourRun, stopUnlocked, stopsWon } from '../progress/tour';
+import { TourScreen } from './tour';
 import { isUnlocked, newlyUnlocked, unlockedKeys, UNLOCKS, type UnlockKind } from '../progress/unlocks';
 import { CareerScreen } from './career';
 import { HowToPlay } from './howto';
 import { Coach } from './coach';
 import { Tutorial, tutorialHint } from '../progress/tutorial';
-import { SERVE_TYPES, type ServeType } from '../game/serves';
+import { SERVE_TYPES, serveReport, tossHeightFor, type ServeReport, type ServeType } from '../game/serves';
 import { Menu, type MenuHost, type PauseContext } from './menu';
 import { VENUES, setVenue, type Venue, type VenueId } from '../render/venues';
 import { OnlineClient } from '../net/client';
@@ -357,11 +360,13 @@ export class Sandbox implements MenuHost {
   private unlocked = new Set<string>();
   private drill: DrillSession | null = null;
   private drillZone: THREE.Mesh | null = null;
-  private tournament: TournamentRun | null = null;
+  /** The World Tour stop being played (knockout or round-robin), if any. */
+  private tournament: TourRun | null = null;
+  private tourScreen!: TourScreen;
   private matchRecorded = false;
   private rallyHits = 0;
   /** This match so far, for the end-of-match card. */
-  private mstats = { won: 0, played: 0, longest: 0, fastest: 0, aces: 0, perfect: 0 };
+  private mstats = { won: 0, played: 0, longest: 0, fastest: 0, aces: 0, perfect: 0, clean: 0, strokes: 0 };
   private lastPhase = '';
   /** Doubles: the ball on our side is my partner's to play (the hit zone turns blue). */
   private partnerTurn = false;
@@ -477,13 +482,14 @@ export class Sandbox implements MenuHost {
     this.unlocked = unlockedKeys(this.career.data, this.career.levelIndex);
     this.careerScreen = new CareerScreen(container, this.career);
     this.careerScreen.onClose = () => this.careerScreen.hide();
-    this.careerScreen.onStartDrill = (id) => this.startDrill(id);
-    this.careerScreen.onStartTournament = (id) => this.startTournament(id);
-    this.careerScreen.onPlayRound = () => this.playTournamentRound();
-    this.careerScreen.onAbandonTournament = () => {
+    this.tourScreen = new TourScreen(container, this.career);
+    this.tourScreen.onClose = () => this.tourScreen.hide();
+    this.tourScreen.onEnter = (id) => this.startTournament(id);
+    this.tourScreen.onPlay = () => this.playTournamentRound();
+    this.tourScreen.onAbandon = () => {
       this.tournament = null;
-      this.careerScreen.run = null;
-      this.careerScreen.render();
+      this.tourScreen.run = null;
+      this.tourScreen.render();
     };
     this.hud.onCareer = () => this.openCareer();
     this.howTo = new HowToPlay(container, this.isTouch);
@@ -515,7 +521,7 @@ export class Sandbox implements MenuHost {
     this.playerView.setStyle(this.player.style.id);
     // Restore the last player picked ("Playing as"), if still unlocked.
     const savedStyle = loadPref('mem.style', '');
-    if (savedStyle in STYLES && savedStyle !== this.realism.style && !this.lockReason('style', savedStyle)) this.setStyle(savedStyle as StyleId);
+    if (savedStyle in STYLES && savedStyle !== this.realism.style && !this.lockReason('style', savedStyle)) this.setStyle(savedStyle as StyleId, false);
     this.sfx.volume = this.look.volume;
     this.sfx.muted = this.look.muted;
     this.sfx.ambienceOn = this.look.ambience;
@@ -654,9 +660,16 @@ export class Sandbox implements MenuHost {
     this.recorder.start(this.clock());
     this.recorder.caption(this.clock(), `Ball machine: ${this.machine.preset}`);
     if (this.drill) {
-      const name = this.drill.nextPreset();
-      if (!name) return this.finishDrill();
-      Object.assign(this.machine, this.settingsFromPreset(PRESETS.find((p) => p.name === name)!), { scatter: 0.12 });
+      const ball = this.drill.nextBall();
+      if (!ball) return this.finishDrill();
+      Object.assign(this.machine, this.settingsFromPreset(PRESETS.find((p) => p.name === ball.preset)!), { scatter: ball.x === undefined ? 0.12 : 0.05 });
+      if (ball.x !== undefined) this.machine.targetX = ball.x;
+      if (ball.call) {
+        // Call the side, and light up that half of the far side.
+        this.showDrillZone({ x0: ball.call === 'left' ? -TABLE.halfWidth : 0, x1: ball.call === 'left' ? 0 : TABLE.halfWidth, z0: -TABLE.halfLength, z1: 0 });
+        // (A toast, not the big centre call-out: that would sit on the incoming ball's path.)
+        this.hud.toast(`<b>${ball.call === 'left' ? '◀ LEFT' : 'RIGHT ▶'}</b> — put it on that side`);
+      }
       this.updateMachineVisuals();
       this.updateDrillHud();
     } else if (this.tutorial) {
@@ -1004,6 +1017,7 @@ export class Sandbox implements MenuHost {
     this.endMatch(false);
     this.stopDrill();
     this.careerScreen?.hide();
+    this.tourScreen?.hide();
     this.practicing = false;
     this.stopTutorial();
     this.matchRecorded = false;
@@ -1041,6 +1055,7 @@ export class Sandbox implements MenuHost {
           this.recorder.caption(this.clock(), `${who}: ${name} · ${info.speed.toFixed(1)} m/s · ${Math.round(info.rpm).toLocaleString()} rpm`);
           if (e.side === 'near' && !e.serve) this.career.recordShot(info.name, info.speed, info.rpm);
           if (e.side === 'near') this.noteMyShot(info.speed, e.serve);
+          if (e.side === 'near' && e.serve) this.reportMyServe({ pos: h.pos, vel: h.velOut, spin: h.spinOut });
           this.ball.clearTrail();
           break;
         }
@@ -1065,6 +1080,9 @@ export class Sandbox implements MenuHost {
           this.aiView.react(e.result.winner === 'far' ? 'celebrate' : 'dismay');
           this.matchHud.pointGlow(e.result.winner === 'near');
           this.notePoint(e.result.winner === 'near', match.referee?.hits ?? 0, !!e.result.ace);
+          // Won a short point off your own serve that the AI misjudged: that's the serve working.
+          const read = this.ai?.lastRead;
+          if (e.result.winner === 'near' && match.referee?.server === 'near' && (match.referee?.hits ?? 9) <= 3 && read && Math.abs(read.seenTop - read.top) > Math.max(15, 0.35 * Math.abs(read.top))) this.career.award('social-engineering');
           this.fxPoint(e.result.reason, match.referee?.hits ?? 0, e.result.winner === 'near', e.match);
           const m = pointMessage(e.result, names);
           if (e.match) this.hud.flash(e.result.winner === 'near' ? 'SHIPPED TO PROD' : 'INCIDENT REPORT', e.result.winner === 'near' ? 'You won the match!' : `${ai.displayName} won the match`);
@@ -1152,7 +1170,7 @@ export class Sandbox implements MenuHost {
       if (!this.matchRecorded) {
         this.matchRecorded = true;
         this.career.recordMatch(won, { aiLevel: this.matchSettings.level, style: this.player.style.id });
-        if (this.tournament) return this.reportTournamentMatch(won, `${sc.games.near}–${sc.games.far}`);
+        if (this.tournament) return this.reportTournamentMatch(sc.games.near, sc.games.far);
       }
       if (this.tournament) return;
       const games = sc.history.map((g) => `${g.near}–${g.far}`).join('  ·  ');
@@ -1179,7 +1197,8 @@ export class Sandbox implements MenuHost {
     if (this.tossHoldStart === null || (!this.match && !this.online)) return;
     const held = Math.min(TOSS_HOLD_MAX, (performance.now() - this.tossHoldStart) / 1000);
     this.tossHoldStart = null;
-    const h = 0.2 + (held / TOSS_HOLD_MAX) * 0.9;
+    const h = tossHeightFor(held / TOSS_HOLD_MAX);
+    this.player.tossHeight = h;
     if (this.online) this.online.toss(h);
     else this.match!.toss(h);
   }
@@ -1209,11 +1228,41 @@ export class Sandbox implements MenuHost {
     return true;
   }
 
+  /** The Locker: stats, badges and unlocks. */
   openCareer() {
     if (document.pointerLockElement) document.exitPointerLock();
     this.setPlaying(false);
-    this.careerScreen.run = this.tournament;
     this.careerScreen.show();
+  }
+
+  /** The World Tour route and the stop in progress. */
+  openTour(banner = '') {
+    if (document.pointerLockElement) document.exitPointerLock();
+    this.setPlaying(false);
+    this.menu.hide();
+    this.tourScreen.run = this.tournament;
+    this.tourScreen.show(banner);
+  }
+
+  /** "3/7 stops won · next: City Park" for the title screen. */
+  tourSummary(): string {
+    const won = this.career.data.tournaments;
+    const n = stopsWon(won);
+    if (this.tournament && this.tournament.state === 'playing') return `In progress: ${this.tournament.stop.place}`;
+    const next = TOUR_STOPS.find((st, i) => stopUnlocked(i, won, false) && !(won[st.id] ?? 0));
+    return next ? `${n}/${TOUR_STOPS.length} stops · next: ${next.place}` : `All ${TOUR_STOPS.length} stops won`;
+  }
+
+  /** Drills, for the Training menu. */
+  readonly drills = DRILLS;
+  drillOpen(index: number) {
+    return drillUnlocked(index, this.career.data.drills, this.career.data.unlockAll);
+  }
+  drillStars(id: string) {
+    return this.career.data.drills[id] ?? 0;
+  }
+  drillBest(id: string) {
+    return this.career.data.drillScores[id] ?? 0;
   }
 
   startDrill(id: string) {
@@ -1229,15 +1278,7 @@ export class Sandbox implements MenuHost {
     this.machine.mix = false;
     this.clearMarkers();
     // Target zone, if the drill has one.
-    if (this.drillZone) this.scene.remove(this.drillZone);
-    this.drillZone = null;
-    const z = this.drill.drill.target;
-    if (z) {
-      this.drillZone = new THREE.Mesh(new THREE.PlaneGeometry(z.x1 - z.x0, z.z1 - z.z0), new THREE.MeshBasicMaterial({ color: 0x4ade80, transparent: true, opacity: 0.28, depthWrite: false }));
-      this.drillZone.rotation.x = -Math.PI / 2;
-      this.drillZone.position.set((z.x0 + z.x1) / 2, TABLE.height + 0.002, (z.z0 + z.z1) / 2);
-      this.scene.add(this.drillZone);
-    }
+    this.showDrillZone(this.drill.drill.target ?? null);
     // Instructions stay up until the player says go — no ball until then.
     const d = this.drill.drill;
     const touch = matchMedia('(pointer: coarse)').matches;
@@ -1249,11 +1290,25 @@ export class Sandbox implements MenuHost {
     this.requestPlay();
   }
 
+  /** Light up a zone on the far half (a drill's target, or the called side); null clears it. */
+  private showDrillZone(z: TargetZone | null) {
+    if (this.drillZone) this.scene.remove(this.drillZone);
+    this.drillZone = null;
+    if (!z) return;
+    this.drillZone = new THREE.Mesh(new THREE.PlaneGeometry(z.x1 - z.x0, z.z1 - z.z0), new THREE.MeshBasicMaterial({ color: 0x4ade80, transparent: true, opacity: 0.28, depthWrite: false }));
+    this.drillZone.rotation.x = -Math.PI / 2;
+    this.drillZone.position.set((z.x0 + z.x1) / 2, TABLE.height + 0.002, (z.z0 + z.z1) / 2);
+    this.scene.add(this.drillZone);
+  }
+
   private drillRegister(result: NonNullable<ReturnReport['result']>, landing?: Vec3) {
     if (!this.drill) return;
     const r = this.lastReturn;
-    const ok = this.drill.register({ result, shot: r?.name ?? '-', top: r?.top ?? 0, speed: r?.speed ?? 0, landing: landing && { x: landing.x, z: landing.z } });
+    // The contact grade, if the ball was hit at all.
+    const grade = result === 'MISSED' ? undefined : this.player.lastContact?.grade;
+    const ok = this.drill.register({ result, shot: r?.name ?? '-', top: r?.top ?? 0, speed: r?.speed ?? 0, landing: landing && { x: landing.x, z: landing.z }, grade });
     if (ok) this.sfx.point(true);
+    if (ok && this.drill.combo >= 5 && this.drill.combo % 5 === 0) this.hud.toast(`🔥 Combo ×${this.drill.combo}`);
     if (this.drill.done) setTimeout(() => this.finishDrill(), 900);
   }
 
@@ -1261,16 +1316,24 @@ export class Sandbox implements MenuHost {
     if (!this.drill) return;
     const d = this.drill;
     const marks = d.log.map((ok) => (ok ? '✓' : '✗')).join('');
-    this.hud.setStatsText(`<b>${d.drill.name}</b> · ball ${Math.min(d.fed, d.drill.balls)}/${d.drill.balls} · ${d.successes} ✓ · goal: ${d.drill.goal} <span style="letter-spacing:1px">${marks}</span>`);
+    const call = d.ball?.call ? ` · <b>${d.ball.call === 'left' ? '◀ LEFT' : 'RIGHT ▶'}</b>` : '';
+    this.hud.setStatsText(`<b>${d.drill.name}</b> · ball ${Math.min(d.fed, d.drill.balls)}/${d.drill.balls} · ${d.successes} ✓ · <b>${d.score.toLocaleString()}</b> pts${d.combo > 1 ? ` · combo ×${d.combo}` : ''}${call} · goal: ${d.drill.goal} <span style="letter-spacing:1px">${marks}</span>`);
   }
 
   private finishDrill() {
     const d = this.drill;
     if (!d) return;
-    this.career.recordDrill(d.drill.id, d.stars, DRILLS.map((x) => x.id));
+    const prevBest = this.career.data.drillScores[d.drill.id] ?? 0;
+    this.career.recordDrill(d.drill.id, d.stars, DRILLS.map((x) => x.id), d.score);
     this.stopDrill();
-    this.openCareer();
-    this.careerScreen.drillResult(d);
+    if (document.pointerLockElement) document.exitPointerLock();
+    this.setPlaying(false);
+    const st = '★'.repeat(d.stars) + '☆'.repeat(3 - d.stars);
+    const rep = d.report();
+    const faults = [rep.early && `${rep.early} early`, rep.edge && `${rep.edge} off-centre`, rep.overhit && `${rep.overhit} over-hit`, rep.missed && `${rep.missed} missed`].filter(Boolean).join(', ');
+    this.menu.banner = `<b>${d.drill.name}</b>: ${d.successes}/${d.drill.balls} <span class="stars">${st}</span> · <b>${d.score.toLocaleString()}</b> pts${d.score > prevBest ? ' <b>(new best!)</b>' : ''} · best combo ×${d.bestCombo}${d.stars === 0 ? ` — need ${d.drill.stars[0]} for a star.` : ''}
+      <div class="menu-coach"><b>Coach:</b> ${rep.clean} clean contact${rep.clean === 1 ? '' : 's'}${faults ? ` · ${faults}` : ''}. ${rep.tip}</div>`;
+    this.menu.show('training');
   }
 
   /** The drill's instructions are up; the first ball waits for this. */
@@ -1293,12 +1356,17 @@ export class Sandbox implements MenuHost {
     this.hud.setStats(this.stats);
   }
 
+  /** Enter a World Tour stop. */
   startTournament(id: string) {
-    const t = TOURNAMENTS.find((x) => x.id === id);
-    if (!t || !tournamentUnlocked(t, this.career.data.tournaments, this.career.data.unlockAll)) return;
-    this.tournament = new TournamentRun(t);
-    this.careerScreen.run = this.tournament;
-    this.careerScreen.show('tournaments', `Entered the <b>${t.name}</b>. Win every round to take the trophy — one loss and you're out.`);
+    const i = TOUR_STOPS.findIndex((x) => x.id === id);
+    if (i < 0 || !stopUnlocked(i, this.career.data.tournaments, this.career.data.unlockAll)) return;
+    const stop = TOUR_STOPS[i];
+    this.tournament = new TourRun(stop);
+    this.openTour(
+      stop.format === 'knockout'
+        ? `Welcome to <b>${stop.place}</b>. Win every round of the ${stop.name} — one loss and you're out.`
+        : `Welcome to <b>${stop.place}</b>. Play everyone in your group once; finish in the top two to reach the final.`,
+    );
   }
 
   private playTournamentRound() {
@@ -1308,27 +1376,35 @@ export class Sandbox implements MenuHost {
     this.matchSettings.level = r.level;
     this.matchSettings.aiStyle = r.style;
     this.matchSettings.bestOf = r.bestOf;
-    this.setVenue(r.venue); // tournaments may use venues you haven't unlocked yet
+    this.setVenue(r.venue); // tour stops may use venues you haven't unlocked yet
     this.startMatch();
     this.tournament = keep; // startMatch clears ongoing modes; keep the run
-    this.hud.flash(r.name.toUpperCase(), `${STYLES[r.style].character} · ${AI_LEVELS[r.level].name} · best of ${r.bestOf}`);
+    this.hud.flash(r.label.toUpperCase(), `${STYLES[r.style].character} · ${AI_LEVELS[r.level].name} · best of ${r.bestOf}`);
   }
 
-  private reportTournamentMatch(won: boolean, score: string) {
+  private reportTournamentMatch(mine: number, theirs: number) {
     const run = this.tournament!;
-    const round = run.current!;
-    const state = run.report(won, score);
+    const played = run.current!;
+    const state = run.report(mine, theirs);
     if (document.pointerLockElement) document.exitPointerLock();
+    const stop = run.stop;
+    const score = `${mine}–${theirs}`;
     let banner: string;
     if (state === 'won') {
-      this.career.recordTournament(run.tournament.id, run.tournament.xp, run.tournament.achievement);
-      banner = `🏆 <b>You won the ${run.tournament.name}!</b> +${run.tournament.xp} XP`;
-    } else if (state === 'eliminated') banner = `Knocked out in ${round.name} (${score}). Enter again to have another go.`;
-    else banner = `✓ ${round.name} won ${score}. Next: <b>${run.current!.name}</b>.`;
+      this.career.recordTournament(stop.id, stop.xp, stop.achievement);
+      if (stopsWon(this.career.data.tournaments) === TOUR_STOPS.length) this.career.award('world-tour');
+      const i = TOUR_STOPS.indexOf(stop);
+      const next = TOUR_STOPS[i + 1];
+      banner = `🏆 <b>You won the ${stop.name}!</b> +${stop.xp} XP${next ? ` · Next stop: <b>${next.place}</b>` : ' · World Tour complete!'}`;
+    } else if (state === 'eliminated') {
+      banner = run.group && run.group.phase === 'eliminated' && !run.group.finalScore ? `Out in the group stage at ${stop.place}: you needed a top-two finish. Enter again to have another go.` : `Knocked out: ${played.label} (${score}). Enter again to have another go.`;
+    } else {
+      const next = run.current!;
+      const toFinal = run.group?.phase === 'final' && !played.label.startsWith('Final');
+      banner = `${mine > theirs ? '✓' : '✗'} ${played.label}: ${score}.${toFinal ? ' <b>Through to the final!</b>' : ''} Next: <b>${next.label}</b>.`;
+    }
     this.endMatch();
-    this.careerScreen.run = run;
-    this.openCareer();
-    this.careerScreen.show('tournaments', banner);
+    this.openTour(banner);
   }
 
   // ---------------------------------------------------------------- menu (title, settings, pause)
@@ -1342,7 +1418,7 @@ export class Sandbox implements MenuHost {
   /** A match from the menu (not a tournament round: that would abandon the run). */
   startAiMatch() {
     this.tournament = null;
-    this.careerScreen.run = null;
+    this.tourScreen.run = null;
     this.startMatch();
   }
 
@@ -1486,7 +1562,7 @@ export class Sandbox implements MenuHost {
       const sc = this.match.score;
       return {
         kind: this.tournament ? 'tournament' : 'match',
-        detail: `${this.tournament ? `${this.tournament.tournament.name} · ` : ''}vs ${this.ai.displayName} · <b>${sc.points.near}–${sc.points.far}</b> · games ${sc.games.near}–${sc.games.far}`,
+        detail: `${this.tournament ? `${this.tournament.stop.name} · ` : ''}vs ${this.ai.displayName} · <b>${sc.points.near}–${sc.points.far}</b> · games ${sc.games.near}–${sc.games.far}`,
       };
     }
     if (this.tutorial?.step) return { kind: 'tutorial', detail: `Tutorial · step ${this.tutorial.index + 1}: ${this.tutorial.step.title}` };
@@ -1497,7 +1573,7 @@ export class Sandbox implements MenuHost {
   /** Whenever nothing else is on screen and you're not playing, show the title or pause menu. */
   private syncMenu() {
     if (this.playing || this.menu.visible || this.inspecting || this.replay) return;
-    if (this.careerScreen.visible || this.howTo.visible || this.lobby.visible || this.matchHud.overVisible || this.coach.finishVisible) return;
+    if (this.careerScreen.visible || this.tourScreen.visible || this.howTo.visible || this.lobby.visible || this.matchHud.overVisible || this.coach.finishVisible) return;
     if (this.inSession()) this.menu.show('pause', this.pauseContext());
     else this.menu.show('title');
   }
@@ -1540,7 +1616,8 @@ export class Sandbox implements MenuHost {
     this.applyRealism();
   }
 
-  setStyle(id: StyleId) {
+  /** `announce`: flash the character banner (not when restoring the saved player at startup). */
+  setStyle(id: StyleId, announce = true) {
     if (this.lockReason('style', id)) return;
     this.realism.style = id;
     savePref('mem.style', id);
@@ -1550,7 +1627,7 @@ export class Sandbox implements MenuHost {
     this.rubberSel.backhand = this.player.rubbers.backhand.id;
     this.online?.setStyle(id);
     this.gui.controllersRecursive().forEach((c) => c.updateDisplay());
-    if (!this.menu?.visible) this.hud.flash(STYLES[id].character.toUpperCase(), `${STYLES[id].role !== STYLES[id].character ? STYLES[id].role + ' · ' : ''}${STYLES[id].label}: ${STYLES[id].description}`);
+    if (announce && !this.menu?.visible) this.hud.flash(STYLES[id].character.toUpperCase(), `${STYLES[id].role !== STYLES[id].character ? STYLES[id].role + ' · ' : ''}${STYLES[id].label}: ${STYLES[id].description}`);
   }
 
   setVolume(v: number) {
@@ -1714,14 +1791,31 @@ export class Sandbox implements MenuHost {
   }
 
   private resetMatchStats() {
-    this.mstats = { won: 0, played: 0, longest: 0, fastest: 0, aces: 0, perfect: 0 };
+    this.mstats = { won: 0, played: 0, longest: 0, fastest: 0, aces: 0, perfect: 0, clean: 0, strokes: 0 };
     this.lastPhase = '';
   }
 
   private noteMyShot(speed: number, serve: boolean) {
     if (!serve) this.mstats.fastest = Math.max(this.mstats.fastest, speed * 3.6);
-    if (!serve && this.player.lastContactPerfect) this.mstats.perfect++;
+    const g = !serve ? this.player.lastContact?.grade : undefined;
+    if (g) {
+      this.mstats.strokes++;
+      if (g === 'PERFECT') this.mstats.perfect++;
+      if (g === 'PERFECT' || g === 'GOOD') this.mstats.clean++;
+    }
   }
+
+  /** After your serve: how good it was (height over the net, length, spin), and its contact grade. */
+  private reportMyServe(ball: BallState) {
+    const r = serveReport(ball, this.params);
+    this.lastServe = r;
+    const g = this.player.lastContact?.grade;
+    const graded = g && g !== 'GOOD' ? ` <span class="toast-grade${g === 'PERFECT' ? ' gold' : ''}">${GRADE_TEXT[g].title}</span>` : '';
+    this.hud.toast(`🏓 Serve: <b>${r.text}</b>${graded}`);
+  }
+
+  /** The last serve you hit (for objectives and stats). */
+  lastServe: ServeReport | null = null;
 
   private notePoint(mine: boolean, hits: number, ace: boolean) {
     const m = this.mstats;
@@ -1738,9 +1832,12 @@ export class Sandbox implements MenuHost {
       ['Points won', `${m.won}/${m.played}${m.aces ? ` · ${m.aces} ace${m.aces > 1 ? 's' : ''}` : ''}`],
       ['Longest rally', `${m.longest} hits`],
       ['Fastest shot', m.fastest ? `${Math.round(m.fastest)} km/h` : '—'],
-      ['Perfect strokes', String(m.perfect)],
+      ['Clean contacts', m.strokes ? `${m.clean}/${m.strokes} · ${m.perfect} perfect` : '—'],
     ];
   }
+
+  /** Clean contacts in a row (any mode), for the Clean Code badge. */
+  private cleanStreak = 0;
 
   /** Arcade effects for a paddle hit (render coordinates). `mine` = the local player. */
   private fxHit(pos: Vec3, velOut: Vec3, spinOut: Vec3, mine: boolean, serve: boolean) {
@@ -1751,9 +1848,18 @@ export class Sandbox implements MenuHost {
     const kmh = length(velOut) * 3.6;
     if (this.look.arcadeFx && !serve && kmh >= 65) this.hud.speedPop(kmh, mine);
     if (this.look.arcadeFx && mine && !serve && kmh >= 45) this.matchHud.impact(Math.min(1, (kmh - 45) / 50));
+    // Contact grade: PERFECT (with the chime and sparks under arcade effects) or a mishit.
+    const g = mine && !serve ? this.player.lastContact?.grade : undefined;
+    if (g) {
+      this.cleanStreak = g === 'PERFECT' || g === 'GOOD' ? this.cleanStreak + 1 : 0;
+      if (this.cleanStreak >= 10) this.career.award('clean-code');
+    }
     if (perfect && this.look.arcadeFx) {
       this.sfx.perfect();
       this.hud.perfect();
+    } else if (g && g !== 'PERFECT' && g !== 'GOOD') {
+      this.hud.grade(GRADE_TEXT[g].title, 'bad');
+      this.sfx.mishit();
     }
   }
 
@@ -2051,6 +2157,7 @@ export class Sandbox implements MenuHost {
         this.rallyHits++;
         if (e.by === c.seat && !e.serve) this.career.recordShot(info.name, info.speed, info.rpm);
         if (e.by === c.seat) this.noteMyShot(info.speed, e.serve);
+        if (e.by === c.seat && e.serve) this.reportMyServe({ pos: mapVec(c.side, e.pos), vel: mapVec(c.side, e.velOut), spin: mapVec(c.side, e.spinOut) });
         this.ball.clearTrail();
         if (c.next === c.seat) this.stopReplay();
         break;
@@ -2297,7 +2404,7 @@ export class Sandbox implements MenuHost {
         // Waiting on the player to read the drill.
       } else if (this.phase === 'done' || this.phase === 'idle') {
         this.sinceResolved += realDt;
-        if (this.sinceResolved > 0.9) this.fire();
+        if (this.sinceResolved > (this.drill?.drill.feedDelay ?? 0.9)) this.fire();
       } else if (this.sinceFire > 6) {
         this.resolve();
       }
@@ -2467,7 +2574,7 @@ export class Sandbox implements MenuHost {
     const onMachine = () => this.updateMachineVisuals();
 
     gui.add({ play: () => this.requestPlay() }, 'play').name('▶ Play  (Esc to leave)');
-    gui.add({ career: () => this.openCareer() }, 'career').name('📈 Career, drills & tournaments');
+    gui.add({ career: () => this.openCareer() }, 'career').name('📈 Locker: stats & badges');
     gui.add({ help: () => this.howTo.show() }, 'help').name('❓ How to play');
 
     const rf = gui.addFolder('Realism');

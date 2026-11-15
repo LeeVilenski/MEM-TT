@@ -1,11 +1,12 @@
-import { RUBBERS, TABLE, length, lerp, normalize, scale, type BallState, type ContactAdjust, type PaddleCollider, type PaddlePose, type PhysicsParams, type Rubber, type Vec3 } from '../physics';
-import { makeAngleAssist, type ShotMode } from './assist';
+import { RUBBERS, TABLE, UP, length, lerp, normalize, scale, type BallState, type ContactAdjust, type PaddleCollider, type PaddlePose, type PhysicsParams, type Rubber, type Vec3 } from '../physics';
+import { makeAngleAssist, pitchRotator, rotate, type ShotMode } from './assist';
+import { NO_GRADING, gradeContact, type ContactResult, type GradeParams } from './contact';
 import { realismSettings } from './realism';
 import { STYLES, type PlayStyle, type StyleId } from './styles';
 import { DEFAULT_SWING } from './swing';
 import { REACH, SwingController, type StrokeSide, type SwingInput } from './swing';
 import type { IncomingPrediction, PathPoint } from './intercept';
-import { serveContact, type ServeType } from './serves';
+import { serveContact, tossEffect, type ServeType } from './serves';
 import { landingOutcome } from './assist';
 import { faceNormal } from './swing';
 
@@ -81,8 +82,6 @@ const EARLY_STROKE_SPEED = 3.2;
 /** …and the bat must be this close to the ball's line (m, beyond the magnet radius). */
 const EARLY_SLACK = 0.05;
 
-/** A stroke whose peak is this close (s) before contact is perfectly timed. */
-export const PERFECT_WINDOW = 0.05;
 /** How far the bat can go sideways in the world. */
 const BAT_LIMIT = TABLE.width / 2 + 1.1;
 
@@ -163,6 +162,53 @@ export class Player {
     this.perfectBonus = r.perfectBonus;
     this.swing.params.strokeHold = r.strokeHold;
     this.swing.params.autoFace = r.autoFace;
+    this.grading = r.grading;
+  }
+
+  /** Contact grading windows (set by the realism slider; off until then). */
+  grading: GradeParams = NO_GRADING;
+  /** The last paddle contact's grade (read on the paddle event), rally shots and serves. */
+  lastContact: ContactResult | null = null;
+  /** Height of the current serve's toss (m above the hand; set by the game). */
+  tossHeight = 0.4;
+  /** Multiplier on the angle assist for the contact being made (from its grade). */
+  private assistScale = 1;
+  /** Recent cursor positions (world x, height; before the magnet), for the sweet-spot check. */
+  private path: { t: number; x: number; y: number }[] = [];
+  private clock = 0;
+
+  /** Closest the cursor's recent path (since `since`) came to a point (x, y), metres. */
+  private pathMiss(x: number, y: number, since: number): number {
+    const pts = this.path.filter((p) => p.t >= since);
+    const last = this.path[this.path.length - 1];
+    if (pts.length === 0) return last ? Math.hypot(last.x - x, last.y - y) : 0;
+    let best = Math.hypot(pts[0].x - x, pts[0].y - y);
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1];
+      const b = pts[i];
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const len2 = dx * dx + dy * dy;
+      const t = len2 > 0 ? clamp(((x - a.x) * dx + (y - a.y) * dy) / len2, 0, 1) : 0;
+      best = Math.min(best, Math.hypot(a.x + dx * t - x, a.y + dy * t - y));
+    }
+    return best;
+  }
+
+  /** Grade a contact with the ball at `ball` (a serve's windows depend on the toss). */
+  private grade(ball: Vec3, serve = false): ContactResult {
+    const sw = this.swing;
+    const age = sw.strokePeakAge;
+    let gp = this.grading;
+    if (serve) {
+      const w = tossEffect(this.tossHeight).window;
+      // The serve magnet reaches further than the rally one (SERVE_REACH), so does the sweet spot.
+      gp = { ...gp, perfectWindow: gp.perfectWindow * w, goodWindow: gp.goodWindow * w, sweet: gp.sweet + 0.05, edge: gp.edge + SERVE_REACH };
+    }
+    const live = age <= gp.strokeHold;
+    // The swipe's path through the hitting plane: the flick itself plus a moment before it.
+    const since = live ? this.clock - (age + sw.flickLength + 0.06) : this.clock;
+    return gradeContact({ peakAge: live ? age : Infinity, miss: this.pathMiss(ball.x, ball.y, since), speed: sw.flickSpeed }, gp);
   }
 
   constructor(
@@ -170,7 +216,7 @@ export class Player {
     private params: PhysicsParams,
   ) {
     this.id = id;
-    this.angleAssist = makeAngleAssist(params, () => this.assists.angle, () => this.shotMode, () => this.aimTarget, () => this.doubles);
+    this.angleAssist = makeAngleAssist(params, () => this.assists.angle * this.assistScale, () => this.shotMode, () => this.aimTarget, () => this.doubles);
     this.swing.reset(FOREHAND_OFFSET, TABLE.height + 0.25, this.restZ, this.body.x);
   }
 
@@ -332,6 +378,9 @@ export class Player {
 
     this.swing.serving = this.shotMode === 'serve';
     this.swing.update(dt, input, this.body, this.contactZ(), this.aimFor(aim));
+    this.clock += dt;
+    this.path.push({ t: this.clock, x: this.body.x + this.swing.x, y: this.swing.y });
+    while (this.path.length > 2 && this.path[0].t < this.clock - 0.4) this.path.shift();
     this.tryEarly();
     if (this.shotMode === 'serve') this.serveMagnet();
     // Taken early: the bat goes to the ball's depth now.
@@ -368,25 +417,54 @@ export class Player {
     }
   }
 
-  /** At contact: perfect-timing check (and its bonus), then the contact assist. */
+  /** At contact: grade the stroke, then the contact assist, then the grade's execution error. */
   private contact(ball: BallState, pose: PaddlePose, normal: Vec3, rubber: Rubber): Vec3 | ContactAdjust {
-    const perfect = this.shotMode === 'rally' && this.swing.strokePeakAge <= PERFECT_WINDOW;
-    this.lastContactPerfect = perfect;
+    const rally = this.shotMode === 'rally';
+    const g = this.grade(ball.pos, !rally);
+    this.lastContact = g;
+    const perfect = g.grade === 'PERFECT';
+    this.lastContactPerfect = rally && perfect;
     this.lastContactSmash = false;
-    if (this.shotMode === 'rally' && this.smashHeld) {
-      const smash = this.smashContact(ball, pose, rubber);
+    if (rally && this.smashHeld) {
+      const smash = this.smashContact(ball, pose, rubber, g.q);
       if (smash) {
         this.lastContactSmash = true;
         return smash;
       }
     }
-    if (this.shotMode === 'serve' && this.serveType !== 'auto') {
-      const adj = serveContact(this.serveType, ball, pose, rubber, this.params, this.assists.angle, false, this.doubles);
-      if (adj) return adj;
+    if (!rally && this.serveType !== 'auto') {
+      // A chosen serve: a poorly struck one gets less help finding a version that lands,
+      // keeps less of its spin, and strays a little after; a high toss adds a little spin.
+      const power = tossEffect(this.tossHeight).power * g.paceScale;
+      const swing = { ...pose, vel: scale(pose.vel, power) };
+      const adj = serveContact(this.serveType, ball, swing, rubber, this.params, this.assists.angle * g.assistScale, false, this.doubles);
+      if (adj) return this.withError(adj, g.faceError * 0.6);
     }
-    if (!perfect || this.perfectBonus <= 0) return this.angleAssist(ball, pose, normal, rubber);
-    const faster = { ...pose, vel: scale(pose.vel, 1 + this.perfectBonus) };
-    return withVel(this.angleAssist(ball, faster, normal, rubber), faster.vel);
+    // A clean contact keeps the full assist; a poor one is rescued less often, loses pace
+    // (mistimed or off-centre), and the face goes a little astray after the assist.
+    const pace = g.paceScale * (rally && perfect ? 1 + this.perfectBonus : 1);
+    const hit = pace !== 1 ? { ...pose, vel: scale(pose.vel, pace) } : pose;
+    this.assistScale = g.assistScale;
+    let r: Vec3 | ContactAdjust;
+    try {
+      r = this.angleAssist(ball, hit, normal, rubber);
+    } finally {
+      this.assistScale = 1;
+    }
+    if (g.faceError <= 0 && pace === 1) return r;
+    return this.withError(withVel(r, hit.vel), g.faceError);
+  }
+
+  /** Execution error on the face (degrees, standard deviation; sideways error is smaller). */
+  private withError(adj: ContactAdjust, sd: number): ContactAdjust {
+    if (sd <= 0) return adj;
+    let n = pitchRotator(adj.normal)?.(this.gauss() * sd) ?? adj.normal;
+    n = rotate(n, UP, (this.gauss() * sd * 0.6 * Math.PI) / 180);
+    return { normal: normalize(n), vel: adj.vel };
+  }
+
+  private gauss() {
+    return Math.sqrt(-2 * Math.log(Math.max(1e-9, this.rng()))) * Math.cos(2 * Math.PI * this.rng());
   }
 
   /**
@@ -394,7 +472,7 @@ export class Player {
    * an execution error is added that grows as the ball gets lower: a high ball is a near-certain
    * kill, a low one a gamble. Arcade realism (the angle assist) halves the error.
    */
-  private smashContact(ball: BallState, pose: PaddlePose, rubber: Rubber): ContactAdjust | null {
+  private smashContact(ball: BallState, pose: PaddlePose, rubber: Rubber, contactQ = 1): ContactAdjust | null {
     const q = smashQuality(ball.pos.y - TABLE.height);
     const full = (SMASH_SPEED.low + (SMASH_SPEED.high - SMASH_SPEED.low) * q) * this.style.power;
     const target = this.aimTarget ?? { x: 0, z: -0.9 };
@@ -435,8 +513,9 @@ export class Player {
     // Execution error, relative to how much room there is: on a sitter a small fraction of the
     // window (almost always in), on a low ball more than the whole window (a gamble).
     const frac = SMASH_ERROR.high + (SMASH_ERROR.low - SMASH_ERROR.high) * (1 - q);
-    const err = Math.max(window, 1.5) * 0.5 * frac * (1 - 0.3 * this.assists.angle);
-    const g = Math.sqrt(-2 * Math.log(Math.max(1e-9, this.rng()))) * Math.cos(2 * Math.PI * this.rng());
+    // A poorly struck smash (mistimed, off-centre, over-hit) sprays more.
+    const err = Math.max(window, 1.5) * 0.5 * frac * (1 - 0.3 * this.assists.angle) * (1 + 1.5 * this.grading.impact * (1 - contactQ));
+    const g = this.gauss();
     const n = faceNormal(pitch + g * err, yaw);
     return { normal: n, vel: scale(faceNormal(pitch, yaw), speed) };
   }

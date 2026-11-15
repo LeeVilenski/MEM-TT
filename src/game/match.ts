@@ -269,7 +269,7 @@ export class Match {
       const state: BallState = { pos: e.pos, vel: e.velOut, spin: e.spinOut };
       const now = this.rallyStart + e.time;
       const c = this.sides[to];
-      if (c.kind === 'ai') c.ai.planReturn(state, now);
+      if (c.kind === 'ai') c.ai.planReturn(state, now, { serve: isServe });
       else this.incoming[to] = new IncomingPrediction(state, this.params, now);
       const hc = this.sides[ctx.hitter!];
       if (hc.kind === 'human') hc.player.shotMode = 'rally';

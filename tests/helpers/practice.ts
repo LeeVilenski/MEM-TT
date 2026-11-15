@@ -18,7 +18,7 @@ const AIM = { x: 0, z: -0.85 };
  * @param opts.basePitch face angle to hold (default: −10° vs backspin, −30° vs topspin)
  * @param opts.setup adjust the player before the ball (e.g. realism)
  */
-export function playBall(presetName: string, angleAssist: number, flickLead = 2 / FPS, flickPx = 60, opts: { basePitch?: number; setup?: (p: Player) => void; smash?: boolean } = {}) {
+export function playBall(presetName: string, angleAssist: number, flickLead = 2 / FPS, flickPx = 60, opts: { basePitch?: number; setup?: (p: Player) => void; smash?: boolean; /** Line the cursor up this far (m, vertically) off the ring. */ offset?: number } = {}) {
   const P = DEFAULT_PARAMS;
   const pr = PRESETS.find((p) => p.name === presetName)!;
   const origin = v3(pr.lateral, TABLE.height + pr.height, -TABLE.halfLength - pr.distanceBack);
@@ -59,7 +59,7 @@ export function playBall(presetName: string, angleAssist: number, flickLead = 2 
         const clamp = (v: number) => Math.max(-maxStep, Math.min(maxStep, v));
         // Steer the cursor (the bat, before the magnet) onto the ring.
         input.dx = clamp((ic.pos.x - player.batX) / sens);
-        input.dy = clamp(-(ic.pos.y - player.swing.y) / sens);
+        input.dy = clamp(-(ic.pos.y + (opts.offset ?? 0) - player.swing.y) / sens);
       }
     } else if (flick > 0) {
       input.dy = -flickPx;

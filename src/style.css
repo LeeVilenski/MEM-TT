@@ -207,6 +207,11 @@ kbd {
   opacity: 0;
   z-index: 6;
 }
+.hud-perfect[data-tone='bad'] {
+  color: #ff7a6b;
+  font-size: 16px;
+  text-shadow: 0 0 10px rgba(255, 80, 60, 0.6), 0 2px 6px rgba(0, 0, 0, 0.6);
+}
 .hud-perfect.show {
   animation: perfect-pop 0.7s ease-out;
 }
@@ -474,7 +479,16 @@ kbd {
   pointer-events: none;
 }
 
+.mhud-meter::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--illegal, 10%);
+  background: rgba(255, 90, 70, 0.55);
+  z-index: 1;
+}
 .mhud-meter-fill {
+  position: relative;
   height: 100%;
   width: 0;
   background: linear-gradient(90deg, #4ade80, #facc15, #2f7cf6);
@@ -1508,6 +1522,7 @@ body.menu-open .mhud-meter {
 
 .menu[data-screen='vsai'] .menu-card,
 .menu[data-screen='online'] .menu-card,
+.menu[data-screen='training'] .menu-card,
 .menu[data-screen='settings'] .menu-card {
   width: 640px;
 }
@@ -3289,6 +3304,7 @@ body {
 .menu-card:has(> .menu-head) { border-top: 10px solid var(--c-orange); }
 .menu[data-screen='settings'] .menu-card { border-top-color: var(--c-green); }
 .menu[data-screen='online'] .menu-card { border-top-color: var(--c-purple); }
+.menu[data-screen='training'] .menu-card { border-top-color: var(--c-green); }
 .menu[data-screen='characters'] .menu-card { border-top-color: var(--c-yellow); }
 .menu-actions .primary { background: var(--c-orange) !important; }
 
@@ -3473,4 +3489,169 @@ body {
 @media (min-width: 820px) and (orientation: landscape) and (max-height: 640px) {
   .menu[data-screen='title'] .menu-card { gap: 10px; }
   .menu[data-screen='title'] .menu-title { font-size: 48px; }
+}
+
+.toast-grade {
+  margin-left: 6px;
+  font-family: var(--mono);
+  font-weight: 800;
+  font-size: 0.85em;
+  color: #ff7a6b;
+}
+.toast-grade.gold {
+  color: #ffc83d;
+}
+
+/* ---------------------------------------------------------------- Training screen */
+.menu-banner {
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(47, 124, 246, 0.15);
+  border: 1px solid rgba(47, 124, 246, 0.4);
+  font-size: 14px;
+}
+.menu-drills {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.menu-drill {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 52px;
+  padding: 8px 12px;
+  text-align: left;
+  background: rgba(22, 33, 52, 0.95);
+  border: 2px solid #26354d;
+  border-radius: 9px;
+}
+.menu-drill:hover,
+.menu-drill:focus-visible {
+  border-color: #3d5683;
+}
+.menu-drill.locked {
+  opacity: 0.55;
+  cursor: not-allowed !important;
+}
+.menu-drill.shake {
+  animation: menu-shake 0.3s;
+}
+.md-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.md-main small,
+.md-side small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+.md-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------- World Tour */
+.tr-route {
+  display: flex;
+  flex-direction: column;
+}
+.tr-num {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #172338;
+  border: 2px solid #26354d;
+  font-weight: 800;
+}
+.tr-stop.won .tr-num {
+  border-color: #facc15;
+}
+.tr-stop.here .tr-num {
+  border-color: var(--accent);
+  background: rgba(47, 124, 246, 0.25);
+}
+.tr-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-top: 6px;
+}
+.tr-table th {
+  color: var(--muted);
+  font-weight: 600;
+  text-align: left;
+  padding: 4px 6px;
+}
+.tr-table td {
+  padding: 5px 6px;
+  border-top: 1px solid #26354d;
+}
+.tr-table td small {
+  color: var(--muted);
+}
+.tr-table tr.top td:first-child {
+  color: #4ade80;
+  font-weight: 800;
+}
+.tr-table tr.you td {
+  color: #fff;
+  font-weight: 700;
+}
+.tr-note {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 6px 0;
+}
+.tr-results {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.tr-results b {
+  color: var(--text);
+}
+@media (max-width: 560px) {
+  .tr-num {
+    width: 28px;
+    height: 28px;
+  }
+  .tr-table {
+    font-size: 12px;
+  }
+}
+
+.md-cat {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.md-cat:first-child {
+  margin-top: 0;
+}
+.menu-coach {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.menu-coach b {
+  color: var(--text);
 }

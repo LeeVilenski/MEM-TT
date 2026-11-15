@@ -40,6 +40,8 @@ export interface ProfileData {
   achievements: string[];
   /** Best stars per drill id. */
   drills: Record<string, number>;
+  /** Best score per drill id. */
+  drillScores: Record<string, number>;
   /** Tournament ids won (and how many times). */
   tournaments: Record<string, number>;
   unlockAll: boolean;
@@ -64,6 +66,9 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'drills', name: 'Continuous Integration', description: 'Earn 3 stars on every drill', xp: 200 },
   { id: 'cup', name: 'Promotion Packet', description: 'Win the Department Cup', xp: 0 },
   { id: 'championship', name: 'IPO', description: 'Win the Company Championship', xp: 0 },
+  { id: 'world-tour', name: 'Global Rollout', description: 'Win every stop of the World Tour', xp: 300 },
+  { id: 'clean-code', name: 'Clean Code', description: '10 clean contacts in a row', xp: 40 },
+  { id: 'social-engineering', name: 'Social Engineering', description: 'Win a point with a serve the AI misread', xp: 40 },
 ];
 
 export interface Storage {
@@ -112,6 +117,7 @@ function fresh(): ProfileData {
     },
     achievements: [],
     drills: {},
+    drillScores: {},
     tournaments: {},
     unlockAll: false,
   };
@@ -260,7 +266,8 @@ export class Career {
   }
 
   /** A drill finished with `stars` (0–3). XP only for improving your best. */
-  recordDrill(id: string, stars: number, allDrillIds: string[]) {
+  recordDrill(id: string, stars: number, allDrillIds: string[], score = 0) {
+    if (score > (this.data.drillScores[id] ?? 0)) this.data.drillScores[id] = score;
     const prev = this.data.drills[id] ?? 0;
     if (stars > prev) {
       this.data.drills[id] = stars;

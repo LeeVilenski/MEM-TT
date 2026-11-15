@@ -149,6 +149,24 @@ export class Sfx {
     src.start(t, Math.random() * 0.5, dur + 0.02);
   }
 
+  /** A dull, woody "thock" for a mishit (mistimed, off-centre or over-hit stroke). */
+  mishit() {
+    const ctx = this.ready();
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    const o = ctx.createOscillator();
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(240, t);
+    o.frequency.exponentialRampToValueAtTime(110, t + 0.12);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.14, t + 0.005);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+    o.connect(g).connect(this.master!);
+    o.start(t);
+    o.stop(t + 0.18);
+  }
+
   /** A bright two-note chime for a perfectly timed stroke. */
   perfect() {
     const ctx = this.ready();

@@ -1,16 +1,13 @@
 import { ACHIEVEMENTS, CAREER_LEVELS, type Career } from '../progress/profile';
-import { DRILLS, drillUnlocked, type DrillSession } from '../progress/drills';
-import { TOURNAMENTS, tournamentUnlocked, type TournamentRun } from '../progress/tournament';
 import { UNLOCKS } from '../progress/unlocks';
 import { STYLES } from '../game/styles';
 import { AI_LEVELS } from '../game/ai';
 import { VENUES } from '../render/venues';
 import { RUBBERS } from '../physics';
 
-type Tab = 'stats' | 'drills' | 'tournaments' | 'unlocks';
+type Tab = 'stats' | 'unlocks';
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
-const stars = (n: number) => `<span class="stars">${'★'.repeat(n)}<span class="off">${'★'.repeat(3 - n)}</span></span>`;
 
 function unlockName(kind: string, id: string) {
   if (kind === 'venue') return `Venue: ${VENUES[id as keyof typeof VENUES]?.name ?? id}`;
@@ -18,17 +15,12 @@ function unlockName(kind: string, id: string) {
   return `Rubber: ${RUBBERS[id]?.name ?? id} (${RUBBERS[id]?.kind ?? ''})`;
 }
 
-/** Career screen: profile, stats, drills, tournaments, unlocks and achievements. */
+/** The Locker: career level, lifetime stats, unlocks and achievements. */
 export class CareerScreen {
   private el: HTMLDivElement;
   tab: Tab = 'stats';
   /** A message shown at the top (e.g. drill or tournament result). */
   banner = '';
-  run: TournamentRun | null = null;
-  onStartDrill: (id: string) => void = () => {};
-  onStartTournament: (id: string) => void = () => {};
-  onPlayRound: () => void = () => {};
-  onAbandonTournament: () => void = () => {};
   onClose: () => void = () => {};
 
   constructor(
@@ -57,11 +49,6 @@ export class CareerScreen {
     this.el.style.display = 'none';
   }
 
-  drillResult(session: DrillSession) {
-    const d = session.drill;
-    this.show('drills', `<b>${esc(d.name)}</b>: ${session.successes}/${d.balls} ${stars(session.stars)}${session.stars === 0 ? ' — need ' + d.stars[0] + ' for a star. Try again!' : ''}`);
-  }
-
   render() {
     const c = this.career;
     const p = c.data;
@@ -70,9 +57,7 @@ export class CareerScreen {
     const next = CAREER_LEVELS[lvl + 1];
     const tabs: [Tab, string][] = [
       ['stats', 'Stats'],
-      ['drills', 'Training drills'],
-      ['tournaments', 'Tournaments'],
-      ['unlocks', 'Unlocks & badges'],
+      ['unlocks', 'Badges & unlocks'],
     ];
     let body = '';
     if (this.tab === 'stats') {
@@ -95,40 +80,6 @@ export class CareerScreen {
         ${row('AI beaten', Object.entries(s.aiWins).map(([k, v]) => `${AI_LEVELS[k as keyof typeof AI_LEVELS]?.name ?? k} ×${v}`).join(', ') || '—')}
         ${row('Favourite shots', fav || '—')}</div>
       </div>`;
-    } else if (this.tab === 'drills') {
-      body = DRILLS.map((d, i) => {
-        const open = drillUnlocked(i, p.drills, p.unlockAll);
-        const best = p.drills[d.id] ?? 0;
-        return `<div class="cs-item${open ? '' : ' locked'}">
-          <div class="cs-item-main"><div class="cs-item-title">${open ? '' : '🔒 '}${esc(d.name)} ${stars(best)}</div>
-          <div class="cs-item-sub">${esc(d.description)} <i>Stars at ${d.stars.join(' / ')} of ${d.balls}.</i></div></div>
-          ${open ? `<button data-a="drill" data-id="${d.id}">${best ? 'Retry' : 'Start'}</button>` : '<span class="cs-lock">Earn a star in the previous drill</span>'}
-        </div>`;
-      }).join('');
-    } else if (this.tab === 'tournaments') {
-      const run = this.run;
-      const bracket = run
-        ? `<div class="cs-bracket"><div class="cs-item-title">${esc(run.tournament.name)} — ${run.state === 'playing' ? 'in progress' : run.state === 'won' ? '🏆 WON' : 'eliminated'}</div>
-           ${run.tournament.rounds
-             .map((r, i) => {
-               const res = run.results[i];
-               const status = res ? (i < run.round || run.state === 'won' ? `✓ ${res}` : `✗ ${res}`) : i === run.round && run.state === 'playing' ? '▶ next' : '';
-               return `<div class="cs-round${i === run.round && run.state === 'playing' ? ' next' : ''}"><span>${esc(r.name)}</span><span class="cs-opp">${STYLES[r.style].character} · ${AI_LEVELS[r.level].name} · best of ${r.bestOf}</span><b>${status}</b></div>`;
-             })
-             .join('')}
-           <div class="cs-actions">${run.state === 'playing' ? `<button data-a="round">Play ${esc(run.current!.name)}</button><button data-a="abandon" class="secondary">Abandon</button>` : '<button data-a="abandon" class="secondary">Close bracket</button>'}</div></div>`
-        : '';
-      body =
-        bracket +
-        TOURNAMENTS.map((t) => {
-          const open = tournamentUnlocked(t, p.tournaments, p.unlockAll);
-          const wins = p.tournaments[t.id] ?? 0;
-          return `<div class="cs-item${open ? '' : ' locked'}">
-            <div class="cs-item-main"><div class="cs-item-title">${open ? '' : '🔒 '}${esc(t.name)} ${wins ? `🏆×${wins}` : ''}</div>
-            <div class="cs-item-sub">${esc(t.description)} Prize: ${t.xp} XP.</div></div>
-            ${open ? (run && run.state === 'playing' ? '' : `<button data-a="tournament" data-id="${t.id}">Enter</button>`) : '<span class="cs-lock">Win the Department Cup first</span>'}
-          </div>`;
-        }).join('');
     } else {
       const unl = UNLOCKS.map((u) => {
         const ok = p.unlockAll || u.test(p, lvl);
@@ -143,7 +94,7 @@ export class CareerScreen {
 
     this.el.innerHTML = `<div class="career-card">
       <div class="cs-head">
-        <div><div class="cs-sub">Career level</div><div class="cs-title">${esc(c.title)}</div></div>
+        <div><div class="cs-sub">Locker · career level</div><div class="cs-title">${esc(c.title)}</div></div>
         <div class="cs-xp"><div class="cs-sub">${p.xp.toLocaleString()} XP${next ? ` · ${next.xp - p.xp} to ${next.title}` : ' · top of the org chart'}</div><div class="cs-bar"><div style="width:${Math.round(c.levelProgress * 100)}%"></div></div></div>
         <button data-a="close" class="cs-close" aria-label="Close">✕</button>
       </div>
@@ -167,14 +118,6 @@ export class CareerScreen {
     switch (a.a) {
       case 'close':
         return this.onClose();
-      case 'drill':
-        return this.onStartDrill(a.id!);
-      case 'tournament':
-        return this.onStartTournament(a.id!);
-      case 'round':
-        return this.onPlayRound();
-      case 'abandon':
-        return this.onAbandonTournament();
       case 'unlockall':
         this.career.setUnlockAll((t as HTMLInputElement).checked);
         return this.render();

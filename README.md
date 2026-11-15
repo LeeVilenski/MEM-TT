@@ -1,3 +1,19 @@
+**Training drills** (title screen → **Training**): ball-machine sessions with a goal, grouped by category. Successes give 1–3 stars; each successful ball also scores points (+50 for a PERFECT contact, +20 for GOOD), with a combo multiplier for a run of successes. Your best score is kept. After each drill a **coach report** counts your clean, early, off-centre and over-hit contacts and gives one tip.
+
+| Category | Drill | Goal |
+|---|---|---|
+| Fundamentals | Onboarding · Push back · Open up against backspin · The Firewall · On-call defence | Keep it on, backspin, topspin, block loops, chop loops |
+| Placement | Ship it to the corner | Land in a marked target zone |
+| Placement | Call your shot | A side is called before each ball (and lit up): land it there |
+| Footwork | Falkenberg | Backhand corner, backhand corner, wide forehand, repeat |
+| Footwork | Random corners | Wide balls to either corner at random |
+| Reading spin | Chop or float? | Heavy chops and no-spin floats that look the same |
+| Reading spin | Sidespin and gyro | Hook loops, corkscrews and banana flicks |
+| Consistency | On-call shift | 25 balls, multi-ball pace |
+| Timing | Timing trainer | Only clean (GOOD or PERFECT) contacts count |
+
+The fundamentals unlock in order; each other category opens with a star in Onboarding, then unlocks in order.
+
 # MEM Table Tennis
 
 A 3D browser table tennis game for 1–4 players, built around spin, pace and a full range of shots. See [PLAN.md](PLAN.md) for the full design and milestones.
@@ -6,7 +22,7 @@ A 3D browser table tennis game for 1–4 players, built around spin, pace and a 
 
 ### Menus
 
-The game opens on a **title screen** over a slowly orbiting view of the venue: **Quick match**, **Match vs AI** (opponent level, character and format), **Practice**, **Career**, **Online** (create or join a room), **How to play** and **Settings** (difficulty, your character, venue, sound, effects, graphics quality). Locked characters and venues show what unlocks them.
+The game opens on a **title screen** over a slowly orbiting view of the venue: **Quick match**, **Match vs AI** (opponent level, character and format), **World Tour**, **Training** (drills, the ball machine and the tutorial), **Online** (create or join a room), then **Locker** (stats, badges, unlocks), **Controls** and **Settings** (difficulty, your character, venue, sound, effects, graphics quality). Locked characters and venues show what unlocks them.
 
 **Esc** (or **☰** on touch) during play opens the **pause menu**: Resume, Restart, How to play, Settings, Quit to title. Menus work with the mouse, touch, Tab or the arrow keys, and Esc goes back.
 
@@ -20,7 +36,7 @@ The game opens on a **title screen** over a slowly orbiting view of the venue: *
 
 The old tuning panel is now **Developer tools**: off by default, toggled with <kbd>`</kbd> or **Settings → Advanced**. With it on, the menus also offer a free camera (the inspect view with the ball-machine controls below).
 
-Open **📈 Career, drills & tournaments**, from the start screen or the top of the panel. **❓ How to play** explains each shot; it also opens automatically the first time you play. Progress is saved in your browser; there are no accounts.
+Progression lives in three places on the title screen: **World Tour** (the career), **Training** (drills) and the **Locker** (stats, badges and unlocks). **❓ How to play** explains each shot; it also opens automatically the first time you play. Progress is saved in your browser; there are no accounts.
 
 **Career and stats**
 - **XP** comes from points, matches (more against Hard and Expert AI, and online), practice returns, drills, tournaments and achievements.
@@ -38,17 +54,27 @@ Open **📈 Career, drills & tournaments**, from the start screen or the top of 
 | Ship it to the corner | Land in a marked target zone |
 | On-call defence | Chop loops back |
 
-**Tournaments:** knockout ladders; one loss and you're out.
-- **Department Cup:** four rounds (IT Support, Security, Infrastructure, then a best-of-3 final against the Platform Team).
-- **Company Championship:** unlocks after the Cup. Hard opponents, ending in a best-of-5 final against an Expert CTO on the rooftop.
+**World Tour** (`src/progress/tour.ts`): a route of seven stops, each at its own venue. Win a stop to travel on to the next.
+- **Knockouts:** lose once and you're out.
+- **Round-robin groups:** you and three opponents each play everyone once (the matches you aren't in are simulated by level); the top two meet in a final.
+
+| # | Stop | Venue | Event |
+|---|---|---|---|
+| 1 | MEM HQ: Department Cup | MEM | Knockout, final best of 3 |
+| 2 | Sprint League | Open-plan office | Group, final best of 3 |
+| 3 | Data Centre Knockout | Server room | Knockout, final best of 3 |
+| 4 | Park Open | **City Park** (new, outdoors) | Group, final best of 3 |
+| 5 | Boardroom Showdown | Conference room | Knockout, all best of 3 |
+| 6 | Beach Classic | **Offsite beach** (new, outdoors) | Group best of 3, final best of 5 |
+| 7 | Company Championship | Rooftop | Knockout, final best of 5 vs an Expert CTO |
 
 **Unlocks**
-- **Venues:** Server room (Junior), Conference room (Mid-level), Rooftop (win the Cup).
-- **Styles:** Lee, Ryan, Ed and Will from the start; the Sysadmin appears only as a tournament opponent.
+- **Venues:** Server room (Junior), Conference room (Mid-level), Rooftop (win the Cup), City Park (win the Data Centre Knockout), Offsite beach (win the Boardroom Showdown). Tour stops are always played at their own venue.
+- **Styles:** Lee, Ryan, Ed and Will from the start; the Sysadmin appears only as a tournament opponent (including World Tour stops).
 - **Rubbers:** Hotfix (Junior), Legacy Code (On-call defence), Air Gap (win the Championship).
 - **Unlock everything** (Unlocks tab) switches gating off for free play. Online lobbies aren't gated.
 
-**Achievements:** 11 badges, including Hello World (first win), Zero-day (ace), Marathon Standup (15-hit rally), Low Latency (90 km/h shot), Spin Doctor (7,000 rpm), Skip-level (beat a Hard or Expert AI), Full Stack (win with every style) and IPO (win the Championship).
+**Achievements:** 14 badges, including Global Rollout (win every World Tour stop), Clean Code (10 clean contacts in a row), Social Engineering (win a point off a serve the AI misread), Hello World (first win), Zero-day (ace), Marathon Standup (15-hit rally), Low Latency (90 km/h shot), Spin Doctor (7,000 rpm), Skip-level (beat a Hard or Expert AI), Full Stack (win with every style) and IPO (win the Championship).
 
 ### Milestone 7 — mobile
 
@@ -258,6 +284,10 @@ Play against the ball machine with a mouse-driven paddle. Click **▶ Play**: th
 - The type sets the face angle and the brush; the swipe's speed sets the spin (a hard backspin serve is nearly 5,000 rpm), and for sidespin its direction sets the curve. The assist finds a version that lands without taking the spin out.
 - While you swing, the bat meets the falling ball (a serve magnet); without a swing it holds back, so the ball doesn't just drop onto a still bat.
 - Free serves keep their spin too: the assist only trims the pace into the face, not the brush across it.
+- **Serves can go wrong:** serves are graded like rally shots (below). A mistimed or off-centre serve gets less help landing, keeps less spin and can fault.
+- **The toss is a skill:** the red start of the toss meter is an illegal toss (a quick tap, under 16 cm). A higher toss allows a little more spin, but the ball drops faster, so the timing window is tighter.
+- **Serve report:** after each serve a toast rates it, e.g. *Low · Short · 3,800 rpm backspin*. Low, short and spinny is hard to attack; a high serve invites a kill.
+- **The AI has to read your serve:** it sees where the ball goes but judges its spin with error (Easy badly, Expert well). Misjudged backspin goes into the net or pops up, and a no-spin serve can look like backspin. Repeating the same kind of serve in a match lets it read that serve better, so mix them up. Rally balls are read exactly.
 
 **Where you meet the ball:**
 - The ring shows the normal contact point: where the ball reaches your usual distance from the table. It's never below table level: if a ball would drop that low first (a short ball, or a long low one), you take it at the top of its bounce and the footwork assist steps you in.
@@ -268,7 +298,20 @@ Play against the ball machine with a mouse-driven paddle. Click **▶ Play**: th
 - **Visuals:** a glowing comet tail coloured by spin, sparks at contact, and puffs on hard bounces.
 - **Sound:** heavier hit sounds on hard shots, and colleagues who applaud long rallies, groan at errors and cheer the match.
 - **Finale:** the match-winning rally replays in slow motion.
-- **Perfect timing:** the cyan ring shrinks onto the ball and turns gold just before contact. A flick still moving within ~50 ms of contact is **PERFECT**: a gold spark burst and chime, plus 10% extra bat speed at 50% realism and above. The bonus is never on in Simulation.
+- **Perfect timing:** the cyan ring shrinks onto the ball and turns gold just before contact. A clean flick still moving within ~50–70 ms of contact is **PERFECT**: a gold spark burst and chime, plus 10% extra bat speed at 50% realism and above. The bonus is never on in Simulation.
+
+**Contact grading** (`src/game/contact.ts`): every stroke and serve is graded, so a swipe alone is no longer always a perfect shot.
+
+| Grade | Cause | Effect |
+|---|---|---|
+| **PERFECT / GOOD** | A flick through the ball, timed with its arrival | None: the full assist, and PERFECT's bonus |
+| **EARLY** | The flick peaked well before the ball arrived (it had faded) | Less pace and spin, less assist, the face strays |
+| **EDGE** | The swipe passed far from the ball; the bat magnet only just reached it | Less pace, less assist, the face strays |
+| **OVERHIT** | A swipe far harder than the power cap rewards | Full pace, but less assist and more face error: a gamble |
+
+- A bad grade pops up in red with a dull "thock"; the end-of-match card shows *Clean contacts*.
+- At Assisted (85%) a clean stroke is unaffected, and a sloppy one misses roughly 10–15% more often.
+- The windows come from the realism slider. Arcade widens them; Simulation grades for feedback only (the physics already punishes a bad stroke). Online, the room host's realism sets them for everyone.
 
 **How contact works**
 - The paddle is a real collider. It's swept between frames, so fast swings can't pass through the ball.
