@@ -777,26 +777,59 @@ kbd {
 
 .hud-replay {
   position: absolute;
-  top: 12px;
+  bottom: 16px;
   left: 50%;
   transform: translateX(-50%);
-  padding: 6px 14px;
-  border-radius: 8px;
-  background: rgba(47, 124, 246, 0.92);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: rgba(20, 24, 32, 0.72);
+  border-left: 3px solid rgb(47, 124, 246);
   color: #fff;
   font-family: var(--mono);
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
+  font-size: 12px;
+  letter-spacing: 0.03em;
   pointer-events: none;
-  z-index: 4;
-  max-width: calc(100vw - 24px);
+  z-index: 6;
+  max-width: min(520px, calc(100vw - 32px));
   text-align: center;
 }
 
-.hud-replay small {
-  font-weight: 400;
-  opacity: 0.85;
+.hud-replay-caption {
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.hud-replay-row {
+  display: flex;
+  gap: 4px;
+  pointer-events: auto;
+}
+
+.hud-replay-row button {
+  font: inherit;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  padding: 4px 9px;
+  min-height: 30px;
+  cursor: pointer;
+}
+
+.hud-replay-row button.on {
+  background: rgb(47, 124, 246);
+  border-color: rgb(47, 124, 246);
+}
+
+.hud-replay-row button.skip {
+  margin-left: 6px;
 }
 
 /* ---------------------------------------------------------------- mobile / touch */

@@ -98,10 +98,48 @@ export class Hud {
     this.fpsEl.textContent = text;
   }
 
-  /** Replay banner (null hides it). */
-  setReplay(text: string | null) {
-    this.replayEl.innerHTML = text ?? '';
-    this.replayEl.style.display = text ? 'block' : 'none';
+  onReplaySpeed: (speed: number) => void = () => {};
+  onReplaySkip: () => void = () => {};
+  private replayCaption: HTMLDivElement | null = null;
+  private replaySpeedBtns: HTMLButtonElement[] = [];
+  static readonly REPLAY_SPEEDS = [0.1, 0.25, 0.5, 1];
+
+  /** Replay bar at the bottom of the screen (null hides it). */
+  setReplay(info: { caption: string; speed: number } | null) {
+    if (!info) {
+      this.replayEl.style.display = 'none';
+      return;
+    }
+    if (!this.replayCaption) {
+      this.replayCaption = el('div', 'hud-replay-caption');
+      const row = el('div', 'hud-replay-row');
+      for (const sp of Hud.REPLAY_SPEEDS) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = `×${sp}`;
+        b.addEventListener('pointerdown', (e) => {
+          e.stopPropagation();
+          this.onReplaySpeed(sp);
+        });
+        this.replaySpeedBtns.push(b);
+        row.append(b);
+      }
+      const skip = document.createElement('button');
+      skip.type = 'button';
+      skip.className = 'skip';
+      skip.textContent = 'Skip ⏭';
+      skip.title = 'Skip replay (R)';
+      skip.addEventListener('pointerdown', (e) => {
+        e.stopPropagation();
+        this.onReplaySkip();
+      });
+      row.append(skip);
+      this.replayEl.append(this.replayCaption, row);
+    }
+    const text = `▶ REPLAY · ${info.caption}`;
+    if (this.replayCaption.textContent !== text) this.replayCaption.textContent = text;
+    Hud.REPLAY_SPEEDS.forEach((sp, i) => this.replaySpeedBtns[i].classList.toggle('on', sp === info.speed));
+    this.replayEl.style.display = 'flex';
   }
   private playing = false;
   onStartPlay: () => void = () => {};

@@ -316,6 +316,7 @@ export class Sandbox implements MenuHost {
     muted: loadPref('mem.muted', '0') === '1',
     ambience: loadPref('mem.ambience', '1') === '1',
     autoReplay: loadPref('mem.autoReplay', '1') === '1',
+    replaySpeed: Number(loadPref('mem.replaySpeed', '0.4')) || 0.4,
     arcadeFx: loadPref('mem.arcadeFx', '1') === '1',
     shotDetails: loadPref('mem.shotDetails', '0') === '1',
     bloom: loadPref('mem.bloom', '1') === '1',
@@ -460,6 +461,8 @@ export class Sandbox implements MenuHost {
       if ((this.match?.humanToServe || this.online?.myServe) && this.playing) this.tossHoldStart = performance.now();
     };
     this.touch.onServeEnd = () => this.releaseToss();
+    this.hud.onReplaySpeed = (sp) => this.setReplaySpeed(sp);
+    this.hud.onReplaySkip = () => this.stopReplay();
     this.touch.onReplay = () => (this.replay ? this.stopReplay() : this.startReplay());
     this.touch.onMenu = () => this.setPlaying(false);
     this.autoQuality = new AutoQuality(this.isTouch ? 1 : 2);
@@ -1497,6 +1500,12 @@ export class Sandbox implements MenuHost {
     this.gui.controllersRecursive().forEach((c) => c.updateDisplay());
   }
 
+  setReplaySpeed(speed: number) {
+    this.look.replaySpeed = speed;
+    savePref('mem.replaySpeed', String(speed));
+    if (this.replay) this.replay.speed = speed;
+  }
+
   setArcadeFx(a: boolean) {
     this.look.arcadeFx = a;
     this.juice.enabled = a;
@@ -1731,7 +1740,7 @@ export class Sandbox implements MenuHost {
     if (this.finale && last && last !== this.autoReplayed && !this.recorder.recording) {
       this.finale = false;
       this.autoReplayed = last;
-      this.startReplay(0.25);
+      this.startReplay(Math.min(0.25, this.look.replaySpeed));
       return;
     }
     if (!this.look.autoReplay || !this.match || !last || last === this.autoReplayed || this.recorder.recording) return;
@@ -1739,7 +1748,7 @@ export class Sandbox implements MenuHost {
     if (last.hits >= 6) this.startReplay();
   }
 
-  startReplay(speed = 0.4) {
+  startReplay(speed = this.look.replaySpeed) {
     const rally = this.recorder.last;
     if (!rally || this.replay) {
       if (!rally) this.hud.flash('NO DATA', 'Play a rally first, then press R');
@@ -1750,7 +1759,7 @@ export class Sandbox implements MenuHost {
     this.savedCamera = { pos: this.camera.position.clone(), target: this.controls.target.clone(), visible };
     this.ball.clearTrail();
     this.playerView.setMarker(null);
-    this.hud.setReplay('REPLAY');
+    this.hud.setReplay({ caption: '…', speed });
   }
 
   stopReplay() {
@@ -1793,7 +1802,7 @@ export class Sandbox implements MenuHost {
     this.camera.position.set(3.6 - k * 0.6, 1.75, 0.9 - k * 1.8);
     this.controls.target.set(0, 0.85, 0);
     this.camera.lookAt(this.controls.target);
-    this.hud.setReplay(`▶ REPLAY ×${r.speed} · ${r.caption || '…'}<br/><small>press R to skip</small>`);
+    this.hud.setReplay({ caption: r.caption || '…', speed: r.speed });
     if (r.done) this.stopReplay();
   }
 
