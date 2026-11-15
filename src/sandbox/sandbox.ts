@@ -2687,7 +2687,7 @@ function savePref(key: string, value: string) {
   }
 }
 
-/** "Lee — Helpdesk Hero, All-rounder" for pickers. */
+/** "Lee — Lee From IT, All-rounder" for pickers. */
 function styleTitle(id: StyleId): string {
   const st = STYLES[id];
   return st.role === st.character ? `${st.character} — ${st.label}` : `${st.character} — ${st.role}, ${st.label}`;
