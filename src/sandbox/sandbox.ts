@@ -511,6 +511,9 @@ export class Sandbox implements MenuHost {
     // A venue saved before progression existed might still be locked.
     this.setVenue(isUnlocked('venue', this.look.venue, this.career.data, this.career.levelIndex) ? this.look.venue : 'office');
     this.playerView.setStyle(this.player.style.id);
+    // Restore the last player picked ("Playing as"), if still unlocked.
+    const savedStyle = loadPref('mem.style', '');
+    if (savedStyle in STYLES && savedStyle !== this.realism.style && !this.lockReason('style', savedStyle)) this.setStyle(savedStyle as StyleId);
     this.sfx.volume = this.look.volume;
     this.sfx.muted = this.look.muted;
     this.sfx.ambienceOn = this.look.ambience;
@@ -1510,6 +1513,7 @@ export class Sandbox implements MenuHost {
   setStyle(id: StyleId) {
     if (this.lockReason('style', id)) return;
     this.realism.style = id;
+    savePref('mem.style', id);
     this.player.applyStyle(id);
     this.playerView.setStyle(id);
     this.rubberSel.forehand = this.player.rubbers.forehand.id;

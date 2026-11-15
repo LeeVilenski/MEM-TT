@@ -3437,3 +3437,24 @@ body {
     left: 228px !important;
   }
 }
+
+/* Title menu on landscape desktop: use the width instead of a tall scrolling column. */
+@media (min-width: 820px) and (orientation: landscape) {
+  .menu[data-screen='title'] .menu-card {
+    width: min(640px, 52vw);
+    overflow: visible;
+    scrollbar-width: none;
+  }
+  .menu[data-screen='title'] .menu-buttons {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  .menu[data-screen='title'] .menu-buttons > .big,
+  .menu[data-screen='title'] .menu-buttons > .menu-row {
+    grid-column: 1 / -1;
+  }
+}
+@media (min-width: 820px) and (orientation: landscape) and (max-height: 640px) {
+  .menu[data-screen='title'] .menu-card { gap: 10px; }
+  .menu[data-screen='title'] .menu-title { font-size: 48px; }
+}
