@@ -370,18 +370,6 @@ export class MatchHud {
   }
 
   private serveBar: HTMLDivElement;
-  private turnEl: HTMLDivElement | null = null;
-
-  /** Doubles: whose shot it is ("Your shot" / "Ed's shot"); null hides it. */
-  setTurn(text: string | null, mine = false) {
-    if (!this.turnEl) {
-      this.turnEl = el('div', 'mhud-turn');
-      this.board.parentElement!.append(this.turnEl);
-    }
-    this.turnEl.style.display = text ? 'block' : 'none';
-    if (text && this.turnEl.textContent !== text) this.turnEl.textContent = text;
-    this.turnEl.classList.toggle('mine', mine);
-  }
   private serveKey = '';
   onServeType: (id: string) => void = () => {};
 
@@ -478,6 +466,33 @@ export class MatchHud {
     }
   }
 
+  private cueEl: HTMLDivElement | null = null;
+  private impactEl: HTMLDivElement | null = null;
+
+  /** A short cue at the start of each point ("YOUR SERVE" / "RECEIVE"). */
+  cue(text: string, mine: boolean) {
+    if (!this.cueEl) {
+      this.cueEl = el('div', 'mhud-cue');
+      this.board.parentElement!.append(this.cueEl);
+    }
+    this.cueEl.textContent = text;
+    this.cueEl.className = `mhud-cue${mine ? ' mine' : ''}`;
+    void this.cueEl.offsetWidth;
+    this.cueEl.classList.add('show');
+  }
+
+  /** A quick white pulse at the screen edges on a hard hit of yours (power 0–1). */
+  impact(power: number) {
+    if (!this.impactEl) {
+      this.impactEl = el('div', 'mhud-impact');
+      this.board.parentElement!.append(this.impactEl);
+    }
+    this.impactEl.style.setProperty('--p', String(0.25 + power * 0.6));
+    this.impactEl.classList.remove('show');
+    void this.impactEl.offsetWidth;
+    this.impactEl.classList.add('show');
+  }
+
   /** A brief glow round the screen edge: green when you win the point, red when you lose it. */
   pointGlow(mine: boolean) {
     if (!this.edgeEl) {
@@ -518,12 +533,12 @@ export class MatchHud {
 
   private overKey = '';
 
-  showOver(title: string, sub: string, games: string, rematch: string | null = 'Rematch', exit = 'Back to practice') {
+  showOver(title: string, sub: string, games: string, rematch: string | null = 'Rematch', exit = 'Back to practice', stats: [string, string][] = []) {
     // Called every frame while the match is over: only rebuild when something changed.
-    const key = [title, sub, games, rematch, exit].join('|');
+    const key = [title, sub, games, rematch, exit, JSON.stringify(stats)].join('|');
     if (this.overKey === key && this.over.style.display === 'flex') return;
     this.overKey = key;
-    this.over.innerHTML = `<div class="mover-card"><div class="mover-title">${title}</div><div class="mover-sub">${sub}</div><div class="mover-games">${games}</div>
+    this.over.innerHTML = `<div class="mover-card"><div class="mover-title">${title}</div><div class="mover-sub">${sub}</div><div class="mover-games">${games}</div>${stats.length ? `<div class="mover-stats">${stats.map(([k, v]) => `<div><b>${v}</b><span>${k}</span></div>`).join('')}</div>` : ''}
       <div class="mover-buttons">${rematch ? `<button type="button" data-a="rematch">${rematch}</button>` : ''}<button type="button" data-a="exit" class="secondary">${exit}</button></div></div>`;
     this.over.style.display = 'flex';
     this.over.querySelector('[data-a=rematch]')?.addEventListener('click', () => this.onRematch());

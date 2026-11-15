@@ -229,9 +229,8 @@ export class Sandbox implements MenuHost {
     }
     this.serveBoxes.visible = doubles && this.doublesServing && !this.replay;
     // Whose shot (partners alternate): shown while the ball is ours to play.
-    let turn: string | null = null;
-    if (doubles && c.phase === 'rally' && !this.doublesServing && c.next && seatSide(c.next) === c.side) turn = c.next === c.seat ? 'Your shot' : `${c.names[c.next] ?? 'Partner'}'s shot`;
-    this.matchHud.setTurn(turn, turn === 'Your shot');
+    // Whose shot (partners alternate): no text, the hit zone turns blue when it's your partner's.
+    this.partnerTurn = doubles && c.phase === 'rally' && !this.doublesServing && !!c.next && seatSide(c.next) === c.side && c.next !== c.seat;
   }
 
   /** The characters chosen for the AI seats (you're near1, your partner near2); random ones left out. */
@@ -359,6 +358,11 @@ export class Sandbox implements MenuHost {
   private tournament: TournamentRun | null = null;
   private matchRecorded = false;
   private rallyHits = 0;
+  /** This match so far, for the end-of-match card. */
+  private mstats = { won: 0, played: 0, longest: 0, fastest: 0, aces: 0, perfect: 0 };
+  private lastPhase = '';
+  /** Doubles: the ball on our side is my partner's to play (the hit zone turns blue). */
+  private partnerTurn = false;
 
   // Mobile and performance
   readonly isTouch = isTouchDevice();
@@ -960,6 +964,7 @@ export class Sandbox implements MenuHost {
   // ---------------------------------------------------------------- match vs AI
 
   startMatch() {
+    this.resetMatchStats();
     this.leaveOnline();
     this.endMatch(false);
     this.stopDrill();
@@ -1000,6 +1005,7 @@ export class Sandbox implements MenuHost {
           } else this.keyContact('ai', this.aiView, h.pos, h.velIn, h.velOut, h.spinOut);
           this.recorder.caption(this.clock(), `${who}: ${name} · ${info.speed.toFixed(1)} m/s · ${Math.round(info.rpm).toLocaleString()} rpm`);
           if (e.side === 'near' && !e.serve) this.career.recordShot(info.name, info.speed, info.rpm);
+          if (e.side === 'near') this.noteMyShot(info.speed, e.serve);
           this.ball.clearTrail();
           break;
         }
@@ -1022,6 +1028,7 @@ export class Sandbox implements MenuHost {
           this.playerView.react(e.result.winner === 'near' ? 'celebrate' : 'dismay');
           this.aiView.react(e.result.winner === 'far' ? 'celebrate' : 'dismay');
           this.matchHud.pointGlow(e.result.winner === 'near');
+          this.notePoint(e.result.winner === 'near', match.referee?.hits ?? 0, !!e.result.ace);
           this.fxPoint(e.result.reason, match.referee?.hits ?? 0, e.result.winner === 'near', e.match);
           const m = pointMessage(e.result, names);
           if (e.match) this.hud.flash(e.result.winner === 'near' ? 'SHIPPED TO PROD' : 'INCIDENT REPORT', e.result.winner === 'near' ? 'You won the match!' : `${ai.displayName} won the match`);
@@ -1084,6 +1091,10 @@ export class Sandbox implements MenuHost {
     if (!match.sim) this.ball.clearTrail();
 
     this.matchHud.setRally(match.phase === 'rally' ? (match.referee?.hits ?? 0) : 0);
+    if (this.playing && match.phase !== this.lastPhase) {
+      this.lastPhase = match.phase;
+      if (match.phase === 'serve-wait' && this.playing) this.matchHud.cue(match.humanToServe ? 'YOUR SERVE' : 'RECEIVE', match.humanToServe);
+    }
     // Scoreboard.
     const sc = match.score;
     const gp = sc.gamePoint();
@@ -1111,7 +1122,7 @@ export class Sandbox implements MenuHost {
       const games = sc.history.map((g) => `${g.near}–${g.far}`).join('  ·  ');
       this.matchHud.setPrompt(null);
       this.matchHud.setMeter(null);
-      this.matchHud.showOver(won ? 'SHIPPED TO PROD' : 'INCIDENT REPORT', won ? `You beat ${ai.displayName} ${sc.games.near}–${sc.games.far}` : `${ai.displayName} won ${sc.games.far}–${sc.games.near}`, games);
+      this.matchHud.showOver(won ? 'SHIPPED TO PROD' : 'INCIDENT REPORT', won ? `You beat ${ai.displayName} ${sc.games.near}–${sc.games.far}` : `${ai.displayName} won ${sc.games.far}–${sc.games.near}`, games, 'Rematch', 'Back to practice', this.matchStatsList());
       if (document.pointerLockElement) document.exitPointerLock();
       return;
     }
@@ -1602,6 +1613,35 @@ export class Sandbox implements MenuHost {
     return this.look.arcadeFx ? this.player.interceptEta : undefined;
   }
 
+  private resetMatchStats() {
+    this.mstats = { won: 0, played: 0, longest: 0, fastest: 0, aces: 0, perfect: 0 };
+    this.lastPhase = '';
+  }
+
+  private noteMyShot(speed: number, serve: boolean) {
+    if (!serve) this.mstats.fastest = Math.max(this.mstats.fastest, speed * 3.6);
+    if (!serve && this.player.lastContactPerfect) this.mstats.perfect++;
+  }
+
+  private notePoint(mine: boolean, hits: number, ace: boolean) {
+    const m = this.mstats;
+    m.played++;
+    if (mine) m.won++;
+    if (mine && ace) m.aces++;
+    m.longest = Math.max(m.longest, hits);
+  }
+
+  /** Label/value pairs for the end-of-match card. */
+  private matchStatsList(): [string, string][] {
+    const m = this.mstats;
+    return [
+      ['Points won', `${m.won}/${m.played}${m.aces ? ` · ${m.aces} ace${m.aces > 1 ? 's' : ''}` : ''}`],
+      ['Longest rally', `${m.longest} hits`],
+      ['Fastest shot', m.fastest ? `${Math.round(m.fastest)} km/h` : '—'],
+      ['Perfect strokes', String(m.perfect)],
+    ];
+  }
+
   /** Arcade effects for a paddle hit (render coordinates). `mine` = the local player. */
   private fxHit(pos: Vec3, velOut: Vec3, spinOut: Vec3, mine: boolean, serve: boolean) {
     this.lastHitPower = serve ? 0 : hitPower(length(velOut));
@@ -1610,6 +1650,7 @@ export class Sandbox implements MenuHost {
     // Speed call-out on a fast shot (its real speed).
     const kmh = length(velOut) * 3.6;
     if (this.look.arcadeFx && !serve && kmh >= 65) this.hud.speedPop(kmh, mine);
+    if (this.look.arcadeFx && mine && !serve && kmh >= 45) this.matchHud.impact(Math.min(1, (kmh - 45) / 50));
     if (perfect && this.look.arcadeFx) {
       this.sfx.perfect();
       this.hud.perfect();
@@ -1804,7 +1845,7 @@ export class Sandbox implements MenuHost {
 
   leaveOnline() {
     if (!this.online) return;
-    this.matchHud.setTurn(null);
+    this.partnerTurn = false;
     if (this.serveBoxes) this.serveBoxes.visible = false;
     this.doublesServing = false;
     if (this.offlineDoubles) {
@@ -1872,6 +1913,7 @@ export class Sandbox implements MenuHost {
         this.lobby.show(c);
         break;
       case 'match':
+        this.resetMatchStats();
         this.lobby.show(null);
         this.matchHud.show(true);
         this.matchHud.hideOver();
@@ -1908,6 +1950,7 @@ export class Sandbox implements MenuHost {
         this.recorder.caption(this.clock(), `${who}: ${name} · ${info.speed.toFixed(1)} m/s · ${Math.round(info.rpm).toLocaleString()} rpm`);
         this.rallyHits++;
         if (e.by === c.seat && !e.serve) this.career.recordShot(info.name, info.speed, info.rpm);
+        if (e.by === c.seat) this.noteMyShot(info.speed, e.serve);
         this.ball.clearTrail();
         if (c.next === c.seat) this.stopReplay();
         break;
@@ -1932,6 +1975,7 @@ export class Sandbox implements MenuHost {
         for (const [seat, view] of this.remoteViews) view.react(seatSide(seat) === e.result.winner ? 'celebrate' : 'dismay');
         this.fxPoint(e.result.reason, this.rallyHits, e.result.winner === c.side, e.match);
         this.matchHud.pointGlow(e.result.winner === c.side);
+        this.notePoint(e.result.winner === c.side, this.rallyHits, !!e.result.ace);
         const names = { near: this.teamName('near'), far: this.teamName('far') };
         const m = pointMessage(e.result, names);
         const mine = e.result.winner === c.side;
@@ -1958,7 +2002,7 @@ export class Sandbox implements MenuHost {
     // Me (view frame), other players (world → view).
     this.playerView.visible = !!c.seat && inMatch;
     this.playerView.update(this.player);
-    this.playerView.setMarker(this.settings.showIntercept ? c.interceptView() : null, this.markerEta());
+    this.playerView.setMarker(this.settings.showIntercept ? c.interceptView() : null, this.markerEta(), this.partnerTurn);
     const seats = Object.keys(c.room?.seats ?? {}) as Seat[];
     for (const seat of seats) {
       if (seat === c.seat) continue;
@@ -1996,6 +2040,13 @@ export class Sandbox implements MenuHost {
     }
 
     this.matchHud.setRally(c.phase === 'rally' ? this.rallyHits : 0);
+    if (this.playing && c.phase !== this.lastPhase) {
+      this.lastPhase = c.phase;
+      if (c.phase === 'serve-wait' && this.playing && c.seat && c.serverSeat) {
+        const ours = seatSide(c.serverSeat) === c.side;
+        this.matchHud.cue(c.myServe ? 'YOUR SERVE' : ours ? 'PARTNER SERVES' : 'RECEIVE', c.myServe);
+      }
+    }
     // Scoreboard (my team first).
     const sc = c.score;
     if (sc && c.phase !== 'lobby') {
@@ -2023,6 +2074,7 @@ export class Sandbox implements MenuHost {
           sc.history.map((g) => `${g[side]}–${g[them]}`).join('  ·  '),
           c.isHost ? 'Rematch' : null,
           this.offlineDoubles ? 'Back to the title' : 'Back to lobby',
+          this.matchStatsList(),
         );
         if (document.pointerLockElement) document.exitPointerLock();
       }

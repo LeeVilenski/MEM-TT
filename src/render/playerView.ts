@@ -10,6 +10,9 @@ const RED = 0xc8202a;
 /** The ring turns gold this long (s) before contact: flick now for a perfect stroke. */
 const PERFECT_RING = 0.06;
 const BLACK = 0x15161a;
+/** Hit-zone colours: yours, and your doubles partner's turn. */
+const MINE = 0x5eead4;
+const PARTNER = 0x60a5fa;
 /** The drawn backswing starts this long (game s) before the ball arrives, and reaches the contact point on time. */
 const WIND_UP = 0.2;
 /** Follow-through after contact: out along the stroke, then back (real s). */
@@ -142,7 +145,7 @@ export class PlayerView {
    * timing ring: it shrinks onto the ball as it arrives and turns gold in the
    * perfect-timing window.
    */
-  setMarker(p: Vec3 | null, eta?: number) {
+  setMarker(p: Vec3 | null, eta?: number, partner = false) {
     this.marker.visible = !!p;
     this.markerLine.visible = !!p;
     if (!p) return;
@@ -150,11 +153,12 @@ export class PlayerView {
     if (eta !== undefined && Number.isFinite(eta)) {
       const k = Math.max(0, Math.min(1, eta / 0.5));
       this.marker.scale.setScalar(1 + 1.6 * k);
-      mat.color.set(eta <= PERFECT_RING ? 0xffc83d : 0x5eead4);
+      mat.color.set(partner ? PARTNER : eta <= PERFECT_RING ? 0xffc83d : MINE);
     } else {
       this.marker.scale.setScalar(1);
-      mat.color.set(0x5eead4);
+      mat.color.set(partner ? PARTNER : MINE);
     }
+    (this.markerLine.material as THREE.LineDashedMaterial).color.set(partner ? PARTNER : MINE);
     this.marker.position.set(p.x, p.y, p.z);
     this.markerLine.position.set(p.x, p.y, p.z);
     this.markerLine.scale.y = p.y;
