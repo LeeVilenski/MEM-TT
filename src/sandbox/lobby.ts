@@ -1,6 +1,6 @@
 import { AI_LEVELS, type AiLevel } from '../game/ai';
 import { realismLabel } from '../game/realism';
-import { STYLES, STYLE_IDS, type StyleId } from '../game/styles';
+import { STYLES, PLAYABLE_STYLE_IDS, type StyleId } from '../game/styles';
 import type { OnlineClient } from '../net/client';
 import { seatsFor, type GameMode, type Seat } from '../net/protocol';
 
@@ -71,7 +71,7 @@ export class Lobby {
           <label>Mode <select data-c="mode">${opts<GameMode>(room.mode, [['singles', 'Singles (1v1)'], ['doubles', 'Doubles (2v2)']])}</select></label>
           <label>Format <select data-c="bestOf">${opts(room.bestOf, [[1, 'Best of 1'], [3, 'Best of 3'], [5, 'Best of 5'], [7, 'Best of 7']])}</select></label>
           <label>AI level <select data-c="aiLevel">${opts<AiLevel>(room.aiLevel, Object.entries(AI_LEVELS).map(([k, v]) => [k as AiLevel, v.name]))}</select></label>
-          <label>AI style <select data-c="aiStyle">${opts<StyleId | 'random'>(room.aiStyle, [['random', 'Random'], ...STYLE_IDS.map((id) => [id, STYLES[id].character] as [StyleId, string])])}</select></label>
+          <label>AI style <select data-c="aiStyle">${opts<StyleId | 'random'>(room.aiStyle, [['random', 'Random'], ...PLAYABLE_STYLE_IDS.map((id) => [id, STYLES[id].character] as [StyleId, string])])}</select></label>
           <label class="realism">Realism <input type="range" min="0" max="100" step="5" value="${Math.round(room.realism * 100)}" data-c="realism"/> <span>${realismLabel(room.realism)}</span></label>
           <label class="check"><input type="checkbox" data-c="fill"${this.fillAI ? ' checked' : ''}/> Fill empty seats with AI</label>
         </div>`

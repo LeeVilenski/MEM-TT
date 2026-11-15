@@ -27,7 +27,7 @@ import {
 import { Player } from '../game/player';
 import { AI_LEVELS, AiPlayer, type AiLevel } from '../game/ai';
 import { DEFAULT_REALISM, REALISM_PRESETS, realismSettings } from '../game/realism';
-import { STYLES, STYLE_IDS, type StyleId } from '../game/styles';
+import { STYLES, PLAYABLE_STYLE_IDS, type StyleId } from '../game/styles';
 import { IncomingPrediction } from '../game/intercept';
 import { Match } from '../game/match';
 import { LET_MESSAGE, pointMessage } from '../game/messages';
@@ -1008,7 +1008,7 @@ export class Sandbox implements MenuHost {
     this.stopTutorial();
     this.matchRecorded = false;
     const ai = (this.ai = new AiPlayer('far', AI_LEVELS[this.matchSettings.level], this.params));
-    const st = this.matchSettings.aiStyle === 'random' ? STYLE_IDS[Math.floor(Math.random() * STYLE_IDS.length)] : this.matchSettings.aiStyle;
+    const st = this.matchSettings.aiStyle === 'random' ? PLAYABLE_STYLE_IDS[Math.floor(Math.random() * PLAYABLE_STYLE_IDS.length)] : this.matchSettings.aiStyle;
     ai.setStyle(STYLES[st]);
     this.aiView.setStyle(st);
     const match = (this.match = new Match(
@@ -2542,7 +2542,7 @@ export class Sandbox implements MenuHost {
     const mt = gui.addFolder('Match vs AI');
     const levelNames = Object.fromEntries(Object.entries(AI_LEVELS).map(([k, v]) => [`${v.name} (${k})`, k]));
     mt.add(this.matchSettings, 'level', levelNames).name('Opponent level');
-    mt.add(this.matchSettings, 'aiStyle', { Random: 'random', ...Object.fromEntries(STYLE_IDS.map((id) => [styleTitle(id), id])) }).name('Opponent');
+    mt.add(this.matchSettings, 'aiStyle', { Random: 'random', ...Object.fromEntries(PLAYABLE_STYLE_IDS.map((id) => [styleTitle(id), id])) }).name('Opponent');
     mt.add(this.matchSettings, 'bestOf', { 'Best of 1': 1, 'Best of 3': 3, 'Best of 5': 5, 'Best of 7': 7 }).name('Format');
     mt.add({ start: () => this.startMatch() }, 'start').name('▶ Start match');
     mt.add({ end: () => this.endMatch() }, 'end').name('End match (back to practice)');
@@ -2562,7 +2562,7 @@ export class Sandbox implements MenuHost {
     }
     const rubberNames = Object.fromEntries(Object.values(RUBBERS).map((r) => [`${r.name} (${r.kind})`, r.id]));
     const rubberSel = this.rubberSel;
-    const styleNames = Object.fromEntries(STYLE_IDS.map((id) => [styleTitle(id), id]));
+    const styleNames = Object.fromEntries(PLAYABLE_STYLE_IDS.map((id) => [styleTitle(id), id]));
     pl.add(this.realism, 'style', styleNames)
       .name('Your style')
       .onChange((id: StyleId) => {
@@ -2714,7 +2714,7 @@ const DEFAULT_SERVER: string =
 /** A remembered character choice ('random' if none or unknown). */
 function pickPref(key: string): StyleId | 'random' {
   const v = loadPref(key, 'random');
-  return v in STYLES ? (v as StyleId) : 'random';
+  return (PLAYABLE_STYLE_IDS as string[]).includes(v) ? (v as StyleId) : 'random';
 }
 
 function loadPref(key: string, fallback: string): string {
