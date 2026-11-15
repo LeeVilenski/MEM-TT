@@ -1490,7 +1490,8 @@ export class Sandbox implements MenuHost {
     const right = card ? card.getBoundingClientRect().right - box.left : 0;
     // Only when there is real room beside the menu (landscape); portrait phones keep the plain view.
     if (card && w - right > w * 0.3) {
-      const freeCentre = (right + w) / 2;
+      // A little left of the gap's centre so the table sits close to the menu.
+      const freeCentre = right + (w - right) * 0.4;
       this.camera.setViewOffset(w, h, w / 2 - freeCentre, 0, w, h);
     } else this.camera.clearViewOffset();
     this.camera.updateProjectionMatrix();
