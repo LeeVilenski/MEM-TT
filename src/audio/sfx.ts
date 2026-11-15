@@ -27,6 +27,40 @@ export function rubberTone(kind: string): { freq: number; q: number; decay: numb
 
 const panFor = (x: number) => Math.max(-1, Math.min(1, x / 1.2));
 
+/** Formants F1–F3 (Hz) of a high, falsetto voice. */
+const VOWELS = { ee: [310, 2790, 3310], ah: [850, 1220, 2810], oo: [370, 950, 2670], oh: [500, 900, 2800] } as const;
+type Vowel = keyof typeof VOWELS;
+interface Syllable {
+  /** Start (s) after the yelp begins. */
+  at: number;
+  dur: number;
+  /** Pitch contour (Hz), spread evenly over the syllable. */
+  pitch: number[];
+  /** Vowel, or a glide from one to another. */
+  vowel: [Vowel, Vowel?];
+  gain: number;
+  breath?: boolean;
+}
+/** MJ mode's yelps: pitch and vowel shapes only, no recordings. */
+export const YELPS: { caption: string; syllables: Syllable[] }[] = [
+  {
+    caption: 'HEE-HEE!',
+    syllables: [
+      { at: 0, dur: 0.12, pitch: [980, 1240, 1180], vowel: ['ee'], gain: 1.3, breath: true },
+      { at: 0.17, dur: 0.16, pitch: [1040, 1320, 1150], vowel: ['ee'], gain: 1.4, breath: true },
+    ],
+  },
+  { caption: 'OW!', syllables: [{ at: 0, dur: 0.3, pitch: [720, 1150, 1050, 640], vowel: ['ah', 'oo'], gain: 0.34 }] },
+  { caption: 'HOO!', syllables: [{ at: 0, dur: 0.36, pitch: [520, 1100, 1350, 1200], vowel: ['oo', 'oh'], gain: 0.65, breath: true }] },
+  {
+    caption: 'DA-OW!',
+    syllables: [
+      { at: 0, dur: 0.07, pitch: [600, 650], vowel: ['ah'], gain: 0.22 },
+      { at: 0.1, dur: 0.26, pitch: [800, 1200, 980, 620], vowel: ['ah', 'oo'], gain: 0.34 },
+    ],
+  },
+];
+
 export class Sfx {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
@@ -180,6 +214,80 @@ export class Sfx {
     o.connect(g).connect(this.master!);
     o.start(t);
     o.stop(t + 0.18);
+  }
+
+  private lastYelp = -1;
+
+  /**
+   * MJ mode: a falsetto pop-star yelp on a smash ("Hee-hee!", "Ow!", "Hoo!"), made by
+   * formant synthesis (no samples), never the same one twice running. Returns its caption.
+   */
+  yelp(x = 0): string {
+    const ctx = this.ready();
+    if (!ctx) return '';
+    let i = Math.floor(Math.random() * YELPS.length);
+    if (i === this.lastYelp) i = (i + 1) % YELPS.length;
+    this.lastYelp = i;
+    const y = YELPS[i];
+    const out = ctx.createStereoPanner();
+    out.pan.value = panFor(x) * 0.5;
+    out.connect(this.master!);
+    const t0 = ctx.currentTime + 0.05; // room for a breathy onset before the first syllable
+    for (const s of y.syllables) this.syllable(ctx, out, t0 + s.at, s);
+    return y.caption;
+  }
+
+  /** One sung syllable: a breathy "h", then a vibrato sawtooth through three vowel formants. */
+  private syllable(ctx: AudioContext, out: AudioNode, t: number, s: Syllable) {
+    const end = t + s.dur;
+    // The aspirated onset.
+    if (s.breath) {
+      const n = ctx.createBufferSource();
+      n.buffer = this.noise;
+      const hf = ctx.createBiquadFilter();
+      hf.type = 'bandpass';
+      hf.frequency.value = 3000;
+      hf.Q.value = 0.8;
+      const hg = ctx.createGain();
+      hg.gain.setValueAtTime(0.0001, t - 0.045);
+      hg.gain.exponentialRampToValueAtTime(0.08, t - 0.01);
+      hg.gain.exponentialRampToValueAtTime(0.0001, t + 0.03);
+      n.connect(hf).connect(hg).connect(out);
+      n.start(t - 0.045, Math.random() * 0.5, 0.09);
+    }
+    // Glottal source: sawtooth on a pitch contour, with a fast vibrato.
+    const src = ctx.createOscillator();
+    src.type = 'sawtooth';
+    src.frequency.setValueAtTime(s.pitch[0], t);
+    s.pitch.slice(1).forEach((f, k, a) => src.frequency.exponentialRampToValueAtTime(f, t + (s.dur * (k + 1)) / a.length));
+    const lfo = ctx.createOscillator();
+    lfo.frequency.value = 7;
+    const depth = ctx.createGain();
+    depth.gain.value = s.pitch[0] * 0.025;
+    lfo.connect(depth).connect(src.frequency);
+    // Envelope: a sharp attack, a held note, a quick release.
+    const env = ctx.createGain();
+    env.gain.setValueAtTime(0.0001, t);
+    env.gain.exponentialRampToValueAtTime(s.gain, t + 0.012);
+    env.gain.setValueAtTime(s.gain, end - s.dur * 0.35);
+    env.gain.exponentialRampToValueAtTime(0.0001, end);
+    env.connect(out);
+    // Vowel: three parallel band-passes gliding from the first vowel to the last.
+    const [a, b] = [VOWELS[s.vowel[0]], VOWELS[s.vowel[1] ?? s.vowel[0]]];
+    for (let k = 0; k < 3; k++) {
+      const f = ctx.createBiquadFilter();
+      f.type = 'bandpass';
+      f.Q.value = 6 + 3 * k;
+      f.frequency.setValueAtTime(a[k], t);
+      f.frequency.linearRampToValueAtTime(b[k], end);
+      const fg = ctx.createGain();
+      fg.gain.value = [1, 0.55, 0.3][k];
+      src.connect(f).connect(fg).connect(env);
+    }
+    src.start(t);
+    lfo.start(t);
+    src.stop(end + 0.02);
+    lfo.stop(end + 0.02);
   }
 
   /** A bright two-note chime for a perfectly timed stroke. */
