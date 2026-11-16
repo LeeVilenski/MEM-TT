@@ -25,6 +25,10 @@ export interface Canvas2D {
 export type Painter = (p: Canvas2D) => void;
 
 export interface Fabric {
+  /** Names the painted textures (they're cached by it). */
+  id: string;
+  /** The shirt's main colour, for trims such as an open collar. */
+  base?: number;
   torso: Painter;
   /** Sleeves and shoulder caps (defaults to the plain shirt colour). */
   sleeve?: Painter;
@@ -221,6 +225,7 @@ const leeStripes = (p: Canvas2D, x0: number, y0: number, w: number, h: number) =
   }
 };
 export const LEE: Fabric = {
+  id: 'lee',
   torso: (p) => {
     const { c, w, h } = p;
     fill(p, '#36466f');
@@ -268,6 +273,7 @@ export const LEE: Fabric = {
 
 /** Ed: teal tee that breaks up into a dense dark-green speckle from mid-chest down. */
 export const ED: Fabric = {
+  id: 'ed',
   torso: (p) => {
     const { c, w, h } = p;
     fill(p, '#22707a');
@@ -296,6 +302,7 @@ export const ED: Fabric = {
 
 /** Ryan: black rugby jersey; crest on the left chest, a white wordmark and a row of coloured dots. */
 export const RYAN: Fabric = {
+  id: 'ryan',
   torso: (p) => {
     const { c, w } = p;
     fill(p, '#131416');
@@ -347,75 +354,258 @@ export const RYAN: Fabric = {
   },
 };
 
-/** Paul: navy Hawaiian shirt crowded with pink hibiscus, teal palm leaves, white blossoms and toucans. */
-const paulPrint = (p: Canvas2D, seed: number, scale: number) => {
-  const { c, w, h } = p;
-  fill(p, '#1b2142');
-  const r = rng(seed);
-  const leafCols = [
-    ['#2aa3b8', '#15606e'],
-    ['#3fc1c0', '#1a7a7a'],
-    ['#1f6fa8', '#123f63'],
-    ['#2e8b57', '#1b5135'],
-  ];
-  const n = (w * h) / (2600 * scale * scale);
-  for (let i = 0; i < n * 0.9; i++) {
-    const [a, b] = leafCols[Math.floor(r() * leafCols.length)];
-    const x = r() * w;
-    const y = r() * h;
-    const len = (40 + r() * 50) * scale;
-    const rot = r() * Math.PI * 2;
-    p.wrap(x, (xx) => leaf(c, xx, y, len, a, b, rot));
+/** A palm tree: a curved trunk with ring marks and a crown of fronds. */
+function palmTree(c: CanvasRenderingContext2D, x: number, y: number, s: number, trunk: string, frond: string, rib: string, lean: number) {
+  c.save();
+  c.translate(x, y);
+  c.strokeStyle = trunk;
+  c.lineCap = 'round';
+  c.lineWidth = s * 0.09;
+  const tx = lean * s * 0.35;
+  const ty = -s;
+  c.beginPath();
+  c.moveTo(0, 0);
+  c.quadraticCurveTo(lean * s * 0.05, -s * 0.5, tx, ty);
+  c.stroke();
+  c.strokeStyle = 'rgba(0,0,0,0.25)';
+  c.lineWidth = Math.max(1, s * 0.02);
+  for (let i = 1; i < 6; i++) {
+    const t = i / 6;
+    const px = lean * s * 0.05 * 2 * t * (1 - t) + tx * t * t;
+    const py = ty * t;
+    c.beginPath();
+    c.moveTo(px - s * 0.04, py);
+    c.lineTo(px + s * 0.04, py);
+    c.stroke();
   }
-  for (let i = 0; i < n * 0.3; i++) {
-    const x = r() * w;
-    const y = r() * h;
-    const flip = r() < 0.5;
-    const s = (9 + r() * 3) * scale;
-    p.wrap(x, (xx) => toucan(c, xx, y, s, flip));
+  for (let k = 0; k < 7; k++) {
+    const a = -Math.PI / 2 + (k - 3) * 0.55 + (k % 2 ? 0.1 : -0.1);
+    leaf(c, tx, ty, s * (0.55 + (k % 3) * 0.08), frond, rib, a + (Math.abs(k - 3) > 1 ? 0.5 * Math.sign(k - 3) : 0));
   }
-  const pinks = ['#ff5c8a', '#ff7aa8', '#f43f7a', '#ff9ec0'];
-  for (let i = 0; i < n * 0.55; i++) {
-    const x = r() * w;
-    const y = r() * h;
-    const rad = (14 + r() * 14) * scale;
-    const col = pinks[Math.floor(r() * pinks.length)];
-    const rot = r() * 6;
-    p.wrap(x, (xx) => hibiscus(c, xx, y, rad, col, '#9d1747', rot));
+  c.restore();
+}
+
+/** A pink flamingo standing on one leg, neck curved. */
+function flamingo(c: CanvasRenderingContext2D, x: number, y: number, s: number, flip: boolean, body: string) {
+  c.save();
+  c.translate(x, y);
+  c.scale(flip ? -s : s, s);
+  c.strokeStyle = '#e46a93';
+  c.lineWidth = 0.07;
+  c.lineCap = 'round';
+  // Legs.
+  c.beginPath();
+  c.moveTo(0, 0.3);
+  c.lineTo(0, 1.6);
+  c.moveTo(0, 0.9);
+  c.lineTo(0.35, 0.75);
+  c.lineTo(0.05, 0.55);
+  c.stroke();
+  // Body.
+  c.fillStyle = body;
+  c.beginPath();
+  c.ellipse(0, 0, 0.75, 0.38, -0.25, 0, Math.PI * 2);
+  c.fill();
+  c.fillStyle = 'rgba(180,40,90,0.35)';
+  c.beginPath();
+  c.ellipse(0.15, -0.05, 0.45, 0.18, -0.35, 0, Math.PI * 2);
+  c.fill();
+  // S-shaped neck up to the head.
+  c.strokeStyle = body;
+  c.lineWidth = 0.16;
+  c.beginPath();
+  c.moveTo(-0.55, -0.1);
+  c.bezierCurveTo(-1.0, -0.6, -0.3, -0.9, -0.55, -1.4);
+  c.stroke();
+  c.fillStyle = body;
+  c.beginPath();
+  c.arc(-0.55, -1.45, 0.14, 0, Math.PI * 2);
+  c.fill();
+  // Beak: pale with a black tip.
+  c.fillStyle = '#f5e6d8';
+  c.beginPath();
+  c.moveTo(-0.65, -1.5);
+  c.lineTo(-0.95, -1.3);
+  c.lineTo(-0.6, -1.38);
+  c.fill();
+  c.fillStyle = '#111';
+  c.beginPath();
+  c.moveTo(-0.85, -1.36);
+  c.lineTo(-0.95, -1.3);
+  c.lineTo(-0.83, -1.32);
+  c.fill();
+  c.restore();
+}
+
+/** A pineapple: a crosshatched golden body and a spiky green crown. */
+function pineapple(c: CanvasRenderingContext2D, x: number, y: number, s: number, rot: number) {
+  c.save();
+  c.translate(x, y);
+  c.rotate(rot);
+  c.fillStyle = '#2f9e44';
+  for (let k = -2; k <= 2; k++) {
+    c.beginPath();
+    c.moveTo(-s * 0.12, -s * 0.5);
+    c.lineTo(k * s * 0.13, -s * (1.05 - Math.abs(k) * 0.12));
+    c.lineTo(s * 0.12, -s * 0.5);
+    c.fill();
   }
-  // Small white and pale-blue blossoms filling the gaps.
-  for (let i = 0; i < n * 0.7; i++) {
-    const x = r() * w;
-    const y = r() * h;
-    const rad = (5 + r() * 4) * scale;
-    c.fillStyle = r() < 0.6 ? '#f1f5f9' : '#9fd8f0';
-    p.wrap(x, (xx) => {
-      for (let k = 0; k < 5; k++) {
-        const a = (k / 5) * Math.PI * 2;
+  c.fillStyle = '#e8a317';
+  c.beginPath();
+  c.ellipse(0, 0, s * 0.36, s * 0.55, 0, 0, Math.PI * 2);
+  c.fill();
+  c.save();
+  c.clip();
+  c.strokeStyle = '#9a5b07';
+  c.lineWidth = Math.max(1, s * 0.04);
+  for (let i = -6; i <= 6; i++) {
+    c.beginPath();
+    c.moveTo(i * s * 0.16 - s, -s);
+    c.lineTo(i * s * 0.16 + s, s);
+    c.moveTo(i * s * 0.16 + s, -s);
+    c.lineTo(i * s * 0.16 - s, s);
+    c.stroke();
+  }
+  c.restore();
+  c.restore();
+}
+
+/** A plumeria: five rounded, slightly overlapping petals with a yellow heart. */
+function plumeria(c: CanvasRenderingContext2D, x: number, y: number, r: number, petal: string, heart: string, rot: number) {
+  c.save();
+  c.translate(x, y);
+  c.rotate(rot);
+  c.fillStyle = petal;
+  for (let k = 0; k < 5; k++) {
+    c.save();
+    c.rotate((k / 5) * Math.PI * 2);
+    c.beginPath();
+    c.ellipse(r * 0.5, 0, r * 0.55, r * 0.3, 0.35, 0, Math.PI * 2);
+    c.fill();
+    c.restore();
+  }
+  c.fillStyle = heart;
+  c.beginPath();
+  c.arc(0, 0, r * 0.22, 0, Math.PI * 2);
+  c.fill();
+  c.restore();
+}
+
+/** A gull in silhouette: two shallow arcs. */
+function bird(c: CanvasRenderingContext2D, x: number, y: number, s: number, color: string) {
+  c.strokeStyle = color;
+  c.lineWidth = Math.max(1.5, s * 0.12);
+  c.lineCap = 'round';
+  c.beginPath();
+  c.moveTo(x - s, y);
+  c.quadraticCurveTo(x - s * 0.5, y - s * 0.5, x, y);
+  c.quadraticCurveTo(x + s * 0.5, y - s * 0.5, x + s, y);
+  c.stroke();
+}
+
+/** One layer of a Hawaiian print: a motif scattered at a density (per 100×100 px at scale 1). */
+interface Layer {
+  per: number;
+  draw: (c: CanvasRenderingContext2D, x: number, y: number, s: number, r: () => number) => void;
+}
+
+/** A Hawaiian shirt from a background and layers of motifs, with a button placket down the front. */
+function hawaiian(id: string, base: number, background: (p: Canvas2D) => void, layers: Layer[], button = '#e2e8f0'): Fabric {
+  const print = (seed: number, scale: number) => (p: Canvas2D) => {
+    background(p);
+    const r = rng(seed);
+    const area = (p.w * p.h) / (2400 * scale * scale);
+    for (const layer of layers) {
+      const n = Math.round(area * layer.per);
+      for (let i = 0; i < n; i++) {
+        const x = r() * p.w;
+        const y = r() * p.h;
+        const k = r();
+        p.wrap(x, (xx) => layer.draw(p.c, xx, y, scale, rng(Math.floor(k * 1e6) + 1)));
+      }
+    }
+  };
+  return {
+    id,
+    base,
+    torso: (p) => {
+      print(11 + id.length, 1)(p);
+      const { c, w } = p;
+      const x = w * 0.5 + 4;
+      c.fillStyle = 'rgba(0,0,0,0.3)';
+      c.fillRect(x - 1, p.y(1.42), 3, p.h);
+      c.fillStyle = button;
+      for (let y = p.y(1.32); y < p.h - 10; y += 52) {
         c.beginPath();
-        c.arc(xx + Math.cos(a) * rad * 0.6, y + Math.sin(a) * rad * 0.6, rad * 0.5, 0, Math.PI * 2);
+        c.arc(x + 9, y, 4, 0, Math.PI * 2);
         c.fill();
       }
-    });
-  }
-};
-export const PAUL: Fabric = {
-  torso: (p) => {
-    paulPrint(p, 11, 1);
-    const { c, w } = p;
-    // Button placket down the front, a touch off-centre, with pale buttons.
-    const x = w * 0.5 + 4;
-    c.fillStyle = 'rgba(10,12,30,0.45)';
-    c.fillRect(x - 1, p.y(1.42), 3, p.h);
-    c.fillStyle = '#e2e8f0';
-    for (let y = p.y(1.32); y < p.h - 10; y += 52) {
-      c.beginPath();
-      c.arc(x + 9, y, 4, 0, Math.PI * 2);
-      c.fill();
-    }
-  },
-  sleeve: (p) => paulPrint(p, 23, 0.55),
-};
+    },
+    sleeve: print(23 + id.length, 0.55),
+  };
+}
+
+const pick = <T,>(r: () => number, xs: T[]) => xs[Math.floor(r() * xs.length)];
+const solid = (color: string) => (p: Canvas2D) => fill(p, color);
+
+/** Paul's wardrobe: a different loud Hawaiian shirt each time he turns up. */
+export const PAUL_SHIRTS: Fabric[] = [
+  // Navy with pink hibiscus, teal palm leaves, toucans and small white blossoms (from a photo of his).
+  hawaiian('paul-toucan', 0x1b2142, solid('#1b2142'), [
+    { per: 0.45, draw: (c, x, y, s, r) => { const [a, b] = pick(r, [['#2aa3b8', '#15606e'], ['#3fc1c0', '#1a7a7a'], ['#1f6fa8', '#123f63'], ['#2e8b57', '#1b5135']]); leaf(c, x, y, (40 + r() * 50) * s, a, b, r() * 7); } },
+    { per: 0.12, draw: (c, x, y, s, r) => toucan(c, x, y, (9 + r() * 3) * s, r() < 0.5) },
+    { per: 0.22, draw: (c, x, y, s, r) => hibiscus(c, x, y, (14 + r() * 14) * s, pick(r, ['#ff5c8a', '#ff7aa8', '#f43f7a', '#ff9ec0']), '#9d1747', r() * 6) },
+    { per: 0.28, draw: (c, x, y, s, r) => plumeria(c, x, y, (6 + r() * 4) * s, r() < 0.6 ? '#f1f5f9' : '#9fd8f0', '#fde68a', r() * 6) },
+  ]),
+  // Pale mint with pink flamingos among green palm trees (from a photo of his).
+  hawaiian('paul-flamingo', 0xdff3ee, solid('#e3f4ef'), [
+    { per: 0.1, draw: (c, x, y, s, r) => palmTree(c, x, y, (80 + r() * 30) * s, '#9a6b3f', pick(r, ['#2f7d5b', '#3a9a6c', '#25664a']), '#164a33', (r() - 0.5) * 1.6) },
+    { per: 0.12, draw: (c, x, y, s, r) => flamingo(c, x, y, (22 + r() * 6) * s, r() < 0.5, pick(r, ['#f7a1c4', '#f48fb8', '#fbb6d0'])) },
+  ], '#f8fafc'),
+  // Bright turquoise with big hibiscus in hot pink, orange, red, white and yellow.
+  hawaiian('paul-turquoise', 0x10c4d0, solid('#10c4d0'), [
+    { per: 0.3, draw: (c, x, y, s, r) => leaf(c, x, y, (35 + r() * 35) * s, pick(r, ['#22c55e', '#84cc16', '#15803d']), '#14532d', r() * 7) },
+    { per: 0.3, draw: (c, x, y, s, r) => hibiscus(c, x, y, (15 + r() * 12) * s, pick(r, ['#ff2d8a', '#ff7a00', '#ef233c', '#ffffff', '#ffd60a']), '#9d1747', r() * 6) },
+  ]),
+  // Classic red with white hibiscus and white leaf outlines.
+  hawaiian('paul-red', 0xc8102e, solid('#c8102e'), [
+    { per: 0.3, draw: (c, x, y, s, r) => leaf(c, x, y, (40 + r() * 40) * s, 'rgba(255,255,255,0.85)', '#c8102e', r() * 7) },
+    { per: 0.22, draw: (c, x, y, s, r) => hibiscus(c, x, y, (16 + r() * 12) * s, '#ffffff', '#f4b6c2', r() * 6) },
+  ], '#111827'),
+  // Sunny yellow with pineapples, green leaves and white plumeria.
+  hawaiian('paul-pineapple', 0xffcf33, solid('#ffcf33'), [
+    { per: 0.3, draw: (c, x, y, s, r) => leaf(c, x, y, (35 + r() * 35) * s, pick(r, ['#16a34a', '#0f766e']), '#064e3b', r() * 7) },
+    { per: 0.14, draw: (c, x, y, s, r) => pineapple(c, x, y, (24 + r() * 8) * s, (r() - 0.5) * 0.8) },
+    { per: 0.25, draw: (c, x, y, s, r) => plumeria(c, x, y, (8 + r() * 5) * s, '#ffffff', '#f59e0b', r() * 6) },
+  ], '#7c2d12'),
+  // Sunset: orange fading to hot pink, purple palm silhouettes and gulls.
+  hawaiian(
+    'paul-sunset',
+    0xff7849,
+    (p) => {
+      const g = p.c.createLinearGradient(0, 0, 0, p.h);
+      g.addColorStop(0, '#ffb347');
+      g.addColorStop(0.5, '#ff7849');
+      g.addColorStop(1, '#e8437a');
+      p.c.fillStyle = g;
+      p.c.fillRect(0, 0, p.w, p.h);
+    },
+    [
+      { per: 0.14, draw: (c, x, y, s, r) => palmTree(c, x, y, (55 + r() * 30) * s, '#3b0f4a', '#4c1d5f', '#2a0a35', (r() - 0.5) * 1.6) },
+      { per: 0.12, draw: (c, x, y, s, r) => bird(c, x, y, (7 + r() * 5) * s, '#3b0f4a') },
+      { per: 0.08, draw: (c, x, y, s, r) => hibiscus(c, x, y, (12 + r() * 8) * s, '#fff1a8', '#e8437a', r() * 6) },
+    ],
+    '#3b0f4a',
+  ),
+  // Royal blue with white plumeria and pale-blue monstera leaves.
+  hawaiian('paul-plumeria', 0x1d4ed8, solid('#1d4ed8'), [
+    { per: 0.35, draw: (c, x, y, s, r) => leaf(c, x, y, (40 + r() * 40) * s, pick(r, ['#93c5fd', '#60a5fa', '#bfdbfe']), '#1e3a8a', r() * 7) },
+    { per: 0.35, draw: (c, x, y, s, r) => plumeria(c, x, y, (10 + r() * 7) * s, '#ffffff', '#facc15', r() * 6) },
+  ]),
+];
+
+/** Paul's default (the shirt in his photo). */
+export const PAUL = PAUL_SHIRTS[0];
 
 /** Bryony: berry long-sleeved top with a small white (and a few gold) star print. */
 const bryonyStars = (p: Canvas2D, seed: number, count: number, size: number) => {
@@ -431,6 +621,7 @@ const bryonyStars = (p: Canvas2D, seed: number, count: number, size: number) => 
   }
 };
 export const BRYONY: Fabric = {
+  id: 'bryony',
   torso: (p) => bryonyStars(p, 5, 260, 7),
   sleeve: (p) => bryonyStars(p, 9, 40, 6),
 };

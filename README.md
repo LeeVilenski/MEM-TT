@@ -141,7 +141,9 @@ Everything is generated in code: geometry, textures and sound. There are no asse
 
 **Characters:** four are modelled on Lee, Ed, Ryan and Will (from a parkrun photo), and the fifth is a generic Sysadmin. Each is low-poly, and its arm really holds the paddle.
 
-**Shirts are painted fabrics** (`src/render/fabric.ts`): each patterned shirt is drawn onto a canvas and wrapped round the torso and sleeves, so prints, raglan panels, crests and sponsors read as cloth rather than shapes stuck on. Lee, Ed, Ryan and Will are matched to the parkrun photo; Paul's shirt follows a photo of one of his Hawaiian shirts.
+**Shirts are painted fabrics** (`src/render/fabric.ts`): each patterned shirt is drawn onto a canvas and wrapped round the torso and sleeves, so prints, raglan panels, crests and sponsors read as cloth rather than shapes stuck on. Lee, Ed, Ryan and Will are matched to the parkrun photo; Paul has a wardrobe of seven Hawaiian shirts (two from photos of his own); one is picked at random each time he appears.
+
+**Faces** are built per character too: eye colour, a closed smile, smirk or open grin, painted stubble or a goatee, greying temples, rosy cheeks, jaw width and face length (Lee lean and clean-shaven; Ed round with greying stubble; Ryan a short dark beard; Will ginger-blond and rosy; Paul aviators, spikes and a goatee).
 
 | Character | Role | Look |
 |---|---|---|
@@ -150,7 +152,7 @@ Everything is generated in code: geometry, textures and sound. There are no asse
 | Ryan | Full-Stack Dev | tall; dark tousled hair and stubble, black rugby jersey with a crest, a white sponsor wordmark and a row of coloured dots |
 | Will | Network Engineer | blue cap, royal-blue running vest, sage shorts, watch |
 | Sysadmin | Sysadmin | beard, black t-shirt, lanyard and badge |
-| Paul | Patient flat hitter (World Tour opponent) | navy Hawaiian shirt with pink hibiscus, teal palm leaves and toucans, jeans, dark sunglasses, goatee |
+| Paul | Patient flat hitter (World Tour opponent) | a different loud Hawaiian shirt each time (seven: navy toucan, mint flamingo, turquoise hibiscus, classic red, pineapple, sunset palms, blue plumeria), jeans, aviators, spiky hair greying at the sides, salt-and-pepper goatee |
 | Bryony | Wheelchair counter-hitter (World Tour opponent) | plays seated in a sports wheelchair (cambered wheels, push rims); berry star-print top, ponytail, glasses |
 
 In first person you see only your paddle, so nothing hides the ball. Replays and the other cameras show your full character.
