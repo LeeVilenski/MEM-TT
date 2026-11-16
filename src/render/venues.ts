@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { buildGreen } from './green';
 
 /**
  * A light source (lamp, LED, bulb): brighter than white, so it clears the bloom
@@ -15,7 +16,7 @@ function glow(color: number, strength = 2.2) {
  * core scene's lights, floor and background, and adds its own props. Everything
  * stays outside the playing area so the ball and its shadow remain readable.
  */
-export type VenueId = 'sandbox' | 'office' | 'mem' | 'server' | 'conference' | 'rooftop' | 'park' | 'beach';
+export type VenueId = 'sandbox' | 'office' | 'mem' | 'server' | 'conference' | 'rooftop' | 'park' | 'beach' | 'green';
 export type Ambience = 'none' | 'office' | 'servers' | 'room' | 'wind';
 /** Background song per venue (see audio/music.ts). */
 export type SongId = 'none' | 'office' | 'mem' | 'servers' | 'room' | 'wind';
@@ -29,6 +30,7 @@ export const VENUES: Record<VenueId, { name: string; ambience: Ambience; song: S
   rooftop: { name: 'Rooftop (company offsite)', ambience: 'wind', song: 'wind' },
   park: { name: 'City Park', ambience: 'wind', song: 'wind' },
   beach: { name: 'Offsite beach', ambience: 'wind', song: 'wind' },
+  green: { name: 'The Green (autumn)', ambience: 'wind', song: 'wind' },
 };
 
 export interface Venue {
@@ -1823,7 +1825,51 @@ function beach(): Venue {
   });
 }
 
+/** The Green: an outdoor concrete table on the lawn in front of an old stone hall (see green.ts). */
+function green(): Venue {
+  const b = buildGreen();
+  return makeVenue('green', b.group, {
+    background: 0xc3c8cc,
+    fog: [0xc3c8cc, 24, 95],
+    // Overcast: a bright, soft sky fill and a weak, neutral key (still enough for the ball's shadow).
+    hemi: [0xe8edf2, 0x5d6b45, 1.55],
+    key: [0xf2f2ee, 1.35],
+    env: 0.55,
+    floor: b.floor,
+    table: { color: 0xffffff, map: b.tableTop, roughness: 0.92, clearcoat: 0, legs: false, net: false },
+    update: (dt) => b.update(dt),
+  });
+}
+
 // ---------------------------------------------------------------- application
+
+/** How the core table looks at a venue (the outdoor concrete table differs from the indoor one). */
+interface TableLook {
+  color: number;
+  map?: THREE.Texture;
+  roughness: number;
+  clearcoat: number;
+  legs: boolean;
+  net: boolean;
+}
+const INDOOR_TABLE: TableLook = { color: 0x173a75, roughness: 0.5, clearcoat: 0.12, legs: true, net: true };
+
+function applyTable(scene: THREE.Scene, t: TableLook) {
+  const top = scene.getObjectByName('tableTop') as THREE.Mesh<THREE.BufferGeometry, THREE.MeshPhysicalMaterial> | undefined;
+  if (top) {
+    top.material.color.set(t.color);
+    top.material.map = t.map ?? null;
+    top.material.roughness = t.roughness;
+    top.material.clearcoat = t.clearcoat;
+    top.material.needsUpdate = true;
+  }
+  scene.traverse((o) => {
+    if (o.name === 'tableLeg') o.visible = t.legs;
+  });
+  const net = scene.getObjectByName('coreNet');
+  if (net) net.visible = t.net;
+}
+
 
 interface Look {
   background: number;
@@ -1833,21 +1879,25 @@ interface Look {
   /** Strength of the image-based (environment) light. */
   env?: number;
   floor?: THREE.Texture;
+  /** Restyle the core table (default: the indoor blue table). */
+  table?: TableLook;
   update?: (dt: number, time: number) => void;
   setScore?: (lines: string[]) => void;
 }
 
 function makeVenue(id: VenueId, group: THREE.Group, look: Look): Venue {
   group.userData.look = look;
+  // Props don't take shadows, except surfaces marked to (ground right round the table).
   group.traverse((o) => {
-    if ((o as THREE.Mesh).isMesh) o.receiveShadow = false;
+    if ((o as THREE.Mesh).isMesh) o.receiveShadow = !!o.userData.receiveShadow;
   });
   return {
     id,
     group,
     update: look.update ?? (() => {}),
     setScore: look.setScore,
-    dispose: () =>
+    dispose: () => {
+      look.table?.map?.dispose();
       group.traverse((o) => {
         const m = o as THREE.Mesh;
         if (!m.isMesh) return;
@@ -1857,11 +1907,12 @@ function makeVenue(id: VenueId, group: THREE.Group, look: Look): Venue {
           (mat as THREE.MeshStandardMaterial).map?.dispose();
           mat.dispose();
         });
-      }),
+      });
+    },
   };
 }
 
-const BUILDERS: Record<Exclude<VenueId, 'sandbox'>, () => Venue> = { office, mem, server: testBay, conference, rooftop, park, beach };
+const BUILDERS: Record<Exclude<VenueId, 'sandbox'>, () => Venue> = { office, mem, server: testBay, conference, rooftop, park, beach, green };
 
 const SANDBOX_LOOK: Look = { background: 0x14161c, fog: [0x14161c, 12, 30], hemi: [0xdfe8ff, 0x22252c, 0.85], key: [0xffffff, 2.2], env: 0.35 };
 
@@ -1888,6 +1939,7 @@ export function setVenue(scene: THREE.Scene, id: VenueId, previous: Venue | null
   floor.material.color.set(look.floor ? 0xffffff : 0x23262e);
   floor.material.needsUpdate = true;
   (scene.getObjectByName('grid') as THREE.Object3D).visible = !venue;
+  applyTable(scene, look.table ?? INDOOR_TABLE);
   if (venue) scene.add(venue.group);
   return venue;
 }

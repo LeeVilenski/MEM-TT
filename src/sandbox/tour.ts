@@ -18,6 +18,7 @@ const VENUE_STYLE: Partial<Record<VenueId, { color: string; icon: string }>> = {
   conference: { color: '#0e9aa7', icon: '📊' },
   beach: { color: '#e0a106', icon: '🏖️' },
   rooftop: { color: '#db2777', icon: '🌆' },
+  green: { color: '#c26a1c', icon: '🍂' },
 };
 const venueStyle = (v: VenueId) => VENUE_STYLE[v] ?? { color: '#3a4a63', icon: '🏓' };
 

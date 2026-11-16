@@ -79,6 +79,7 @@ Progression lives in three places on the title screen: **World Tour** (the caree
 
 **Unlocks**
 - **Venues:** Test Bay (Club Player), Conference room (League Player), Rooftop (win the Cup), City Park (win the Data Centre Knockout), Offsite beach (win the Boardroom Showdown). Tour stops are always played at their own venue.
+- **The Green (autumn)** is open from the start (Settings → Venue): an outdoor concrete table with a perforated steel net on a mown lawn, a bare-earth patch worn round it and bats left underneath; tall cedars screening a car park, an old stone hall with a clock gable (in scaffolding) and a slate-roofed turret, a multi-stemmed lime with leaves heaped round it, a cherry in orange, picnic tables and a shelter, distant hills under a flat grey sky. Leaves drift down (never across the table), pigeons peck on the grass and crows circle. Built in `src/render/green.ts`; static props are merged by material to keep the draw calls down.
 - **Styles:** Lee, Ryan, Ed and Will from the start; the Sysadmin appears only as a tournament opponent (including World Tour stops).
 - **Rubbers:** Rapid (Club Player), Twister (Chop defence), Deadener (win the Championship).
 - **Unlock everything** (Unlocks tab) switches gating off for free play. Online lobbies aren't gated.
