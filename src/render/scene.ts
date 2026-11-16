@@ -73,6 +73,7 @@ function createTable(): THREE.Group {
   top.position.y = TABLE.height - TABLE.thickness / 2;
   top.receiveShadow = true;
   top.castShadow = true;
+  top.name = 'tableTop';
   g.add(top);
 
   // White lines: 2 cm edges and a 3 mm centre line (for doubles).
@@ -98,6 +99,7 @@ function createTable(): THREE.Group {
       const leg = new THREE.Mesh(new THREE.BoxGeometry(0.05, TABLE.height - TABLE.thickness, 0.05), legMat);
       leg.position.set(sx * (TABLE.halfWidth - 0.15), (TABLE.height - TABLE.thickness) / 2, sz * (TABLE.halfLength - 0.3));
       leg.castShadow = true;
+      leg.name = 'tableLeg';
       g.add(leg);
     }
   }
@@ -106,6 +108,7 @@ function createTable(): THREE.Group {
 
 function createNet(): THREE.Group {
   const g = new THREE.Group();
+  g.name = 'coreNet';
   const width = NET.halfLength * 2;
 
   // Mesh: a fine grid texture on a transparent plane.
