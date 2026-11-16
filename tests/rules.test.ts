@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TABLE, v3, type BallEvent } from '../src/physics';
-import { RallyReferee, Scoreboard, checkServe, type RallyOutcome } from '../src/game/rules';
+import { RallyReferee, Scoreboard, checkServe, endsSwapped, type RallyOutcome } from '../src/game/rules';
 import type { SideId } from '../src/game/frame';
 
 const z = (side: SideId, depth = 0.6) => (side === 'near' ? depth : -depth);
@@ -112,5 +112,51 @@ describe('scoreboard', () => {
     expect(s.matchPoint()).toBe('near');
     expect(s.award('near')).toEqual({ game: true, match: true });
     expect(s.winner).toBe('near');
+  });
+});
+
+describe('changing ends', () => {
+  const play = (sb: Scoreboard, near: number, far: number) => {
+    for (let i = 0; i < Math.max(near, far); i++) {
+      if (i < near) sb.award('near');
+      if (i < far) sb.award('far');
+    }
+  };
+  const swapped = (sb: Scoreboard) => endsSwapped(sb.points, sb.games, sb.config.bestOf, sb.config.pointsToWin);
+
+  it('swaps after every game', () => {
+    const sb = new Scoreboard({ bestOf: 5, pointsToWin: 11, firstServer: 'near' });
+    expect(swapped(sb)).toBe(false);
+    play(sb, 11, 3);
+    expect(swapped(sb)).toBe(true);
+    play(sb, 4, 11);
+    expect(swapped(sb)).toBe(false);
+    play(sb, 11, 9);
+    expect(swapped(sb)).toBe(true);
+  });
+
+  it('swaps again at 5 in the deciding game, and stays swapped', () => {
+    const sb = new Scoreboard({ bestOf: 3, pointsToWin: 11, firstServer: 'near' });
+    play(sb, 11, 5);
+    play(sb, 6, 11);
+    // Game 3 (deciding): starts at the original end after two games...
+    expect(swapped(sb)).toBe(false);
+    play(sb, 4, 3);
+    expect(swapped(sb)).toBe(false);
+    sb.award('far');
+    sb.award('far'); // 4–5: someone has reached 5
+    expect(swapped(sb)).toBe(true);
+    play(sb, 3, 3);
+    expect(swapped(sb)).toBe(true);
+  });
+
+  it('a single-game match is the deciding game: ends change at 5', () => {
+    expect(endsSwapped({ near: 4, far: 2 }, { near: 0, far: 0 }, 1)).toBe(false);
+    expect(endsSwapped({ near: 4, far: 5 }, { near: 0, far: 0 }, 1)).toBe(true);
+  });
+
+  it('a 21-point game changes ends at 10 in the decider', () => {
+    expect(endsSwapped({ near: 9, far: 3 }, { near: 1, far: 1 }, 3, 21)).toBe(false);
+    expect(endsSwapped({ near: 10, far: 3 }, { near: 1, far: 1 }, 3, 21)).toBe(true);
   });
 });

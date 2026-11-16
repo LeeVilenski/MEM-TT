@@ -67,6 +67,7 @@ import { OnlineClient } from '../net/client';
 import { LocalServer, WebSocketTransport, roomUrl, type Transport } from '../net/transport';
 import { fromV, isRoomCode, randomRoomCode, seatSide, type GameMode, type Seat } from '../net/protocol';
 import { mapVec, mapState, type SideId } from '../game/frame';
+import { endsSwapped } from '../game/rules';
 import { PRESETS, type Preset } from './presets';
 
 type CameraView = 'Player' | 'Side' | 'Top' | 'Broadcast' | 'Machine';
@@ -355,6 +356,11 @@ export class Sandbox implements MenuHost {
   private autoReplayed: unknown = null;
   /** The viewer has moved the replay camera themselves (the broadcast shot stops). */
   private replayFreeCam = false;
+  /** Players have changed ends: the venue is turned half round the table. */
+  private endsSwapped = false;
+  private endsFading = false;
+  private lastPointAt = -Infinity;
+  private endsFade: HTMLDivElement | null = null;
   private savedCamera: { pos: THREE.Vector3; target: THREE.Vector3; visible: Map<string, boolean> } | null = null;
 
   // Progression
@@ -991,6 +997,7 @@ export class Sandbox implements MenuHost {
       }
       this.recordFrame();
       this.maybeAutoReplay();
+      this.syncEnds();
       if (this.playing) this.updatePlayCamera(realDt);
     }
     this.syncMenu();
@@ -1123,6 +1130,7 @@ export class Sandbox implements MenuHost {
           this.recorder.end(this.clock());
           break;
         case 'point': {
+          this.lastPointAt = this.clock();
           this.fadeMarkers();
           this.recorder.end(this.clock());
           this.sfx.point(e.result.winner === 'near', e.game);
@@ -1880,6 +1888,7 @@ export class Sandbox implements MenuHost {
   setVenue(id: VenueId) {
     this.look.venue = id;
     this.venue = setVenue(this.scene, id, this.venue);
+    this.applyEnds();
     this.sfx.setAmbience(this.look.ambience ? VENUES[id].ambience : 'none');
     this.sfx.setMusic(VENUES[id].song);
     savePref('mem.venue', id);
@@ -2106,6 +2115,55 @@ export class Sandbox implements MenuHost {
     this.hud.setReplay({ caption: '…', speed });
     this.replayFreeCam = false;
     this.syncControlsEnabled();
+  }
+
+  /**
+   * Changing ends. The game is always played from the near end, so instead the
+   * whole venue turns half round the (symmetric) table: you see the other end of
+   * the room, exactly as if you'd walked round. Ends change after each game and
+   * at 5 in the deciding game; the swap waits for the point's banner and any
+   * replay, then happens behind a quick dip to black.
+   */
+  private syncEnds() {
+    const sc = this.online?.score ?? this.match?.score ?? null;
+    let want = false;
+    if (sc) {
+      const bestOf = 'bestOf' in sc ? sc.bestOf : sc.config.bestOf;
+      const toWin = 'config' in sc ? sc.config.pointsToWin : 11;
+      // Once the match is won, stay where you finished until it's closed.
+      want = sc.winner ? this.endsSwapped : endsSwapped(sc.points, sc.games, bestOf, toWin);
+    }
+    if (want === this.endsSwapped || this.endsFading) return;
+    const fresh = !sc || sc.points.near + sc.points.far + sc.games.near + sc.games.far === 0;
+    if (fresh) {
+      // A new match (or none): just go back to the starting end.
+      this.endsSwapped = want;
+      return this.applyEnds();
+    }
+    if (this.replay || this.recorder.recording || this.clock() - this.lastPointAt < 1.45) return;
+    const swap = () => {
+      this.endsSwapped = want;
+      this.applyEnds();
+      this.hud.flash('CHANGE ENDS', want ? 'You are at the far end now' : 'Back to the end you started');
+    };
+    if (this.look.reduceMotion) return swap();
+    if (!this.endsFade) {
+      this.endsFade = document.createElement('div');
+      this.endsFade.className = 'ends-fade';
+      document.body.appendChild(this.endsFade);
+    }
+    const fade = this.endsFade;
+    this.endsFading = true;
+    fade.classList.add('on');
+    window.setTimeout(() => {
+      swap();
+      fade.classList.remove('on');
+      this.endsFading = false;
+    }, 260);
+  }
+
+  private applyEnds() {
+    if (this.venue) this.venue.group.rotation.y = this.endsSwapped ? Math.PI : 0;
   }
 
   /** Camera controls: off during play (the mouse swings the bat), except to steer a replay. */
@@ -2351,6 +2409,7 @@ export class Sandbox implements MenuHost {
         this.recorder.end(this.clock());
         break;
       case 'point': {
+        this.lastPointAt = this.clock();
         this.recorder.end(this.clock());
         this.sfx.point(e.result.winner === c.side, e.game);
         this.updateVenueScreen();

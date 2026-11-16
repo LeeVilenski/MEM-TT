@@ -4350,3 +4350,17 @@ body {
   color: #8a9bb8;
   font-size: 12px;
 }
+
+/* A quick dip to black while the players change ends. */
+.ends-fade {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+  z-index: 40;
+}
+.ends-fade.on {
+  opacity: 1;
+}
