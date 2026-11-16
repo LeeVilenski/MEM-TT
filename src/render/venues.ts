@@ -1022,7 +1022,6 @@ function testBay(): Venue {
   const bench = (x: number, z: number, len: number) => {
     g.add(box(0.8, 0.04, len, maple, x, 0.76, z), box(0.7, 0.72, len, cab, x, 0.37, z));
   };
-  bench(-W / 2 + 0.45, 0, 17);
   bench(W / 2 - 0.55, 0, 17);
 
   // Monitors (black, on stands), keyboards and open laptops on the benches.
@@ -1036,7 +1035,7 @@ function testBay(): Venue {
   const lit: THREE.Matrix4[] = [];
   let n = 0;
   for (let z = -7.8; z <= 7.8; z += 1.3) {
-    for (const side of [-1, 1]) {
+    for (const side of [1]) {
       const x = side * (W / 2 - 0.3);
       const ry = side < 0 ? Math.PI / 2 : -Math.PI / 2;
       n++;
@@ -1094,7 +1093,6 @@ function testBay(): Venue {
     ctx.fillRect(92, 60, 26, 22);
   });
   const dellMat = new THREE.MeshStandardMaterial({ map: dell, roughness: 0.9 });
-  const boxMats = [card, card, dellMat, card, card, cardDark];
 
   const pile = (cx: number, cz: number, cols: number, rows: number, seed: number) => {
     let s = seed;
@@ -1114,26 +1112,105 @@ function testBay(): Venue {
         }
       }
   };
-  pile(-5.6, -9.8, 3, 3, 7);
   pile(3.2, 8.4, 2, 2, 31);
 
-  // Grey steel shelving across the back wall, loaded with boxes.
+  // Grey steel shelving, rammed with kit: a long run down the left wall, a run across
+  // the back, and two free-standing back-to-back aisles at the far end.
   const steel = std(0x3a4150, { roughness: 0.5, metalness: 0.5 });
-  const shelfBoard = std(0xb9a27f, { roughness: 0.95 });
-  for (const sx of [-1.6, 1.8]) {
-    const len = 2.6;
-    const z = -D / 2 + 0.4;
-    for (const dx of [-len / 2, len / 2]) for (const dz of [-0.28, 0.28]) g.add(box(0.05, 2.2, 0.05, steel, sx + dx, 1.1, z + dz));
-    for (let lv = 0; lv < 4; lv++) {
-      const y = 0.15 + lv * 0.62;
-      g.add(box(len, 0.03, 0.6, shelfBoard, sx, y, z), box(len, 0.05, 0.03, std(0xd1d5db), sx, y + 0.02, z + 0.3));
-      for (let k = 0; k < 6; k++) {
-        const bw = 0.32 + ((k * 13 + lv * 7) % 5) * 0.03;
-        const bh = 0.3 + ((k + lv) % 3) * 0.08;
-        g.add(box(bw, bh, 0.5, boxMats[(k + lv * 2) % boxMats.length], sx - len / 2 + 0.25 + k * 0.42, y + 0.02 + bh / 2, z));
+  const shelfBoard = std(0xc4ab84, { roughness: 0.95 });
+  const lip = std(0xd1d5db, { roughness: 0.6 });
+  const laptopTex = canvasTexture(64, 128, (ctx) => {
+    ctx.fillStyle = '#c49c6c';
+    ctx.fillRect(0, 0, 64, 128);
+    ctx.fillStyle = '#f8f8f6';
+    ctx.fillRect(8, 74, 48, 36);
+    ctx.fillStyle = '#222';
+    for (let i = 0; i < 14; i++) ctx.fillRect(12 + i * 3, 96, i % 3 ? 1 : 2, 10);
+    ctx.font = '8px sans-serif';
+    ctx.fillText('LATITUDE', 12, 88);
+    ctx.strokeStyle = '#2b2b2b';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(10, 30);
+    ctx.bezierCurveTo(20, 18, 30, 40, 52, 26);
+    ctx.moveTo(12, 46);
+    ctx.bezierCurveTo(26, 36, 34, 54, 48, 44);
+    ctx.stroke();
+  });
+  const laptopMat = new THREE.MeshStandardMaterial({ map: laptopTex, roughness: 0.9 });
+  const lists = { card: [] as THREE.Matrix4[], dell: [] as THREE.Matrix4[], laptop: [] as THREE.Matrix4[], bag: [] as THREE.Matrix4[], post: [] as THREE.Matrix4[], board: [] as THREE.Matrix4[], lip: [] as THREE.Matrix4[] };
+  const unit = new THREE.BoxGeometry(1, 1, 1);
+  let seed = 12345;
+  const rnd = () => ((seed = (seed * 9301 + 49297) % 233280) / 233280);
+  const sized = (base: THREE.Matrix4, x: number, y: number, z: number, w: number, h: number, d: number, ry = 0) =>
+    base.clone().multiply(new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), ry), new THREE.Vector3(w, h, d)));
+  /** A shelving run, length along its local x, front facing local +z. */
+  const shelfRun = (cx: number, cz: number, len: number, ry: number, top = true) => {
+    const base = at(cx, 0, cz, ry);
+    const depth = 0.6;
+    const bays = Math.max(1, Math.round(len / 1.8));
+    for (let b = 0; b <= bays; b++) for (const dz of [-depth / 2, depth / 2]) lists.post.push(sized(base, -len / 2 + (b * len) / bays, 1.15, dz, 0.05, 2.3, 0.04));
+    const levels = [0.12, 0.62, 1.12, 1.62, 2.28];
+    levels.forEach((y, lv) => {
+      lists.board.push(sized(base, 0, y, 0, len, 0.03, depth));
+      lists.lip.push(sized(base, 0, y + 0.02, depth / 2, len, 0.06, 0.03));
+      const room = lv === levels.length - 1 ? (top ? 3.0 - y - 0.05 : 0) : levels[lv + 1] - y - 0.06;
+      if (room <= 0.1) return;
+      let x = -len / 2 + 0.04;
+      while (x < len / 2 - 0.15) {
+        const r = rnd();
+        if (lv < levels.length - 1 && r < 0.35) {
+          // A run of tall thin laptop boxes stood on end.
+          const count = 4 + Math.floor(rnd() * 6);
+          const h = Math.min(room - 0.02, 0.36 + rnd() * 0.06);
+          for (let k = 0; k < count && x < len / 2 - 0.1; k++) {
+            const w = 0.08 + rnd() * 0.03;
+            lists.laptop.push(sized(base, x + w / 2, y + 0.015 + h / 2, 0.02, w, h, 0.48));
+            x += w + 0.005;
+          }
+        } else if (r < 0.43 && lv < levels.length - 1) {
+          const w = 0.35 + rnd() * 0.2;
+          const h = Math.min(room - 0.04, 0.2 + rnd() * 0.15);
+          lists.bag.push(sized(base, x + w / 2, y + 0.015 + h / 2, 0.05, w, h, 0.4, (rnd() - 0.5) * 0.3));
+          x += w + 0.02;
+        } else {
+          const w = 0.32 + rnd() * 0.3;
+          let yy = y + 0.015;
+          // Stack until the shelf above (or near the ceiling on top).
+          while (yy < y + room - 0.18) {
+            const h = Math.min(y + room - yy - 0.01, 0.18 + rnd() * 0.25);
+            if (h < 0.12) break;
+            const d = 0.4 + rnd() * 0.18;
+            (rnd() < 0.4 ? lists.dell : lists.card).push(sized(base, x + w / 2 + (rnd() - 0.5) * 0.03, yy + h / 2, 0.3 - d / 2 + 0.02, w, h, d, (rnd() - 0.5) * 0.06));
+            yy += h;
+            if (lv < levels.length - 1 && rnd() < 0.5) break;
+          }
+          x += w + 0.02;
+        }
       }
-    }
+    });
+  };
+  shelfRun(-W / 2 + 0.36, 0, 17.2, Math.PI / 2);
+  shelfRun(-1.6, -D / 2 + 0.36, 8.6, 0);
+  for (const ax of [-3.6, 2.4]) {
+    shelfRun(ax - 0.31, -8.1, 3, -Math.PI / 2, false);
+    shelfRun(ax + 0.31, -8.1, 3, Math.PI / 2, false);
   }
+  const cardInst = instances(unit, card, lists.card);
+  const tint = new THREE.Color();
+  lists.card.forEach((_, i) => cardInst.setColorAt(i, tint.setHSL(0.08 + Math.random() * 0.02, 0.35 + Math.random() * 0.15, 0.82 + Math.random() * 0.14)));
+  g.add(
+    cardInst,
+    instances(unit, dellMat, lists.dell),
+    instances(unit, laptopMat, lists.laptop),
+    instances(unit, std(0xb9c7d8, { roughness: 0.35 }), lists.bag),
+    instances(unit, steel, lists.post),
+    instances(unit, shelfBoard, lists.board),
+    instances(unit, lip, lists.lip),
+  );
+  const note = board(['KIT TO BUILD', 'Row 1', 'REVENUE', 'Row 3'], 0.42, 0.42, { bg: '#fdf6c7', fg: '#1f2937', font: 'bold 52px "Comic Sans MS", cursive' });
+  note.position.set(-3.6, 2.0, -6.57);
+  g.add(note);
 
   // Fire exit double doors on the front-left wall, sign above; dartboard on a whiteboard.
   const door = std(0xf4f4f2, { roughness: 0.6 });
@@ -1149,26 +1226,106 @@ function testBay(): Venue {
     r.position.z = i * 0.002;
     darts.add(r);
   });
-  darts.position.set(-W / 2 + 0.03, 1.7, 7.5);
-  darts.rotation.y = Math.PI / 2;
+  darts.position.set(1.5, 1.7, D / 2 - 0.03);
+  darts.rotation.y = Math.PI;
   g.add(darts);
-  const note = board(['KIT TO BUILD', 'Row 1', 'REVENUE', 'Row 3'], 0.5, 0.5, { bg: '#fdf6c7', fg: '#1f2937', font: 'bold 52px "Comic Sans MS", cursive' });
-  note.position.set(-1.6, 2.6, -D / 2 + 0.72);
-  g.add(note);
 
-  // Floor fan, sack truck, blue crates, bin.
+  // Pedestal fan, sack truck by the window, blue crates.
+  const white = std(0xeeeae0);
   const fan = new THREE.Group();
-  fan.add(box(0.22, 0.95, 0.22, std(0xeeeae0), 0, 0.5, 0), box(0.34, 0.04, 0.34, std(0xeeeae0), 0, 0.02, 0));
-  fan.position.set(-W / 2 + 0.5, 0, 9.6);
+  fan.add(box(0.03, 1.1, 0.03, white, 0, 0.6, 0), box(0.6, 0.02, 0.04, white, 0, 0.02, 0), box(0.04, 0.02, 0.6, white, 0, 0.02, 0));
+  const head = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.1, 24), white);
+  head.rotation.x = Math.PI / 2;
+  head.position.y = 1.2;
+  fan.add(head);
+  fan.position.set(-5.4, 0, 9.6);
+  fan.rotation.y = -0.6;
   g.add(fan);
-  const truck = new THREE.Group();
-  const red = std(0xd9737a, { roughness: 0.6 });
-  truck.add(box(0.5, 1.1, 0.03, red, 0, 0.6, 0), box(0.5, 0.03, 0.3, std(0x9ca3af, { metalness: 0.5 }), 0, 0.05, 0.15));
-  truck.position.set(4.6, 0, -9.7);
-  truck.rotation.x = -0.12;
-  g.add(truck);
+  const metal = std(0x9ca3af, { metalness: 0.6, roughness: 0.4 });
+  const sack = new THREE.Group();
+  sack.add(box(0.03, 1.2, 0.03, metal, -0.2, 0.62, 0), box(0.03, 1.2, 0.03, metal, 0.2, 0.62, 0), box(0.43, 0.03, 0.03, metal, 0, 1.2, 0), box(0.43, 0.03, 0.25, metal, 0, 0.04, 0.12));
+  for (const sx of [-0.24, 0.24]) {
+    const w = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.06, 16), std(0x111111));
+    w.rotation.z = Math.PI / 2;
+    w.position.set(sx, 0.11, -0.05);
+    sack.add(w);
+  }
+  sack.position.set(6.3, 0, -10.2);
+  sack.rotation.x = -0.15;
+  g.add(sack);
   const crate = std(0x1d4ed8, { roughness: 0.5 });
-  g.add(box(0.55, 0.35, 0.4, crate, 5.6, 0.18, -8.9), box(0.55, 0.35, 0.4, crate, 5.6, 0.53, -8.9));
+  g.add(box(0.55, 0.35, 0.4, crate, 5.3, 0.18, -10.5), box(0.55, 0.35, 0.4, crate, 5.3, 0.53, -10.5));
+
+  // Wire roll cage, half full of flattened cardboard.
+  const cage: THREE.Matrix4[] = [];
+  const cw = 0.8;
+  const cd = 0.7;
+  const ch = 1.6;
+  for (let i = 0; i <= 8; i++) {
+    const t = -cw / 2 + (i * cw) / 8;
+    cage.push(sized(at(0, 0, 0), t, ch / 2 + 0.12, -cd / 2, 0.012, ch, 0.012), sized(at(0, 0, 0), t, ch / 2 + 0.12, cd / 2, 0.012, ch, 0.012));
+  }
+  for (let i = 0; i <= 7; i++) {
+    const t = -cd / 2 + (i * cd) / 7;
+    cage.push(sized(at(0, 0, 0), -cw / 2, ch / 2 + 0.12, t, 0.012, ch, 0.012), sized(at(0, 0, 0), cw / 2, ch / 2 + 0.12, t, 0.012, ch, 0.012));
+  }
+  for (let j = 0; j <= 8; j++) {
+    const y = 0.12 + (j * ch) / 8;
+    cage.push(sized(at(0, 0, 0), 0, y, -cd / 2, cw, 0.012, 0.012), sized(at(0, 0, 0), 0, y, cd / 2, cw, 0.012, 0.012), sized(at(0, 0, 0), -cw / 2, y, 0, 0.012, 0.012, cd), sized(at(0, 0, 0), cw / 2, y, 0, 0.012, 0.012, cd));
+  }
+  const rollCage = new THREE.Group();
+  rollCage.add(instances(unit, metal, cage), box(cw, 0.04, cd, metal, 0, 0.1, 0));
+  for (let k = 0; k < 6; k++) {
+    const flat = box(0.7, 0.9 + (k % 3) * 0.15, 0.02, k % 2 ? card : cardDark, (k % 2 - 0.5) * 0.06, 0.6 + (k % 3) * 0.07, -0.25 + k * 0.09);
+    flat.rotation.z = (k % 2 ? 1 : -1) * 0.05;
+    rollCage.add(flat);
+  }
+  rollCage.position.set(4.0, 0, -9.9);
+  rollCage.rotation.y = 0.2;
+  g.add(rollCage);
+
+  // Pink "MINI DAVE" platform trolley and two folding trolleys leant on the aisle ends.
+  const dave = canvasTexture(128, 192, (ctx) => {
+    ctx.fillStyle = '#e48a90';
+    ctx.fillRect(0, 0, 128, 192);
+    ctx.fillStyle = 'rgba(255,255,255,0.2)';
+    for (let i = 0; i < 40; i++) ctx.fillRect(Math.random() * 128, Math.random() * 192, 6, 3);
+    ctx.fillStyle = '#efe7d6';
+    ctx.fillRect(16, 120, 96, 50);
+    ctx.fillStyle = '#111';
+    ctx.font = 'bold 14px "Comic Sans MS", cursive';
+    ctx.fillText('MINI', 46, 138);
+    ctx.font = 'bold 26px "Comic Sans MS", cursive';
+    ctx.fillText('DAVE', 30, 164);
+  });
+  const trolley = (x: number, z: number, mat: THREE.Material, tilt: number, ry = 0) => {
+    const t = new THREE.Group();
+    const deck = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.8, 0.03), mat);
+    deck.position.y = 0.42;
+    t.add(deck, box(0.03, 0.75, 0.03, std(0xd8cdb0, { metalness: 0.4 }), -0.28, 0.85, -0.04), box(0.03, 0.75, 0.03, std(0xd8cdb0, { metalness: 0.4 }), 0.28, 0.85, -0.04), box(0.59, 0.03, 0.03, std(0xd8cdb0, { metalness: 0.4 }), 0, 1.21, -0.04));
+    t.position.set(x, 0, z);
+    t.rotation.set(tilt, ry, 0);
+    g.add(t);
+  };
+  trolley(-3.6, -6.35, new THREE.MeshStandardMaterial({ map: dave, roughness: 0.7 }), -0.25);
+  trolley(2.25, -6.3, std(0x3b3f46, { metalness: 0.3 }), -0.28, 0.1);
+  trolley(2.65, -6.25, std(0x2f3339, { metalness: 0.3 }), -0.22, -0.08);
+
+  // Open box with plastic wrap ("618"), bubble-wrapped kit and blue bags on the floor.
+  const open = new THREE.Group();
+  open.add(box(0.8, 0.35, 0.55, card, 0, 0.175, 0));
+  const film = new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, opacity: 0.35, roughness: 0.15 });
+  const wrap = new THREE.Mesh(new THREE.SphereGeometry(0.4, 12, 8), film);
+  wrap.scale.set(1.05, 0.35, 0.75);
+  wrap.position.y = 0.38;
+  const label = board(['618'], 0.3, 0.15, { bg: '#c29a6b', fg: '#1f2937', font: 'bold 120px "Comic Sans MS", cursive' });
+  label.position.set(0, 0.2, 0.28);
+  open.add(wrap, label);
+  open.position.set(0.2, 0, -9.85);
+  g.add(open);
+  const bubble = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.45, 0.4), new THREE.MeshStandardMaterial({ color: 0xdfe6ea, transparent: true, opacity: 0.7, roughness: 0.3 }));
+  bubble.position.set(-5.9, 2.55, -4.2);
+  g.add(bubble, box(0.5, 0.3, 0.35, std(0x2563eb, { roughness: 0.6 }), -1.2, 0.15, -9.9));
 
   // Speckled blue-grey vinyl floor.
   const vinyl = canvasTexture(
