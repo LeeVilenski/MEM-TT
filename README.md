@@ -145,7 +145,7 @@ Everything is generated in code: geometry, textures and sound. There are no asse
 | Ryan | Full-Stack Dev | tall; dark tousled hair and stubble, black rugby-style jersey with white trim |
 | Will | Network Engineer | blue cap, royal-blue running vest, grey shorts, watch |
 | Sysadmin | Sysadmin | beard, black t-shirt, lanyard and badge |
-| Paul | Patient flat hitter (World Tour opponent) | navy Hawaiian flower-print shirt, jeans, dark sunglasses, goatee |
+| Paul | Patient flat hitter (World Tour opponent) | bright turquoise Hawaiian hibiscus-print shirt, jeans, dark sunglasses, goatee |
 | Bryony | Wheelchair counter-hitter (World Tour opponent) | plays seated in a sports wheelchair (cambered wheels, push rims); berry star-print top, ponytail, glasses |
 
 In first person you see only your paddle, so nothing hides the ball. Replays and the other cameras show your full character.
