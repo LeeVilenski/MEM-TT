@@ -29,6 +29,11 @@ export const RUBBERS: Record<string, Rubber> = {
   shortPips: { id: 'shortPips', name: 'Rapid', kind: 'Short pips', restitution: 0.88, restitutionSpeedLoss: 0.006, friction: 0.55, tangentialRestitution: 0.05 },
   longPips: { id: 'longPips', name: 'Twister', kind: 'Long pips', restitution: 0.72, restitutionSpeedLoss: 0.008, friction: 0.1, tangentialRestitution: 0 },
   anti: { id: 'anti', name: 'Deadener', kind: 'Anti-spin', restitution: 0.62, restitutionSpeedLoss: 0.01, friction: 0.04, tangentialRestitution: 0 },
+  // Better inverted rubbers (unlocked on the World Tour): grippier topsheets and livelier
+  // sponges, so more spin and a little more pace for the same stroke.
+  classicPro: { id: 'classicPro', name: 'Classic Pro', kind: 'Inverted', restitution: 0.87, restitutionSpeedLoss: 0.006, friction: 1.2, tangentialRestitution: 0.34 },
+  turbo: { id: 'turbo', name: 'Turbo Spin', kind: 'Inverted', restitution: 0.885, restitutionSpeedLoss: 0.006, friction: 1.3, tangentialRestitution: 0.38 },
+  gripMax: { id: 'gripMax', name: 'Grip Max', kind: 'Inverted', restitution: 0.89, restitutionSpeedLoss: 0.006, friction: 1.42, tangentialRestitution: 0.42 },
 };
 
 /** Blade face, approximated as a disc. ITTF has no size rule; typical blades are ~15 × 16 cm. */

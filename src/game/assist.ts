@@ -205,14 +205,29 @@ export function makeAngleAssist(
       const r = landingOutcome(ball, { ...pose, vel: t.vel! }, t.normal, rubber, params, 'rally');
       return r.outcome === 'in' && r.pos ? r.pos.x : null;
     };
-    const x0 = landX(0);
-    if (x0 === null || Math.abs(x0 - target.x) < 0.06) return adj;
     const maxYaw = 30 * k;
-    let best = { deg: 0, err: Math.abs(x0 - target.x) };
+    let start = 0;
+    let x0 = landX(0);
+    if (x0 === null) {
+      // The stroke as played misses (e.g. sidespin curving it off the side, or aimed too
+      // wide): look for a turn that lands, nearest the aim, rather than giving up on it.
+      let found: { deg: number; x: number } | null = null;
+      for (let deg = 4; deg <= maxYaw + 1e-6 && !found; deg += 4) {
+        for (const d of [deg, -deg]) {
+          const x = landX(d);
+          if (x !== null && (!found || Math.abs(x - target.x) < Math.abs(found.x - target.x))) found = { deg: d, x };
+        }
+      }
+      if (!found) return adj;
+      start = found.deg;
+      x0 = found.x;
+    }
+    if (Math.abs(x0 - target.x) < 0.06) return start ? turned(start) : adj;
+    let best = { deg: start, err: Math.abs(x0 - target.x) };
     // Secant search on yaw → landing x.
-    let d0 = 0;
+    let d0 = start;
     let e0 = x0 - target.x;
-    let d1 = e0 > 0 ? -6 : 6;
+    let d1 = start + (e0 > 0 ? -6 : 6);
     for (let it = 0; it < 4; it++) {
       const x1 = landX(d1);
       if (x1 === null) {
@@ -285,11 +300,33 @@ export function makeAngleAssist(
     return at(Math.sign(target) * reach);
   };
 
+  /** Whether a contact adjustment lands. */
+  const lands = (ball: BallState, pose: PaddlePose, adj: ContactAdjust, rubber: Rubber) =>
+    landingOutcome(ball, { ...pose, vel: adj.vel ?? pose.vel }, adj.normal, rubber, params, mode()).outcome === 'in';
+
   return (ball: BallState, pose: PaddlePose, normal: Vec3, rubber: Rubber): Vec3 | ContactAdjust => {
     const k = strength();
     const r = base(ball, pose, normal, rubber);
     if (k <= 0) return r;
-    const adj = 'normal' in r ? r : { normal: r };
+    let adj: ContactAdjust = 'normal' in r ? r : { normal: r };
+    // Rallies: a stroke heading off the side (an angled swipe, sidespin carrying it wide) can't be
+    // saved by tilting the face up or down. Turn the whole stroke back toward the table first,
+    // smallest turn that lands, within what this strength allows, then aim it from there.
+    if (mode() === 'rally' && !lands(ball, pose, adj, rubber)) {
+      const maxYaw = 30 * k;
+      search: for (let deg = 6; deg <= maxYaw + 1e-6; deg += 6) {
+        for (const d of [deg, -deg]) {
+          const rad = (d * Math.PI) / 180;
+          const turnedPose = { ...pose, vel: rotate(pose.vel, UP, rad) };
+          const t = base(ball, turnedPose, rotate(normal, UP, rad), rubber);
+          const tAdj: ContactAdjust = 'normal' in t ? { normal: t.normal, vel: t.vel ?? turnedPose.vel } : { normal: t, vel: turnedPose.vel };
+          if (lands(ball, pose, tAdj, rubber)) {
+            adj = tAdj;
+            break search;
+          }
+        }
+      }
+    }
     const out = mode() === 'serve' && diagonal() ? steerDiagonal(ball, pose, adj, rubber, k) : steer(ball, pose, adj, rubber, k);
     return out.vel ? out : out.normal;
   };

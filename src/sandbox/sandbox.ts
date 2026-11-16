@@ -34,7 +34,7 @@ import { IncomingPrediction } from '../game/intercept';
 import { Match } from '../game/match';
 import { LET_MESSAGE, pointMessage } from '../game/messages';
 import { classifyShot } from '../game/shots';
-import { NO_INPUT, type SwingInput } from '../game/swing';
+import { NO_INPUT, type SwingInput, type SwipeMode } from '../game/swing';
 import { BallView, SPIN_PALETTES, setSpinPalette, spinColor, spinKind, type SpinPalette } from '../render/ballView';
 import { Juice, hitPower } from '../render/juice';
 import { PlayerView } from '../render/playerView';
@@ -50,6 +50,7 @@ import { AutoQuality, QUALITY_LEVELS, type QualitySetting } from '../render/qual
 import { Career } from '../progress/profile';
 import { DRILLS, DrillSession, drillUnlocked, type TargetZone } from '../progress/drills';
 import { GRADE_TEXT } from '../game/contact';
+import { BLADES, LEVEL_GEAR, TOUR_GEAR, defaultBat, opponentBat, type Bat, type BladeId } from '../game/equipment';
 import { GRADE_TEXT as MATCH_GRADE_TEXT, matchGrade, type MatchGrade } from '../game/matchGrade';
 import type { OverGrade } from './hud';
 import { TOUR_STOPS, TourRun, stopUnlocked, stopsWon } from '../progress/tour';
@@ -334,6 +335,8 @@ export class Sandbox implements MenuHost {
     callouts: loadPref('mem.callouts', '0') === '1',
     /** MJ mode: a falsetto pop-star yelp on each of your smashes. Off by default. */
     mjMode: loadPref('mem.mjMode', '0') === '1',
+    /** What a rally swipe's sideways angle does: aim + curve in (default), aim + real brush, aim only, spin only. */
+    swipeMode: (['curve', 'real', 'aim', 'spin'].includes(loadPref('mem.swipeMode', 'curve')) ? loadPref('mem.swipeMode', 'curve') : 'curve') as SwipeMode,
     /** Spin colours on the trail, comet tail and sparks. */
     spinPalette: (loadPref('mem.spinPalette', 'standard') === 'colourblind' ? 'colourblind' : 'standard') as SpinPalette,
     /** A label naming the spin of the ball coming at you. Off by default. */
@@ -443,6 +446,7 @@ export class Sandbox implements MenuHost {
     this.hud = new Hud(container);
 
     this.player = new Player('p1', this.params);
+    this.player.swing.params.swipeMode = this.look.swipeMode;
     this.playerView = new PlayerView(this.scene);
     this.playerView.visible = false;
     this.aiView = new PlayerView(this.scene, { bodyColor: 0xe8562a, bodyOpacity: 0.45 });
@@ -540,6 +544,7 @@ export class Sandbox implements MenuHost {
     // Restore the last player picked ("Playing as"), if still unlocked.
     const savedStyle = loadPref('mem.style', '');
     if (savedStyle in STYLES && savedStyle !== this.realism.style && !this.lockReason('style', savedStyle)) this.setStyle(savedStyle as StyleId, false);
+    else this.player.applyBat(this.batFor(this.player.style.id));
     this.sfx.volume = this.look.volume;
     this.sfx.muted = this.look.muted;
     this.sfx.ambienceOn = this.look.ambience;
@@ -1056,6 +1061,9 @@ export class Sandbox implements MenuHost {
     const ai = (this.ai = new AiPlayer('far', AI_LEVELS[this.matchSettings.level], this.params));
     const st = this.matchSettings.aiStyle === 'random' ? FREE_PLAY_OPPONENT_IDS[Math.floor(Math.random() * FREE_PLAY_OPPONENT_IDS.length)] : this.matchSettings.aiStyle;
     ai.setStyle(STYLES[st]);
+    // Better opponents carry better bats: by World Tour stop, else by level.
+    const stopIndex = this.tournament ? TOUR_STOPS.indexOf(this.tournament.stop) : -1;
+    ai.setBat(opponentBat(st, stopIndex >= 0 ? TOUR_GEAR[stopIndex] : LEVEL_GEAR[this.matchSettings.level]));
     this.aiView.setStyle(st);
     const match = (this.match = new Match(
       this.params,
@@ -1251,7 +1259,8 @@ export class Sandbox implements MenuHost {
   private unlockLabel(kind: UnlockKind, id: string) {
     if (kind === 'venue') return VENUES[id as VenueId]?.name ?? id;
     if (kind === 'style') return STYLES[id as StyleId]?.character ?? id;
-    return `${RUBBERS[id]?.name} (${RUBBERS[id]?.kind})`;
+    if (kind === 'blade') return `${BLADES[id as BladeId]?.name ?? id} blade`;
+    return `${RUBBERS[id]?.name} rubber (${RUBBERS[id]?.kind})`;
   }
 
   /** True (and tells the player how to unlock it) if an item is still locked. */
@@ -1657,12 +1666,39 @@ export class Sandbox implements MenuHost {
     this.realism.style = id;
     savePref('mem.style', id);
     this.player.applyStyle(id);
+    this.player.applyBat(this.batFor(id));
     this.playerView.setStyle(id);
     this.rubberSel.forehand = this.player.rubbers.forehand.id;
     this.rubberSel.backhand = this.player.rubbers.backhand.id;
     this.online?.setStyle(id);
     this.gui.controllersRecursive().forEach((c) => c.updateDisplay());
     if (announce && !this.menu?.visible) this.hud.flash(STYLES[id].character.toUpperCase(), `${STYLES[id].role !== STYLES[id].character ? STYLES[id].role + ' · ' : ''}${STYLES[id].label}: ${STYLES[id].description}`);
+  }
+
+  /** A character's bat: the one you set up for them, else their usual rubbers on a starter blade. */
+  batFor(id: StyleId): Bat {
+    const saved = this.career.data.bats[id];
+    if (!saved) return defaultBat(id);
+    // Kit that's locked again (e.g. after switching "Unlock everything" off) falls back.
+    const ok = (kind: UnlockKind, x: string) => !this.lockReason(kind, x);
+    const d = defaultBat(id);
+    return {
+      blade: ok('blade', saved.blade) ? saved.blade : d.blade,
+      forehand: ok('rubber', saved.forehand) ? saved.forehand : d.forehand,
+      backhand: ok('rubber', saved.backhand) ? saved.backhand : d.backhand,
+    };
+  }
+
+  /** Change a character's bat (only to unlocked kit); applies now if it's your player. */
+  setBat(id: StyleId, bat: Bat) {
+    if (this.lockReason('blade', bat.blade) || this.lockReason('rubber', bat.forehand) || this.lockReason('rubber', bat.backhand)) return;
+    this.career.setBat(id, bat);
+    if (this.player.style.id === id) {
+      this.player.applyBat(bat);
+      this.rubberSel.forehand = bat.forehand;
+      this.rubberSel.backhand = bat.backhand;
+      this.gui.controllersRecursive().forEach((c) => c.updateDisplay());
+    }
   }
 
   setVolume(v: number) {
@@ -1781,6 +1817,12 @@ export class Sandbox implements MenuHost {
     savePref('mem.spinPalette', p);
     setSpinPalette(p);
     this.ball.clearTrail();
+  }
+
+  setSwipeMode(m: SwipeMode) {
+    this.look.swipeMode = m;
+    savePref('mem.swipeMode', m);
+    this.player.swing.params.swipeMode = m;
   }
 
   setSpinLabel(on: boolean) {
@@ -2786,7 +2828,7 @@ export class Sandbox implements MenuHost {
         pl.controllersRecursive().forEach((c) => c.updateDisplay());
         return;
       }
-      this.player.rubbers[wing] = RUBBERS[id];
+      this.setBat(this.player.style.id, { ...this.player.bat, [wing]: id });
     };
     pl.add(rubberSel, 'forehand', rubberNames).name('Forehand rubber').onChange(pickRubber('forehand'));
     pl.add(rubberSel, 'backhand', rubberNames).name('Backhand rubber').onChange(pickRubber('backhand'));
