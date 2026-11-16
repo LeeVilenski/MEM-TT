@@ -37,8 +37,19 @@ export interface Venue {
   update(dt: number, time: number): void;
   /** Venues with a screen show the score on it. */
   setScore?(lines: string[]): void;
+  /** Where a free camera may go: a box centred on the table (floor at y = 0). */
+  bounds: CameraBounds;
   dispose(): void;
 }
+
+export interface CameraBounds {
+  halfW: number;
+  halfD: number;
+  h: number;
+}
+
+/** Outdoor venues (and the sandbox) have no walls: a generous box round the court. */
+export const OPEN_BOUNDS: CameraBounds = { halfW: 12, halfD: 15, h: 8 };
 
 // ---------------------------------------------------------------- helpers
 
@@ -79,6 +90,7 @@ const at = (x: number, y: number, z: number, ry = 0, s = 1) => new THREE.Matrix4
 
 function room(group: THREE.Group, w: number, d: number, h: number, wallMat: THREE.Material, opts: { ceiling?: THREE.Material; skipWalls?: ('back' | 'front' | 'left' | 'right')[] } = {}) {
   const skip = new Set(opts.skipWalls ?? []);
+  group.userData.bounds = { halfW: w / 2, halfD: d / 2, h } satisfies CameraBounds;
   const wall = (gw: number, x: number, z: number, ry: number) => {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(gw, h), wallMat);
     m.position.set(x, h / 2, z);
@@ -1847,6 +1859,7 @@ function makeVenue(id: VenueId, group: THREE.Group, look: Look): Venue {
     group,
     update: look.update ?? (() => {}),
     setScore: look.setScore,
+    bounds: (group.userData.bounds as CameraBounds | undefined) ?? OPEN_BOUNDS,
     dispose: () =>
       group.traverse((o) => {
         const m = o as THREE.Mesh;
