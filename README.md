@@ -31,6 +31,8 @@ The game opens on a **title screen** over a slowly orbiting view of the venue: *
 
 **Tutorial** (title screen, or from How to play): a guided ball-machine session in seven steps: meet the ball, keep it on the table, topspin, backspin, block, aim left, aim right. A coach card shows what to do, tracks progress and gives a tip after each miss (too late, too long, into the net, not enough spin…). There's no ball limit; it ends with a choice of a quick match, more practice or the title.
 
+**Changing ends:** as in a real match, the players change ends after every game, and again in the deciding game when someone reaches 5. You always play from the near end, so instead the whole venue turns half round the table behind a quick fade, with a "CHANGE ENDS" card: you see the other end of the room for that game. It waits for the point's banner and any replay, so it lands in the pause before the next serve. Works in matches, World Tour, online and doubles; practice and drills stay put. With Reduce motion on there's no fade.
+
 **Characters move:** side-step shuffles when moving, a bouncy ready stance, the upper body turning into strokes and leaning for low balls, and after each point a hop and fist pump or a slump.
 
 **Spin colours:** the ball's trail (now a thick line), comet tail, sparks and bounce marks are coloured by the ball's predominant spin: **red topspin, green backspin, yellow sidespin** (side or corkscrew outweighing top/back), white for no spin. Light spin is a little paler.

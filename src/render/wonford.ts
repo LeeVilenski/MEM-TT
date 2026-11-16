@@ -193,7 +193,7 @@ const hex = (s: string) => new THREE.Color(s);
 
 /** Mown lawn: alternate light and dark stripes, blades and a few stray leaves. One tile = 5 m. */
 function lawnTexture(repeat: number) {
-  return canvasTexture(
+  const t = canvasTexture(
     256,
     256,
     (ctx) => {
@@ -220,6 +220,10 @@ function lawnTexture(repeat: number) {
     },
     [repeat, repeat],
   );
+  // Centre a stripe on the table, so the pattern is the same when the venue
+  // turns half round for a change of ends (the core floor doesn't turn).
+  t.offset.x = 0.25;
+  return t;
 }
 
 /** Worn earth round the table: soft irregular blobs at each end and under it, with leaf litter. */

@@ -139,6 +139,69 @@ function board(lines: string[], w: number, h: number, opts: { bg?: string; fg?: 
   return new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.6 }));
 }
 
+/** A round wall clock (face toward +z; turn it to hang it on a wall). */
+function wallClock(r = 0.22) {
+  const face = canvasTexture(128, 128, (ctx) => {
+    ctx.fillStyle = '#222';
+    ctx.beginPath();
+    ctx.arc(64, 64, 63, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#f7f6f2';
+    ctx.beginPath();
+    ctx.arc(64, 64, 56, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#222';
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      ctx.lineWidth = i % 3 ? 2 : 4;
+      ctx.beginPath();
+      ctx.moveTo(64 + Math.sin(a) * 44, 64 - Math.cos(a) * 44);
+      ctx.lineTo(64 + Math.sin(a) * 52, 64 - Math.cos(a) * 52);
+      ctx.stroke();
+    }
+    ctx.lineCap = 'round';
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(64, 64);
+    ctx.lineTo(64 + Math.sin(-0.5) * 28, 64 - Math.cos(-0.5) * 28);
+    ctx.stroke();
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(64, 64);
+    ctx.lineTo(64 + Math.sin(2.1) * 44, 64 - Math.cos(2.1) * 44);
+    ctx.stroke();
+  });
+  return new THREE.Mesh(new THREE.CircleGeometry(r, 32), new THREE.MeshStandardMaterial({ map: face, roughness: 0.5 }));
+}
+
+/** A framed picture: a simple abstract print in a thin frame (face toward +z). */
+function framedPrint(w: number, h: number, cols: string[]) {
+  const g = new THREE.Group();
+  const art = canvasTexture(128, Math.round((128 * h) / w), (ctx) => {
+    const H = Math.round((128 * h) / w);
+    ctx.fillStyle = '#f4f1ea';
+    ctx.fillRect(0, 0, 128, H);
+    cols.forEach((c, i) => {
+      ctx.fillStyle = c;
+      ctx.beginPath();
+      ctx.arc(20 + ((i * 47) % 90), 18 + ((i * 31) % Math.max(20, H - 36)), 14 + (i % 3) * 8, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  });
+  g.add(box(w + 0.06, h + 0.06, 0.03, std(0x2b2b2b), 0, 0, 0));
+  const pic = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ map: art, roughness: 0.7 }));
+  pic.position.z = 0.017;
+  g.add(pic);
+  return g;
+}
+
+/** Hang a +z-facing prop on the near wall (z = zWall), facing back into the room. */
+function onNearWall(o: THREE.Object3D, x: number, y: number, zWall: number) {
+  o.position.set(x, y, zWall - 0.02);
+  o.rotation.y = Math.PI;
+  return o;
+}
+
 // ---------------------------------------------------------------- venues
 
 function office(): Venue {
@@ -202,6 +265,47 @@ function office(): Venue {
   wb.rotation.y = Math.PI / 2;
   g.add(wb);
   g.add(plant(-6.8, -8.5, 1.4), plant(6.8, -8.5, 1.4), plant(-3, -9.2), plant(3, -9.2));
+
+  // The near wall (seen when you change ends): a kitchenette, a sofa corner, the door.
+  const Z = D / 2;
+  const cab = std(0xf3f1ec);
+  const worktop = std(0x3b3f46, { roughness: 0.4 });
+  g.add(box(4.2, 0.88, 0.62, cab, -4.6, 0.44, Z - 0.31), box(4.3, 0.04, 0.66, worktop, -4.6, 0.9, Z - 0.33));
+  g.add(box(4.2, 0.7, 0.36, cab, -4.6, 2.05, Z - 0.18));
+  for (let x = -6.3; x <= -3; x += 0.7) g.add(box(0.02, 0.6, 0.01, std(0xc9c5bd), x, 2.05, Z - 0.365));
+  g.add(box(0.75, 1.9, 0.68, std(0xd9dce0, { metalness: 0.4, roughness: 0.35 }), -7.1, 0.95, Z - 0.34));
+  g.add(box(0.32, 0.4, 0.34, std(0x1f2328, { metalness: 0.3 }), -5.6, 1.12, Z - 0.3));
+  g.add(box(0.1, 0.03, 0.1, glow(0x5ad1ff, 1.6), -5.6, 1.2, Z - 0.47));
+  const mugCols = [0xe8562a, 0x2f7cf6, 0xf7f7f4, 0x3fa34d];
+  mugCols.forEach((c, i) => {
+    const mug = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.04, 0.1, 12), std(c));
+    mug.position.set(-4.6 + i * 0.16, 0.97, Z - 0.35);
+    g.add(mug);
+  });
+  g.add(onNearWall(board(['KITCHEN', 'wash your mug!', 'milk: ask Paul'], 1.1, 0.5, { bg: '#fff6c8', fg: '#7a3412', font: 'bold 40px sans-serif' }), -3.4, 1.4, Z));
+  g.add(onNearWall(wallClock(0.25), 0, 2.55, Z));
+  // Noticeboard and the doorway in the middle.
+  g.add(onNearWall(board(['LEAGUE TABLE', '1. Lee      18', '2. Paul     15', '3. Bryony   15', '4. IT desk   9'], 1.6, 1.1, { bg: '#c9a46a', fg: '#1f2937', font: 'bold 38px ui-monospace, monospace' }), -1.3, 1.55, Z));
+  g.add(box(1.0, 2.2, 0.06, std(0x8a6a4c), 1.1, 1.1, Z - 0.03), box(1.15, 0.08, 0.08, std(0x4b5563), 1.1, 2.24, Z - 0.04));
+  const exit = box(0.36, 0.16, 0.04, glow(0x35d07f, 1.6), 1.1, 2.45, Z - 0.03);
+  g.add(exit);
+  // Sofa corner with a coffee table, a water cooler and a printer.
+  const sofaMat = std(0x2f4f7f, { roughness: 0.95 });
+  g.add(box(2.4, 0.42, 0.85, sofaMat, 4.6, 0.21, Z - 0.6), box(2.4, 0.5, 0.2, sofaMat, 4.6, 0.62, Z - 0.13));
+  for (const sx of [-1, 1]) g.add(box(0.2, 0.62, 0.85, sofaMat, 4.6 + sx * 1.3, 0.31, Z - 0.6));
+  g.add(box(0.5, 0.35, 0.35, std(0xe8562a), 3.9, 0.55, Z - 0.35), box(0.5, 0.35, 0.35, std(0xffd166), 5.3, 0.55, Z - 0.35));
+  g.add(box(1.2, 0.04, 0.6, std(0xcfc6b5), 4.6, 0.42, Z - 1.7));
+  for (const [dx, dz] of [[-0.5, -0.24], [0.5, -0.24], [-0.5, 0.24], [0.5, 0.24]] as const) g.add(box(0.04, 0.4, 0.04, std(0x2b2b2b), 4.6 + dx, 0.2, Z - 1.7 + dz));
+  g.add(onNearWall(framedPrint(1.5, 1.0, ['#e8562a', '#2f7cf6', '#ffd166', '#3fa34d']), 4.6, 1.75, Z));
+  const cooler = new THREE.Group();
+  cooler.add(box(0.36, 1.0, 0.36, std(0xf0f0ee), 0, 0.5, 0));
+  const bottle = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.42, 16), new THREE.MeshStandardMaterial({ color: 0x9fd3f2, transparent: true, opacity: 0.6, roughness: 0.1 }));
+  bottle.position.y = 1.22;
+  cooler.add(bottle);
+  cooler.position.set(6.9, 0, Z - 0.3);
+  g.add(cooler);
+  g.add(box(0.6, 0.85, 0.5, std(0xd5d7da), 2.4, 0.43, Z - 0.3), box(0.5, 0.06, 0.3, std(0x3a3f46), 2.4, 0.88, Z - 0.3));
+  g.add(plant(7.2, Z - 1.2, 1.3), plant(-2.3, Z - 0.4, 1.0));
 
   const carpet = canvasTexture(
     128,
@@ -1419,6 +1523,39 @@ function conference(): Venue {
   okr.position.set(-W / 2 + 0.02, 1.6, 3.5);
   okr.rotation.y = Math.PI / 2;
   g.add(okr, plant(-4.8, -7, 1.2), plant(4.6, -7, 1.2));
+
+  // The near wall (seen when you change ends): sideboard, pictures, door, clock.
+  const Z = D / 2;
+  const walnut = std(0x5a3f2a, { roughness: 0.55 });
+  g.add(box(2.6, 0.8, 0.5, walnut, -2.2, 0.4, Z - 0.25));
+  for (let i = 0; i < 4; i++) g.add(box(0.6, 0.66, 0.01, std(0x6b4f35, { roughness: 0.5 }), -3.15 + i * 0.63, 0.42, Z - 0.505));
+  const jug = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 0.28, 14), new THREE.MeshStandardMaterial({ color: 0xcfe8f5, transparent: true, opacity: 0.55, roughness: 0.05 }));
+  jug.position.set(-2.9, 0.94, Z - 0.25);
+  g.add(jug);
+  for (let i = 0; i < 5; i++) {
+    const glassCup = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.03, 0.1, 10), new THREE.MeshStandardMaterial({ color: 0xe6f2f7, transparent: true, opacity: 0.5, roughness: 0.05 }));
+    glassCup.position.set(-2.6 + i * 0.12, 0.85, Z - 0.3);
+    g.add(glassCup);
+  }
+  const fruit = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.14, 0.08, 16), std(0xdedad2));
+  fruit.position.set(-1.4, 0.84, Z - 0.25);
+  g.add(fruit);
+  [0xd94a2b, 0x7fb24a, 0xf2c14e].forEach((c, i) => {
+    const f = new THREE.Mesh(new THREE.SphereGeometry(0.05, 10, 8), std(c));
+    f.position.set(-1.48 + i * 0.08, 0.91, Z - 0.25 + (i % 2) * 0.05);
+    g.add(f);
+  });
+  g.add(onNearWall(framedPrint(1.1, 0.75, ['#0e9aa7', '#e8562a', '#f4d35e']), -3.1, 1.75, Z));
+  g.add(onNearWall(framedPrint(1.1, 0.75, ['#2f7cf6', '#3fa34d', '#db2777']), -1.4, 1.75, Z));
+  g.add(onNearWall(board(['RETRO', '+ ping pong at lunch', '+ shipped on time', '- who took the bats?'], 1.7, 1.05), 1.6, 1.6, Z));
+  g.add(onNearWall(wallClock(0.2), 1.6, 2.6, Z));
+  // The door, with its meeting sign, and a coat stand.
+  g.add(box(0.95, 2.1, 0.05, std(0x8a6a4c), 3.9, 1.05, Z - 0.03), box(1.05, 0.07, 0.07, std(0xefece6), 3.9, 2.14, Z - 0.04));
+  g.add(onNearWall(board(['IN USE', 'tournament'], 0.5, 0.2, { bg: '#b91c1c', fg: '#ffffff', font: 'bold 70px sans-serif' }), 3.9, 1.6, Z - 0.07));
+  const stand = std(0x2b2b2b);
+  g.add(box(0.04, 1.75, 0.04, stand, 4.9, 0.875, Z - 0.4), box(0.4, 0.03, 0.4, stand, 4.9, 0.015, Z - 0.4));
+  g.add(box(0.36, 0.7, 0.14, std(0x2f4f7f), 4.9, 1.3, Z - 0.48));
+  g.add(plant(-4.9, Z - 0.5, 1.2));
 
   const wood = canvasTexture(
     256,

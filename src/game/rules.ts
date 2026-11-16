@@ -327,3 +327,16 @@ export class Scoreboard {
     return { game: false, match: false };
   }
 }
+
+/**
+ * Have the players swapped ends from where they started? They change ends after
+ * every game, and in the deciding game once either side reaches half the target
+ * (5 in an 11-point game), as in the ITTF rules.
+ */
+export function endsSwapped(points: Record<SideId, number>, games: Record<SideId, number>, bestOf: number, pointsToWin = 11): boolean {
+  const played = games.near + games.far;
+  let swapped = played % 2 === 1;
+  const deciding = played === bestOf - 1;
+  if (deciding && Math.max(points.near, points.far) >= Math.ceil(pointsToWin / 2) - 1) swapped = !swapped;
+  return swapped;
+}
