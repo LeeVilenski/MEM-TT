@@ -190,10 +190,10 @@ const LOOKS: Record<StyleId, Look> = {
       g.add(v, under);
     },
   },
-  // Paul: navy Hawaiian shirt with a pink, teal and orange flower print, open collar,
+  // Paul: bright turquoise Hawaiian shirt with a hot-pink, orange, red, white and yellow hibiscus print, open collar,
   // jeans, dark sunglasses, short dark hair and a goatee.
   patient: {
-    shirt: 0x1c2442,
+    shirt: 0x10c4d0,
     legs: { kind: 'trousers', color: 0x3b5b8f },
     skin: 0xe9b996,
     hair: 0x3a2a20,
@@ -204,8 +204,8 @@ const LOOKS: Record<StyleId, Look> = {
     lenses: 0x1b2230,
     goatee: 0x4a3426,
     accessory: (g, m, t) => {
-      // A busy flower print front and back: big blossoms (petals round a yellow centre) among leaves.
-      const petals = [0xf06292, 0x2bb3a3, 0xf59e0b, 0xf8fafc, 0xec4899];
+      // A busy hibiscus print front and back: big blossoms (petals round a yellow centre) among leaves.
+      const petals = [0xff2d8a, 0xff7a00, 0xef233c, 0xffffff, 0xffd60a, 0xc026d3];
       const disc = new THREE.CircleGeometry(1, 10);
       const leaf = new THREE.CircleGeometry(1, 6);
       const place = (o: THREE.Object3D, i: number, back: boolean, x: number, y: number) => {
@@ -227,7 +227,7 @@ const LOOKS: Record<StyleId, Look> = {
         const y = 0.93 + ((row + 0.5) / ROWS + jitter(i + 99) * 0.08) * 0.45;
         if (i % 3 === 0) {
           // A leaf.
-          const l = new THREE.Mesh(leaf, m(i % 2 ? 0x15803d : 0x0e7490));
+          const l = new THREE.Mesh(leaf, m(i % 2 ? 0x22c55e : 0x84cc16));
           l.scale.set(0.012, 0.028, 1);
           l.rotation.z = i;
           const w = new THREE.Group();
@@ -252,7 +252,7 @@ const LOOKS: Record<StyleId, Look> = {
       }
       // Open collar: two lapels either side of the neck.
       for (const side of [-1, 1]) {
-        const lapel = new THREE.Mesh(new THREE.CircleGeometry(0.04, 3), m(0x141a33));
+        const lapel = new THREE.Mesh(new THREE.CircleGeometry(0.04, 3), m(0x0b8f99));
         lapel.position.set(side * 0.03, 1.415, t.front(1.415, side * 0.03) - 0.004);
         lapel.rotation.set(0, Math.PI, side * 0.6 - Math.PI / 2);
         lapel.scale.set(1.2, 0.7, 1);
