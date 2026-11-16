@@ -62,7 +62,7 @@ import { Coach } from './coach';
 import { Tutorial, tutorialHint } from '../progress/tutorial';
 import { SERVE_TYPES, serveReport, tossHeightFor, type ServeReport, type ServeType } from '../game/serves';
 import { Menu, type MenuHost, type PauseContext } from './menu';
-import { VENUES, setVenue, type Venue, type VenueId } from '../render/venues';
+import { OPEN_BOUNDS, VENUES, setVenue, type Venue, type VenueId } from '../render/venues';
 import { OnlineClient } from '../net/client';
 import { LocalServer, WebSocketTransport, roomUrl, type Transport } from '../net/transport';
 import { fromV, isRoomCode, randomRoomCode, seatSide, type GameMode, type Seat } from '../net/protocol';
@@ -1006,6 +1006,7 @@ export class Sandbox implements MenuHost {
     if (this.quality.setting === 'auto' && this.autoQuality.sample(realDt)) this.applyQuality();
     this.hud.setFps(this.quality.showFps ? `${this.autoQuality.fps} fps · ${QUALITY_LEVELS[this.qualityLevel].name}` : null);
     this.controls.update();
+    if (this.replay && this.replayFreeCam) this.keepReplayCameraInRoom();
     const b = this.ball.last;
     this.juice.update(realDt, this.ball.isVisible && b ? { pos: b.pos, state: b.state, visible: true } : null);
     this.updateSpinTag();
@@ -2110,6 +2111,20 @@ export class Sandbox implements MenuHost {
   /** Camera controls: off during play (the mouse swings the bat), except to steer a replay. */
   private syncControlsEnabled() {
     this.controls.enabled = !this.playing || (!!this.replay && !document.pointerLockElement);
+  }
+
+  /** Keep a viewer-steered replay camera (and what it orbits) inside the room. */
+  private keepReplayCameraInRoom() {
+    const b = this.venue?.bounds ?? OPEN_BOUNDS;
+    const m = 0.25; // stay a little off the walls, floor and ceiling
+    const clamp = (v: THREE.Vector3) => {
+      v.x = THREE.MathUtils.clamp(v.x, -b.halfW + m, b.halfW - m);
+      v.z = THREE.MathUtils.clamp(v.z, -b.halfD + m, b.halfD - m);
+      v.y = THREE.MathUtils.clamp(v.y, 0.15, b.h - m);
+    };
+    clamp(this.controls.target);
+    clamp(this.camera.position);
+    this.camera.lookAt(this.controls.target);
   }
 
   /** Back to the broadcast shot after the viewer moved the replay camera. */
