@@ -488,7 +488,11 @@ function signTexture(lines: string[], bg: string, fg: string, w = 256, h = 128) 
     ctx.fillStyle = fg;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    const size = Math.floor(h / (lines.length + 0.8));
+    let size = Math.floor(h / (lines.length + 0.8));
+    ctx.font = `bold ${size}px sans-serif`;
+    // Shrink to fit the widest line.
+    const widest = Math.max(...lines.map((l) => ctx.measureText(l).width));
+    if (widest > w * 0.9) size = Math.floor((size * w * 0.9) / widest);
     ctx.font = `bold ${size}px sans-serif`;
     lines.forEach((l, i) => ctx.fillText(l, w / 2, (h * (i + 0.5 + 0.4)) / (lines.length + 0.8)));
   });
