@@ -7,6 +7,8 @@ import type { UnlockKind } from '../progress/unlocks';
 import { CharacterPreview } from '../render/charPreview';
 import { canInstall, install, onInstallChange } from '../pwa/install';
 import { DRILL_CATEGORIES, type Drill } from '../progress/drills';
+import { BAT_RUBBER_IDS, BLADES, BLADE_IDS, type Bat, type BladeId } from '../game/equipment';
+import { RUBBERS } from '../physics';
 
 /** Which screen the menu shows (null: hidden). */
 export type MenuScreen = 'title' | 'pause' | 'vsai' | 'online' | 'settings' | 'characters' | 'training';
@@ -30,6 +32,9 @@ export interface MenuHost {
   devTools: boolean;
   /** null if unlocked, otherwise how to unlock it. */
   lockReason(kind: UnlockKind, id: string): string | null;
+  /** A character's bat, and changing it. */
+  batFor(id: StyleId): Bat;
+  setBat(id: StyleId, bat: Bat): void;
 
   startAiMatch(): void;
   /** You and an AI partner against two AI. */
@@ -447,11 +452,39 @@ export class Menu {
             ${bar('Footwork', st.footwork, 0.95, 1.15, rate(st.footwork))}
             ${bar('Stance', st.distance, 0.4, 1.9, stance)}
           </div>
-          <div class="cs-rubbers"><span class="k">Forehand</span>${rubber(st.rubbers.forehand)}<span class="k">Backhand</span>${rubber(st.rubbers.backhand)}</div>
+          ${lock ? `<div class="cs-rubbers"><span class="k">Forehand</span>${rubber(st.rubbers.forehand)}<span class="k">Backhand</span>${rubber(st.rubbers.backhand)}</div>` : this.batHtml(id)}
           <div class="menu-actions">${action}</div>
         </div>
       </div>
       <div class="cs-list" role="group" aria-label="Characters">${list}</div>`;
+  }
+
+  /** The bat editor: blade and the rubber on each side, with what each does. Locked kit says how to unlock it. */
+  private batHtml(id: StyleId) {
+    const h = this.host;
+    const bat = h.batFor(id);
+    const blade = BLADES[bat.blade];
+    const opt = (v: string, label: string, sel: boolean, lock: string | null) => `<option value="${esc(v)}"${sel ? ' selected' : ''}${lock ? ' disabled' : ''}>${lock ? '🔒 ' : ''}${esc(label)}${lock ? ` — ${esc(lock)}` : ''}</option>`;
+    const blades = BLADE_IDS.map((b) => opt(b, BLADES[b].name, b === bat.blade, h.lockReason('blade', b))).join('');
+    const rubbers = (sel: string) => BAT_RUBBER_IDS.map((r) => opt(r, `${RUBBERS[r].name} (${RUBBERS[r].kind})`, r === sel, h.lockReason('rubber', r))).join('');
+    // 1–5 pips for a quick read of the kit.
+    const pips = (v: number) => `<span class="bat-pips" aria-label="${v} out of 5">${'●'.repeat(v)}${'○'.repeat(5 - v)}</span>`;
+    const r = RUBBERS[bat.forehand];
+    // Starter kit (Classic on a Starter blade) rates 2; only the best kit reaches 5.
+    const speedScore = (e: number) => (e < 0.86 ? 1 + (e - 0.62) / 0.24 : 2 + (3 * (e - 0.86)) / 0.1);
+    const spinScore = (g: number) => (g < 1.43 ? 1 + g / 1.43 : 2 + (3 * (g - 1.43)) / 0.59);
+    const lvl = (x: number, lo: number, hi: number) => Math.max(1, Math.min(5, Math.round(1 + (4 * (x - lo)) / (hi - lo))));
+    return `<div class="cs-bat">
+      <div class="cs-bat-row"><label for="bat-blade">Blade</label><select id="bat-blade" data-k="batBlade">${blades}</select></div>
+      <div class="cs-bat-row"><label for="bat-fh">Forehand</label><select id="bat-fh" data-k="batFH">${rubbers(bat.forehand)}</select></div>
+      <div class="cs-bat-row"><label for="bat-bh">Backhand</label><select id="bat-bh" data-k="batBH">${rubbers(bat.backhand)}</select></div>
+      <div class="cs-bat-stats">
+        <span>Speed ${pips(lvl(speedScore(Math.min(0.96, blade.speed * r.restitution)), 1, 5))}</span>
+        <span>Control ${pips(lvl(blade.control, 0, 0.45))}</span>
+        <span>Spin ${pips(lvl(spinScore(r.friction * (1 + r.tangentialRestitution)), 1, 5))}</span>
+      </div>
+      <p class="cs-bat-note">${esc(blade.description)} <small>(Stats for the forehand side.)</small></p>
+    </div>`;
   }
 
   private header(title: string) {
@@ -608,6 +641,13 @@ export class Menu {
       h.setVolume(Number(t.value));
       const out = t.parentElement?.querySelector('output');
       if (out) out.textContent = `${Math.round(Number(t.value) * 100)}%`;
+    } else if (e.type === 'change' && (k === 'batBlade' || k === 'batFH' || k === 'batBH') && this.browse) {
+      const bat = { ...h.batFor(this.browse) };
+      if (k === 'batBlade') bat.blade = t.value as BladeId;
+      else if (k === 'batFH') bat.forehand = t.value;
+      else bat.backhand = t.value;
+      h.setBat(this.browse, bat);
+      this.refresh();
     } else if (e.type === 'change') {
       if (k === 'muted') h.setMuted(t.checked);
       else if (k === 'ambience') h.setAmbience(t.checked);
@@ -653,8 +693,10 @@ export class Menu {
       return;
     }
     // Arrow keys move between buttons, like a console menu.
+    // (A dropdown keeps its own arrow keys.)
+    if (target.tagName === 'SELECT') return;
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && target.tagName !== 'INPUT')) {
-      const items = [...this.card.querySelectorAll<HTMLElement>('button, input')].filter((x) => x.offsetParent !== null);
+      const items = [...this.card.querySelectorAll<HTMLElement>('button, input, select')].filter((x) => x.offsetParent !== null);
       const i = items.indexOf(target);
       const step = e.key === 'ArrowDown' || e.key === 'ArrowRight' ? 1 : -1;
       const next = items[(i + step + items.length) % items.length];

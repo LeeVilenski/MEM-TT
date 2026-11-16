@@ -4,7 +4,7 @@ import type { ProfileData } from './profile';
  * What unlocks what. Venues, player styles and rubbers unlock with your career
  * level, drills and tournaments; "Unlock everything" in the Career screen skips it.
  */
-export type UnlockKind = 'venue' | 'style' | 'rubber';
+export type UnlockKind = 'venue' | 'style' | 'rubber' | 'blade';
 
 export interface UnlockRule {
   kind: UnlockKind;
@@ -31,6 +31,14 @@ export const UNLOCKS: UnlockRule[] = [
   { kind: 'rubber', id: 'shortPips', ...level(1, 'Club Player') },
   { kind: 'rubber', id: 'longPips', ...drill('defence', 'Chop defence') },
   { kind: 'rubber', id: 'anti', ...cup('championship', 'Company Championship') },
+  // Better inverted rubbers and blades, along the World Tour (the starter blade is free).
+  { kind: 'rubber', id: 'classicPro', ...stop('department-cup', 'Department Cup') },
+  { kind: 'blade', id: 'allround', ...level(1, 'Club Player') },
+  { kind: 'blade', id: 'offensive', ...stop('sprint-league', 'Office League') },
+  { kind: 'rubber', id: 'turbo', ...stop('datacentre-knockout', 'Data Centre Knockout') },
+  { kind: 'blade', id: 'carbon', ...stop('park-open', 'Park Open') },
+  { kind: 'rubber', id: 'gripMax', ...stop('board-showdown', 'Boardroom Showdown') },
+  { kind: 'blade', id: 'champion', ...stop('beach-classic', 'Beach Classic') },
 ];
 
 export function isUnlocked(kind: UnlockKind, id: string, p: ProfileData, levelIndex: number): boolean {

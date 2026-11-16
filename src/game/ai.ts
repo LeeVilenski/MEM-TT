@@ -23,6 +23,7 @@ import { mapPose, mapState, mapVec, type SideId } from './frame';
 import { IncomingPrediction } from './intercept';
 import { faceNormal } from './swing';
 import { STYLES, type PlayStyle } from './styles';
+import { BLADES, batRubbers, defaultBat, type Bat } from './equipment';
 
 /**
  * Computer opponent. All reasoning happens in the AI's local frame, where it stands
@@ -151,7 +152,20 @@ export class AiPlayer {
   setStyle(style: PlayStyle) {
     this.style = style;
     this.rubber = style.rubbers.forehand;
+    this.bat = defaultBat(style.id);
+    this.control = 0;
     this.body = { ...this.ready };
+  }
+
+  /** The bat (call after setStyle). The AI plays both wings with its forehand rubber. */
+  bat: Bat = defaultBat('allround');
+  /** The blade's control (0–1): steadier execution. */
+  private control = 0;
+
+  setBat(bat: Bat) {
+    this.bat = { ...bat };
+    this.rubber = batRubbers(bat).forehand;
+    this.control = (BLADES[bat.blade] ?? BLADES.starter).control;
   }
 
   /** Display name, e.g. "Sysadmin · Senior". */
@@ -411,7 +425,8 @@ export class AiPlayer {
 
       // Human-like execution error.
       // Serves are rehearsed: much more consistent than rally shots.
-      const errScale = mode === 'serve' ? 0.35 : 1;
+      // A controlled blade steadies the stroke a little.
+      const errScale = (mode === 'serve' ? 0.35 : 1) * (1 - 0.25 * this.control);
       // Personal error: wild slammers spray their smashes; a counter-attacker blocks pace steadily.
       let personal = 1;
       if (stroke === 'smash') personal *= pers.smashError ?? 1;

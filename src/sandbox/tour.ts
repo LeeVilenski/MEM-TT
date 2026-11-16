@@ -4,6 +4,7 @@ import { TOUR_STOPS, stopUnlocked, stopsWon, type TourRun, type TourStop } from 
 import { AI_LEVELS, type AiLevel } from '../game/ai';
 import { STYLES, type StyleId } from '../game/styles';
 import { scoutReport } from '../game/scouting';
+import { TOUR_GEAR, batLabel, opponentBat } from '../game/equipment';
 import type { VenueId } from '../render/venues';
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
@@ -142,7 +143,7 @@ export class TourScreen {
   }
 
   /** The scouting report on your next opponent, with your best grade against them. */
-  private scoutHtml(style: StyleId, level: AiLevel) {
+  private scoutHtml(style: StyleId, level: AiLevel, gear: number) {
     const r = scoutReport(style, level);
     const best = this.career.data.bestGrades[style];
     return `<div class="tw-scout" style="--l:${LEVEL_COLOR[level]}">
@@ -151,6 +152,7 @@ export class TourScreen {
       <ul>${r.traits.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>
       <p class="tw-scout-plan"><b>Game plan:</b> ${esc(r.plan)}</p>
       <p class="tw-scout-level">${esc(r.level)}</p>
+      <p class="tw-scout-level">Bat: ${esc(batLabel(opponentBat(style, gear)))}</p>
     </div>`;
   }
 
@@ -193,7 +195,7 @@ export class TourScreen {
         ${here && this.banner ? `<div class="tw-news">${this.banner}</div>` : ''}
         ${here ? '' : `<p class="tw-blurb">${esc(s.blurb)}</p>`}
         ${here ? this.progressHtml(here) : this.lineupHtml(s)}
-        ${here && here.state === 'playing' && here.current ? this.scoutHtml(here.current.style, here.current.level) : ''}
+        ${here && here.state === 'playing' && here.current ? this.scoutHtml(here.current.style, here.current.level, TOUR_GEAR[i] ?? 0) : ''}
         <div class="tw-actions">${actions}</div>
       </div>
     </section>`;

@@ -5,6 +5,7 @@
  */
 
 import { betterGrade, type MatchGrade } from '../game/matchGrade';
+import type { Bat } from '../game/equipment';
 
 export const CAREER_LEVELS = [
   { title: 'Beginner', xp: 0 },
@@ -48,6 +49,8 @@ export interface ProfileData {
   tournaments: Record<string, number>;
   /** Best match grade per AI opponent (style id), and 'online'. */
   bestGrades: Record<string, MatchGrade>;
+  /** Each character's bat (style id → bat), once you've changed it. */
+  bats: Record<string, Bat>;
   unlockAll: boolean;
 }
 
@@ -127,6 +130,7 @@ function fresh(): ProfileData {
     drillScores: {},
     tournaments: {},
     bestGrades: {},
+    bats: {},
     unlockAll: false,
   };
 }
@@ -303,6 +307,11 @@ export class Career {
     this.data.tournaments[id] = (this.data.tournaments[id] ?? 0) + 1;
     this.addXp(xp, 'Tournament won');
     if (achievement) this.award(achievement);
+    this.save();
+  }
+
+  setBat(style: string, bat: Bat) {
+    this.data.bats[style] = { ...bat };
     this.save();
   }
 

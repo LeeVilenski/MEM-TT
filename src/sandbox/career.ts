@@ -4,6 +4,7 @@ import { STYLES } from '../game/styles';
 import { AI_LEVELS } from '../game/ai';
 import { VENUES } from '../render/venues';
 import { RUBBERS } from '../physics';
+import { BLADES, type BladeId } from '../game/equipment';
 
 type Tab = 'stats' | 'unlocks';
 
@@ -12,6 +13,7 @@ const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&
 function unlockName(kind: string, id: string) {
   if (kind === 'venue') return `Venue: ${VENUES[id as keyof typeof VENUES]?.name ?? id}`;
   if (kind === 'style') return `Style: ${STYLES[id as keyof typeof STYLES]?.character ?? id}`;
+  if (kind === 'blade') return `Blade: ${BLADES[id as BladeId]?.name ?? id}`;
   return `Rubber: ${RUBBERS[id]?.name ?? id} (${RUBBERS[id]?.kind ?? ''})`;
 }
 

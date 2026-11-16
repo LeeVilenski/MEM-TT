@@ -4,6 +4,7 @@ import { NO_GRADING, gradeContact, type ContactResult, type GradeParams } from '
 import { realismSettings } from './realism';
 import { STYLES, type PlayStyle, type StyleId } from './styles';
 import { DEFAULT_SWING } from './swing';
+import { BLADES, batRubbers, defaultBat, withControl, type Bat, type Blade } from './equipment';
 import { REACH, SwingController, type StrokeSide, type SwingInput } from './swing';
 import type { IncomingPrediction, PathPoint } from './intercept';
 import { serveContact, tossEffect, type ServeType } from './serves';
@@ -149,6 +150,18 @@ export class Player {
     this.swing.reachScale = st.reach;
     this.homeZ = TABLE.halfLength + st.distance;
     this.rubbers = { ...st.rubbers };
+    this.bat = defaultBat(id);
+    this.blade = BLADES.starter;
+  }
+
+  /** The bat in hand: its blade and the rubber on each side. Apply after the style. */
+  bat: Bat = defaultBat('allround');
+  blade: Blade = BLADES.starter;
+
+  applyBat(bat: Bat) {
+    this.bat = { ...bat };
+    this.blade = BLADES[bat.blade] ?? BLADES.starter;
+    this.rubbers = batRubbers(bat);
   }
 
   /** Apply the realism slider (0 = simulation, 1 = arcade) to this player's assists. */
@@ -199,7 +212,7 @@ export class Player {
   private grade(ball: Vec3, serve = false): ContactResult {
     const sw = this.swing;
     const age = sw.strokePeakAge;
-    let gp = this.grading;
+    let gp = withControl(this.grading, this.blade);
     if (serve) {
       const w = tossEffect(this.tossHeight).window;
       // The serve magnet reaches further than the rally one (SERVE_REACH), so does the sweet spot.

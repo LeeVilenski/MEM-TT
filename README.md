@@ -85,6 +85,12 @@ Progression lives in three places on the title screen: **World Tour** (the caree
 
 **Match grade** (`src/game/matchGrade.ts`): every match against the AI or online ends with a grade on the match card (S, A, B or C) from your clean contacts (50%), PERFECT contacts (15%) and points won (35%); S also needs a win. Your best grade against each opponent is kept and shown in the Locker and on World Tour scouting reports.
 
+**Bats** (`src/game/equipment.ts`; Choose your player → Blade / Forehand / Backhand): each character has their own bat, a blade plus a rubber on each side, saved per character.
+- **Blades:** Starter → Allround Wood (Club Player) → Offensive Seven (win the Office League) → Carbon Pro (win the Park Open) → Champion Carbon (win the Beach Classic). Faster blades give a livelier rebound (more pace); control widens the sweet spot and steadies the face.
+- **Rubbers:** Classic → Classic Pro (win the Department Cup) → Turbo Spin (win the Data Centre Knockout) → Grip Max (win the Boardroom Showdown): grippier and a little livelier, so more spin. Rapid, Twister and Deadener (pips and anti-spin) as before.
+- Unlocked kit works for whoever you play as. The best kit adds roughly 10–15% spin and 5–10% pace to the same stroke.
+- **Opponents carry better bats later on:** World Tour stops 1–7 use gear tiers 0, 1, 1, 2, 3, 3, 4 (Match vs AI: by level). Their pips and anti-spin rubbers stay; inverted rubbers are upgraded. The scouting report shows their bat.
+
 **Achievements:** 17 badges, including Top Marks (an S grade), Class Act (A or better against a Hard or Expert AI), Serve Reader (3 stars in Read the serve), World Tour Champion (win every World Tour stop), Clean Hitter (10 clean contacts in a row), Mind Games (win a point off a serve the AI misread), First Win, Ace, Marathon Rally (15-hit rally), Speed Demon (90 km/h shot), Spin Doctor (7,000 rpm), Giant Killer (beat a Hard or Expert AI), All-Rounder (win with every style), Online Debut, Training Complete (3 stars on every drill), Cup Winner and Champion (win the Championship).
 
 ### Milestone 7 — mobile

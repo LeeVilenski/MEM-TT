@@ -50,6 +50,7 @@ import { AutoQuality, QUALITY_LEVELS, type QualitySetting } from '../render/qual
 import { Career } from '../progress/profile';
 import { DRILLS, DrillSession, drillUnlocked, type TargetZone } from '../progress/drills';
 import { GRADE_TEXT } from '../game/contact';
+import { BLADES, LEVEL_GEAR, TOUR_GEAR, defaultBat, opponentBat, type Bat, type BladeId } from '../game/equipment';
 import { GRADE_TEXT as MATCH_GRADE_TEXT, matchGrade, type MatchGrade } from '../game/matchGrade';
 import type { OverGrade } from './hud';
 import { TOUR_STOPS, TourRun, stopUnlocked, stopsWon } from '../progress/tour';
@@ -540,6 +541,7 @@ export class Sandbox implements MenuHost {
     // Restore the last player picked ("Playing as"), if still unlocked.
     const savedStyle = loadPref('mem.style', '');
     if (savedStyle in STYLES && savedStyle !== this.realism.style && !this.lockReason('style', savedStyle)) this.setStyle(savedStyle as StyleId, false);
+    else this.player.applyBat(this.batFor(this.player.style.id));
     this.sfx.volume = this.look.volume;
     this.sfx.muted = this.look.muted;
     this.sfx.ambienceOn = this.look.ambience;
@@ -1056,6 +1058,9 @@ export class Sandbox implements MenuHost {
     const ai = (this.ai = new AiPlayer('far', AI_LEVELS[this.matchSettings.level], this.params));
     const st = this.matchSettings.aiStyle === 'random' ? FREE_PLAY_OPPONENT_IDS[Math.floor(Math.random() * FREE_PLAY_OPPONENT_IDS.length)] : this.matchSettings.aiStyle;
     ai.setStyle(STYLES[st]);
+    // Better opponents carry better bats: by World Tour stop, else by level.
+    const stopIndex = this.tournament ? TOUR_STOPS.indexOf(this.tournament.stop) : -1;
+    ai.setBat(opponentBat(st, stopIndex >= 0 ? TOUR_GEAR[stopIndex] : LEVEL_GEAR[this.matchSettings.level]));
     this.aiView.setStyle(st);
     const match = (this.match = new Match(
       this.params,
@@ -1251,7 +1256,8 @@ export class Sandbox implements MenuHost {
   private unlockLabel(kind: UnlockKind, id: string) {
     if (kind === 'venue') return VENUES[id as VenueId]?.name ?? id;
     if (kind === 'style') return STYLES[id as StyleId]?.character ?? id;
-    return `${RUBBERS[id]?.name} (${RUBBERS[id]?.kind})`;
+    if (kind === 'blade') return `${BLADES[id as BladeId]?.name ?? id} blade`;
+    return `${RUBBERS[id]?.name} rubber (${RUBBERS[id]?.kind})`;
   }
 
   /** True (and tells the player how to unlock it) if an item is still locked. */
@@ -1657,12 +1663,39 @@ export class Sandbox implements MenuHost {
     this.realism.style = id;
     savePref('mem.style', id);
     this.player.applyStyle(id);
+    this.player.applyBat(this.batFor(id));
     this.playerView.setStyle(id);
     this.rubberSel.forehand = this.player.rubbers.forehand.id;
     this.rubberSel.backhand = this.player.rubbers.backhand.id;
     this.online?.setStyle(id);
     this.gui.controllersRecursive().forEach((c) => c.updateDisplay());
     if (announce && !this.menu?.visible) this.hud.flash(STYLES[id].character.toUpperCase(), `${STYLES[id].role !== STYLES[id].character ? STYLES[id].role + ' · ' : ''}${STYLES[id].label}: ${STYLES[id].description}`);
+  }
+
+  /** A character's bat: the one you set up for them, else their usual rubbers on a starter blade. */
+  batFor(id: StyleId): Bat {
+    const saved = this.career.data.bats[id];
+    if (!saved) return defaultBat(id);
+    // Kit that's locked again (e.g. after switching "Unlock everything" off) falls back.
+    const ok = (kind: UnlockKind, x: string) => !this.lockReason(kind, x);
+    const d = defaultBat(id);
+    return {
+      blade: ok('blade', saved.blade) ? saved.blade : d.blade,
+      forehand: ok('rubber', saved.forehand) ? saved.forehand : d.forehand,
+      backhand: ok('rubber', saved.backhand) ? saved.backhand : d.backhand,
+    };
+  }
+
+  /** Change a character's bat (only to unlocked kit); applies now if it's your player. */
+  setBat(id: StyleId, bat: Bat) {
+    if (this.lockReason('blade', bat.blade) || this.lockReason('rubber', bat.forehand) || this.lockReason('rubber', bat.backhand)) return;
+    this.career.setBat(id, bat);
+    if (this.player.style.id === id) {
+      this.player.applyBat(bat);
+      this.rubberSel.forehand = bat.forehand;
+      this.rubberSel.backhand = bat.backhand;
+      this.gui.controllersRecursive().forEach((c) => c.updateDisplay());
+    }
   }
 
   setVolume(v: number) {
@@ -2786,7 +2819,7 @@ export class Sandbox implements MenuHost {
         pl.controllersRecursive().forEach((c) => c.updateDisplay());
         return;
       }
-      this.player.rubbers[wing] = RUBBERS[id];
+      this.setBat(this.player.style.id, { ...this.player.bat, [wing]: id });
     };
     pl.add(rubberSel, 'forehand', rubberNames).name('Forehand rubber').onChange(pickRubber('forehand'));
     pl.add(rubberSel, 'backhand', rubberNames).name('Backhand rubber').onChange(pickRubber('backhand'));
