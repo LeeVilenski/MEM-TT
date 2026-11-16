@@ -27,7 +27,7 @@ export interface MenuHost {
   saveDoublesPicks(): void;
   onlineSettings: { name: string; code: string; mode: 'singles' | 'doubles'; bestOf: number };
   realism: { percent: number; style: StyleId };
-  look: { venue: VenueId; volume: number; muted: boolean; ambience: boolean; music: boolean; autoReplay: boolean; arcadeFx: boolean; bloom: boolean; fullSpeedOut: boolean; callouts: boolean; mjMode: boolean; spinPalette: 'standard' | 'colourblind'; spinLabel: boolean; reduceMotion: boolean };
+  look: { venue: VenueId; volume: number; muted: boolean; ambience: boolean; music: boolean; autoReplay: boolean; arcadeFx: boolean; bloom: boolean; fullSpeedOut: boolean; callouts: boolean; mjMode: boolean; spinPalette: 'standard' | 'colourblind'; spinLabel: boolean; reduceMotion: boolean; swipeMode: 'curve' | 'real' | 'aim' | 'spin' };
   quality: { setting: QualitySetting };
   devTools: boolean;
   /** null if unlocked, otherwise how to unlock it. */
@@ -81,6 +81,7 @@ export interface MenuHost {
   setMjMode(on: boolean): void;
   setSpinPalette(p: 'standard' | 'colourblind'): void;
   setSpinLabel(on: boolean): void;
+  setSwipeMode(m: 'curve' | 'real' | 'aim' | 'spin'): void;
   setReduceMotion(on: boolean): void;
   camMode: 'classic' | 'close' | 'dynamic';
   setCamMode(mode: 'classic' | 'close' | 'dynamic'): void;
@@ -396,6 +397,8 @@ export class Menu {
           `${toggle('arcadeFx', 'Arcade effects', h.look.arcadeFx, 'Hit-stop, camera shake, sparks, crowd')}
            ${toggle('fullSpeedOut', 'Your shots at full speed', h.look.fullSpeedOut, 'The game slows down only for balls coming at you (offline)')}
            ${toggle('autoReplay', 'Auto-replay long rallies', h.look.autoReplay)}
+           <p class="menu-note">Angling your ${h.isTouch ? 'swipe' : 'flick'} sideways (up-left, up-right) does:</p>
+           <div class="menu-choices wrap">${this.choice('swipeMode', 'curve', 'Aim + curve in', h.look.swipeMode === 'curve', 'Aims, and the ball bends in toward where you aimed (recommended)')}${this.choice('swipeMode', 'real', 'Aim + real brush', h.look.swipeMode === 'real', 'Aims, and brushes the way the bat travels: it curves away from the aim')}${this.choice('swipeMode', 'aim', 'Aim only', h.look.swipeMode === 'aim', 'No sidespin from the angle: use the hook keys or buttons')}${this.choice('swipeMode', 'spin', 'Spin only', h.look.swipeMode === 'spin', 'Sidespin only, no aiming')}</div>
            ${toggle('callouts', 'Point call-outs', h.look.callouts, 'A call after each point: NET, OUT, ACE…')}`,
         )}
         ${this.group(
@@ -616,6 +619,9 @@ export class Menu {
         break;
       case 'cam':
         h.setCamMode(v as 'classic' | 'close' | 'dynamic');
+        break;
+      case 'swipeMode':
+        h.setSwipeMode(v as 'curve' | 'real' | 'aim' | 'spin');
         break;
       case 'spinPalette':
         h.setSpinPalette(v === 'colourblind' ? 'colourblind' : 'standard');

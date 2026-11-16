@@ -15,6 +15,8 @@ import { TABLE, length, normalize, scale, v3, type PaddlePose, type Vec3 } from 
  *   - an up/down stroke angled sideways also brushes across the ball (sidespin), as well as aiming
  *   - no movement   → a block: the ball rebounds off the still paddle
  */
+export type SwipeMode = 'curve' | 'real' | 'aim' | 'spin';
+
 export interface SwingParams {
   /** Metres of paddle travel per pixel of mouse movement. */
   sensitivity: number;
@@ -33,10 +35,17 @@ export interface SwingParams {
   hookGain: number;
   /**
    * Rally strokes: how much of a hook a sideways-angled stroke brushes, at full angle (~40° off
-   * vertical), as a fraction of holding A/D. Swiping up-right brushes the back of the ball to the
-   * right, so it curves left (like A); up-left curves right. 0 = the angle only aims.
+   * vertical), as a fraction of holding A/D; which way it curves is set by swipeMode.
    */
   swipeHook: number;
+  /**
+   * What a rally stroke's sideways angle does (Settings → Gameplay → Swipe angle):
+   *  - 'curve' (default): aims, and curves the ball toward the aim (sidespin that bends it in);
+   *  - 'real': aims, and brushes the way the bat travels, so the ball curves away from the aim;
+   *  - 'aim': aims only (sidespin from the hook keys/buttons);
+   *  - 'spin': sidespin only, brushed the way the bat travels; no aim.
+   */
+  swipeMode: SwipeMode;
   /** Face angle change while W or S is held, degrees. */
   faceStep: number;
   /** How far the paddle can travel forward during a stroke, metres. */
@@ -86,6 +95,7 @@ export const DEFAULT_SWING: SwingParams = {
   driveBrushScale: 0.5,
   hookGain: 1.0,
   swipeHook: 0.8,
+  swipeMode: 'curve',
   faceStep: 22,
   maxForwardTravel: 0.3,
   lateralStroke: 0.3,
@@ -312,10 +322,12 @@ export class SwingController {
       this.flickAge = 0;
     } else this.flickAge += dt;
 
-    // A rally stroke angled sideways brushes across the ball too: sidespin from the swipe's
-    // path, on top of the aim it gives. Brushing to the right makes the ball curve left, so a
-    // swipe up-right hooks like A. (Serves read the swipe's side themselves.)
-    const swipe = this.serving ? 0 : -this.strokeAim * p.swipeHook;
+    // A rally stroke angled sideways brushes across the ball too: sidespin as well as aim
+    // (swipeMode). 'real': brushing to the right makes the ball curve left, so a swipe up-right
+    // hooks like A, away from the aim. 'curve' flips it, so the ball bends in toward the aim.
+    // (Serves read the swipe's side themselves.)
+    const brush = p.swipeMode === 'aim' ? 0 : p.swipeMode === 'curve' ? 1 : -1;
+    const swipe = this.serving ? 0 : brush * this.strokeAim * p.swipeHook;
     const totalHook = clamp(hook + swipe, -1, 1);
     let vel = strokeVelocity(gesture, input.drive, totalHook, p, this.serving ? p.serveThreshold : p.swingThreshold, this.serving);
 

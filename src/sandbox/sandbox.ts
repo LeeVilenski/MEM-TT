@@ -34,7 +34,7 @@ import { IncomingPrediction } from '../game/intercept';
 import { Match } from '../game/match';
 import { LET_MESSAGE, pointMessage } from '../game/messages';
 import { classifyShot } from '../game/shots';
-import { NO_INPUT, type SwingInput } from '../game/swing';
+import { NO_INPUT, type SwingInput, type SwipeMode } from '../game/swing';
 import { BallView, SPIN_PALETTES, setSpinPalette, spinColor, spinKind, type SpinPalette } from '../render/ballView';
 import { Juice, hitPower } from '../render/juice';
 import { PlayerView } from '../render/playerView';
@@ -335,6 +335,8 @@ export class Sandbox implements MenuHost {
     callouts: loadPref('mem.callouts', '0') === '1',
     /** MJ mode: a falsetto pop-star yelp on each of your smashes. Off by default. */
     mjMode: loadPref('mem.mjMode', '0') === '1',
+    /** What a rally swipe's sideways angle does: aim + curve in (default), aim + real brush, aim only, spin only. */
+    swipeMode: (['curve', 'real', 'aim', 'spin'].includes(loadPref('mem.swipeMode', 'curve')) ? loadPref('mem.swipeMode', 'curve') : 'curve') as SwipeMode,
     /** Spin colours on the trail, comet tail and sparks. */
     spinPalette: (loadPref('mem.spinPalette', 'standard') === 'colourblind' ? 'colourblind' : 'standard') as SpinPalette,
     /** A label naming the spin of the ball coming at you. Off by default. */
@@ -444,6 +446,7 @@ export class Sandbox implements MenuHost {
     this.hud = new Hud(container);
 
     this.player = new Player('p1', this.params);
+    this.player.swing.params.swipeMode = this.look.swipeMode;
     this.playerView = new PlayerView(this.scene);
     this.playerView.visible = false;
     this.aiView = new PlayerView(this.scene, { bodyColor: 0xe8562a, bodyOpacity: 0.45 });
@@ -1814,6 +1817,12 @@ export class Sandbox implements MenuHost {
     savePref('mem.spinPalette', p);
     setSpinPalette(p);
     this.ball.clearTrail();
+  }
+
+  setSwipeMode(m: SwipeMode) {
+    this.look.swipeMode = m;
+    savePref('mem.swipeMode', m);
+    this.player.swing.params.swipeMode = m;
   }
 
   setSpinLabel(on: boolean) {

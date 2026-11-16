@@ -344,7 +344,7 @@ export class Player {
 
   /** Landing aim from the stroke's direction: swipe up-left → left, up-right → right. */
   aimFor(aim: { x: number; z: number }) {
-    if (this.shotMode !== 'rally') return aim;
+    if (this.shotMode !== 'rally' || this.swing.params.swipeMode === 'spin') return aim;
     const x = aim.x + this.swing.strokeAim * AIM_LIMIT;
     return { x: clamp(x, -AIM_LIMIT, AIM_LIMIT), z: aim.z };
   }

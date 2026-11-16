@@ -85,6 +85,12 @@ Progression lives in three places on the title screen: **World Tour** (the caree
 
 **Match grade** (`src/game/matchGrade.ts`): every match against the AI or online ends with a grade on the match card (S, A, B or C) from your clean contacts (50%), PERFECT contacts (15%) and points won (35%); S also needs a win. Your best grade against each opponent is kept and shown in the Locker and on World Tour scouting reports.
 
+**Swipe angle** (Settings → Gameplay): what angling a rally swipe sideways does.
+- **Aim + curve in** (default): aims, and the ball bends in toward where you aimed (the assist starts it on a safer line).
+- **Aim + real brush:** aims, and brushes the way the bat travels, so the ball curves away from the aim.
+- **Aim only:** no sidespin from the angle (use the hook keys/buttons). **Spin only:** sidespin, no aiming.
+- The contact assist now turns a stroke that's heading off the side back toward the table before aiming it (it used to give up on those), so at Assisted, angled swipes land about as often as straight ones in every mode.
+
 **Bats** (`src/game/equipment.ts`; Choose your player → Blade / Forehand / Backhand): each character has their own bat, a blade plus a rubber on each side, saved per character.
 - **Blades:** Starter → Allround Wood (Club Player) → Offensive Seven (win the Office League) → Carbon Pro (win the Park Open) → Champion Carbon (win the Beach Classic). Faster blades give a livelier rebound (more pace); control widens the sweet spot and steadies the face.
 - **Rubbers:** Classic → Classic Pro (win the Department Cup) → Turbo Spin (win the Data Centre Knockout) → Grip Max (win the Boardroom Showdown): grippier and a little livelier, so more spin. Rapid, Twister and Deadener (pips and anti-spin) as before.
