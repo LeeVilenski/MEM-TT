@@ -3,7 +3,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { NET, TABLE } from '../physics';
 
 /**
- * The Green: a lunchtime game on an outdoor concrete table, on the mown lawn in
+ * Wonford House: a lunchtime game on an outdoor concrete table, on the mown lawn in
  * front of an old Victorian stone hall. Overcast autumn afternoon: striped grass,
  * fallen leaves, a bare-earth patch worn round the table, tall cedars screening a
  * car park, broad limes and planes, a cherry in orange, distant hills.
@@ -1053,14 +1053,14 @@ function concreteTable() {
 
 // ---------------------------------------------------------------- the venue
 
-export interface GreenBuild {
+export interface WonfordBuild {
   group: THREE.Group;
   floor: THREE.Texture;
   tableTop: THREE.Texture;
   update: (dt: number) => void;
 }
 
-export function buildGreen(): GreenBuild {
+export function buildWonford(): WonfordBuild {
   matCache = new Map();
   const g = new THREE.Group();
   const rnd = seeded(2024);
@@ -1274,7 +1274,7 @@ export function buildGreen(): GreenBuild {
     const s = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.7), new THREE.MeshStandardMaterial({ map: signTexture(['P'], '#1d4f9c', '#ffffff', 128, 128) }));
     s.position.set(13.5, 2.1, -14.2);
     g.add(s, box(0.06, 2.4, 0.06, iron, 13.5, 1.2, -14.25));
-    const info = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.6), new THREE.MeshStandardMaterial({ map: signTexture(['THE GREEN', 'please take', 'bats home'], '#2f6b45', '#f4f1e6', 192, 128) }));
+    const info = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.6), new THREE.MeshStandardMaterial({ map: signTexture(['WONFORD HOUSE', 'please take', 'bats home'], '#2f6b45', '#f4f1e6', 288, 192) }));
     info.position.set(16.2, 1.1, -14.2);
     g.add(info, box(0.05, 1.4, 0.05, iron, 15.8, 0.7, -14.25), box(0.05, 1.4, 0.05, iron, 16.6, 0.7, -14.25));
   }

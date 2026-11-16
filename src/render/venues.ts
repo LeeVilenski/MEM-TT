@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { buildGreen } from './green';
+import { buildWonford } from './wonford';
 
 /**
  * A light source (lamp, LED, bulb): brighter than white, so it clears the bloom
@@ -16,7 +16,7 @@ function glow(color: number, strength = 2.2) {
  * core scene's lights, floor and background, and adds its own props. Everything
  * stays outside the playing area so the ball and its shadow remain readable.
  */
-export type VenueId = 'sandbox' | 'office' | 'mem' | 'server' | 'conference' | 'rooftop' | 'park' | 'beach' | 'green';
+export type VenueId = 'sandbox' | 'office' | 'mem' | 'server' | 'conference' | 'rooftop' | 'park' | 'beach' | 'wonford';
 export type Ambience = 'none' | 'office' | 'servers' | 'room' | 'wind';
 /** Background song per venue (see audio/music.ts). */
 export type SongId = 'none' | 'office' | 'mem' | 'servers' | 'room' | 'wind';
@@ -30,7 +30,7 @@ export const VENUES: Record<VenueId, { name: string; ambience: Ambience; song: S
   rooftop: { name: 'Rooftop (company offsite)', ambience: 'wind', song: 'wind' },
   park: { name: 'City Park', ambience: 'wind', song: 'wind' },
   beach: { name: 'Offsite beach', ambience: 'wind', song: 'wind' },
-  green: { name: 'The Green (autumn)', ambience: 'wind', song: 'wind' },
+  wonford: { name: 'Wonford House', ambience: 'wind', song: 'wind' },
 };
 
 export interface Venue {
@@ -1825,10 +1825,10 @@ function beach(): Venue {
   });
 }
 
-/** The Green: an outdoor concrete table on the lawn in front of an old stone hall (see green.ts). */
-function green(): Venue {
-  const b = buildGreen();
-  return makeVenue('green', b.group, {
+/** Wonford House: an outdoor concrete table on the lawn in front of an old stone hall (see wonford.ts). */
+function wonford(): Venue {
+  const b = buildWonford();
+  return makeVenue('wonford', b.group, {
     background: 0xc3c8cc,
     fog: [0xc3c8cc, 24, 95],
     // Overcast: a bright, soft sky fill and a weak, neutral key (still enough for the ball's shadow).
@@ -1912,7 +1912,7 @@ function makeVenue(id: VenueId, group: THREE.Group, look: Look): Venue {
   };
 }
 
-const BUILDERS: Record<Exclude<VenueId, 'sandbox'>, () => Venue> = { office, mem, server: testBay, conference, rooftop, park, beach, green };
+const BUILDERS: Record<Exclude<VenueId, 'sandbox'>, () => Venue> = { office, mem, server: testBay, conference, rooftop, park, beach, wonford };
 
 const SANDBOX_LOOK: Look = { background: 0x14161c, fog: [0x14161c, 12, 30], hemi: [0xdfe8ff, 0x22252c, 0.85], key: [0xffffff, 2.2], env: 0.35 };
 
