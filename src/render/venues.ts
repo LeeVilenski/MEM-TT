@@ -24,7 +24,7 @@ export const VENUES: Record<VenueId, { name: string; ambience: Ambience; song: S
   sandbox: { name: 'Sandbox', ambience: 'none', song: 'none' },
   office: { name: 'Open-plan office', ambience: 'office', song: 'office' },
   mem: { name: 'MEM', ambience: 'servers', song: 'mem' },
-  server: { name: 'Server room', ambience: 'servers', song: 'servers' },
+  server: { name: 'Test Bay', ambience: 'office', song: 'servers' },
   conference: { name: 'Conference room', ambience: 'room', song: 'room' },
   rooftop: { name: 'Rooftop (company offsite)', ambience: 'wind', song: 'wind' },
   park: { name: 'City Park', ambience: 'wind', song: 'wind' },
@@ -975,83 +975,223 @@ function mem(): Venue {
   });
 }
 
-function serverRoom(): Venue {
+function testBay(): Venue {
+  // The IT build/test bay: white walls, suspended ceiling with panel lights, blue
+  // vertical blinds, maple worktops full of monitors and laptops being imaged, and
+  // stacks of Dell boxes on grey steel shelving.
   const g = new THREE.Group();
   const W = 14;
   const D = 22;
-  const H = 3.2;
-  room(g, W, D, H, std(0x1b2230), { ceiling: std(0x111620) });
-
-  // Rack rows along both sides and behind the far end, with blinking status LEDs.
-  const rackMat = std(0x0e1117, { roughness: 0.5, metalness: 0.4 });
-  const racks: THREE.Matrix4[] = [];
-  const leds: THREE.Matrix4[] = [];
-  const addRack = (x: number, z: number, ry: number) => {
-    racks.push(at(x, 1.05, z, ry));
-    const face = new THREE.Vector3(Math.sin(ry), 0, Math.cos(ry)).multiplyScalar(0.36);
-    const side = new THREE.Vector3(Math.cos(ry), 0, -Math.sin(ry));
-    for (let row = 0; row < 14; row++) {
-      for (let k = 0; k < 3; k++) {
-        const p = new THREE.Vector3(x, 0.35 + row * 0.12, z).add(face).add(side.clone().multiplyScalar(-0.22 + k * 0.05));
-        leds.push(at(p.x, p.y, p.z));
-      }
-    }
-  };
-  for (let z = -9; z <= 9; z += 0.7) {
-    addRack(-5.2, z, Math.PI / 2);
-    addRack(5.2, z, -Math.PI / 2);
-  }
-  for (let x = -3.6; x <= 3.6; x += 0.7) addRack(x, -9.6, 0);
-  g.add(instances(new THREE.BoxGeometry(0.6, 2.1, 0.7), rackMat, racks));
-  const ledMesh = instances(new THREE.BoxGeometry(0.025, 0.012, 0.01), glow(0xffffff, 2.6), leds);
-  const palette = [new THREE.Color(0x22c55e), new THREE.Color(0x22c55e), new THREE.Color(0x38bdf8), new THREE.Color(0xf59e0b), new THREE.Color(0x111827)];
-  for (let i = 0; i < leds.length; i++) ledMesh.setColorAt(i, palette[(i * 7) % palette.length]);
-  g.add(ledMesh);
-
-  // Cable trays overhead and cold-aisle lights.
-  const tray = std(0xd4a017, { metalness: 0.3 });
-  g.add(box(0.4, 0.08, D, tray, -4, H - 0.4, 0), box(0.4, 0.08, D, tray, 4, H - 0.4, 0));
-  const strip = glow(0x7dd3fc);
-  for (const x of [-2.5, 2.5]) g.add(box(0.08, 0.03, D - 2, strip, x, H - 0.02, 0));
-  const sign = board(['⚠ AUTHORISED', '   PERSONNEL ONLY', '  (and ping pong)'], 1.8, 0.9, { bg: '#fde047', fg: '#111827', font: 'bold 40px sans-serif' });
-  sign.position.set(-6.98, 1.8, -3);
-  sign.rotation.y = Math.PI / 2;
-  g.add(sign);
-
-  const tiles = canvasTexture(
+  const H = 3.0;
+  const ceilTex = canvasTexture(
     128,
     128,
     (ctx) => {
-      ctx.fillStyle = '#3a414d';
+      ctx.fillStyle = '#f4f4f1';
       ctx.fillRect(0, 0, 128, 128);
-      ctx.strokeStyle = '#262b33';
+      ctx.fillStyle = 'rgba(0,0,0,0.035)';
+      for (let i = 0; i < 260; i++) ctx.fillRect(Math.random() * 128, Math.random() * 128, 2, 2);
+      ctx.strokeStyle = '#d9d9d4';
       ctx.lineWidth = 4;
       ctx.strokeRect(0, 0, 128, 128);
-      ctx.fillStyle = '#2f353f';
-      for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) ctx.fillRect(20 + i * 26, 20 + j * 26, 6, 6);
     },
-    [40, 40],
+    [W / 0.6, D / 0.6],
+  );
+  room(g, W, D, H, std(0xeef0ee), { ceiling: new THREE.MeshStandardMaterial({ map: ceilTex, roughness: 0.9 }) });
+
+  // Recessed LED panels in the ceiling grid.
+  const panel = glow(0xffffff, 1.9);
+  const panels: THREE.Matrix4[] = [];
+  for (const x of [-3.6, 0, 3.6]) for (let z = -8.4; z <= 8.4; z += 3.6) panels.push(at(x, H - 0.01, z));
+  g.add(instances(new THREE.BoxGeometry(1.15, 0.02, 0.58), panel, panels));
+
+  // Window wall on the right with blue vertical blinds (slightly open, light leaking through).
+  const blind = std(0x1f5fbf, { roughness: 0.7 });
+  const slats: THREE.Matrix4[] = [];
+  for (let z = -10.4; z <= 10.4; z += 0.11) {
+    slats.push(at(W / 2 - 0.12, 1.85, z, 0.5));
+  }
+  g.add(instances(new THREE.BoxGeometry(0.01, 1.7, 0.09), blind, slats));
+  g.add(box(0.02, 1.7, D - 1, glow(0xdbe9f7, 1.3), W / 2 - 0.02, 1.85, 0));
+  for (let z = -9; z <= 9; z += 4.5) g.add(box(0.3, H, 0.5, std(0xf1f1ee), W / 2 - 0.15, H / 2, z));
+  g.add(box(0.06, 0.06, D, std(0xe5e7eb), W / 2 - 0.12, 2.72, 0));
+
+  // Maple worktops with cabinets along the left wall and under the window.
+  const maple = std(0xd9b27c, { roughness: 0.55 });
+  const cab = std(0xc99a5e, { roughness: 0.65 });
+  const bench = (x: number, z: number, len: number) => {
+    g.add(box(0.8, 0.04, len, maple, x, 0.76, z), box(0.7, 0.72, len, cab, x, 0.37, z));
+  };
+  bench(-W / 2 + 0.45, 0, 17);
+  bench(W / 2 - 0.55, 0, 17);
+
+  // Monitors (black, on stands), keyboards and open laptops on the benches.
+  const black = std(0x15171b, { roughness: 0.4 });
+  const screenOff = std(0x0b0d10, { roughness: 0.2, metalness: 0.2 });
+  const monitors: THREE.Matrix4[] = [];
+  const stands: THREE.Matrix4[] = [];
+  const keys: THREE.Matrix4[] = [];
+  const laptops: THREE.Matrix4[] = [];
+  const lids: THREE.Matrix4[] = [];
+  const lit: THREE.Matrix4[] = [];
+  let n = 0;
+  for (let z = -7.8; z <= 7.8; z += 1.3) {
+    for (const side of [-1, 1]) {
+      const x = side * (W / 2 - 0.3);
+      const ry = side < 0 ? Math.PI / 2 : -Math.PI / 2;
+      n++;
+      if (n % 4 === 0) {
+        // Laptop being imaged, lid open, screen lit.
+        laptops.push(at(x - side * 0.15, 0.79, z, ry));
+        const lid = new THREE.Matrix4().compose(
+          new THREE.Vector3(x + side * 0.02, 0.92, z),
+          new THREE.Quaternion().setFromEuler(new THREE.Euler(0, ry, 0)),
+          new THREE.Vector3(1, 1, 1),
+        );
+        lids.push(lid);
+        lit.push(at(x + side * 0.02, 0.92, z, ry));
+      } else {
+        monitors.push(at(x, 1.12, z, ry));
+        stands.push(at(x, 0.9, z, ry));
+        keys.push(at(x - side * 0.3, 0.79, z, ry));
+        if (n % 5 === 0) lit.push(at(x - side * 0.03, 1.12, z, ry));
+      }
+    }
+  }
+  g.add(instances(new THREE.BoxGeometry(0.62, 0.38, 0.04), screenOff, monitors));
+  g.add(instances(new THREE.BoxGeometry(0.06, 0.28, 0.06), black, stands));
+  g.add(instances(new THREE.BoxGeometry(0.42, 0.02, 0.14), black, keys));
+  g.add(instances(new THREE.BoxGeometry(0.34, 0.02, 0.24), std(0x2a2d33, { metalness: 0.4 }), laptops));
+  g.add(instances(new THREE.BoxGeometry(0.34, 0.24, 0.015), std(0x2a2d33, { metalness: 0.4 }), lids));
+  const winScreen = canvasTexture(128, 80, (ctx) => {
+    ctx.fillStyle = '#1e4fa8';
+    ctx.fillRect(0, 0, 128, 80);
+    ctx.fillStyle = '#9cc4ff';
+    ctx.fillRect(14, 30, 100, 6);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(14, 30, 62, 6);
+    ctx.font = '10px sans-serif';
+    ctx.fillText('Installing updates…', 14, 22);
+  });
+  g.add(instances(new THREE.PlaneGeometry(0.3, 0.2), new THREE.MeshBasicMaterial({ map: winScreen }), lit.map((m) => m.clone().multiply(new THREE.Matrix4().makeTranslation(0, 0, 0.025)))));
+
+  // Cardboard: a big pile of boxes in the back-left corner and Dell boxes on steel shelving at the back.
+  const card = std(0xc29a6b, { roughness: 0.9 });
+  const cardDark = std(0xb08757, { roughness: 0.9 });
+  const tape = std(0xa98a62, { roughness: 0.6 });
+  const dell = canvasTexture(128, 96, (ctx) => {
+    ctx.fillStyle = '#c29a6b';
+    ctx.fillRect(0, 0, 128, 96);
+    ctx.strokeStyle = '#3d3a36';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(64, 48, 20, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = '#3d3a36';
+    ctx.font = 'bold 13px sans-serif';
+    ctx.fillText('DELL', 48, 53);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(92, 60, 26, 22);
+  });
+  const dellMat = new THREE.MeshStandardMaterial({ map: dell, roughness: 0.9 });
+  const boxMats = [card, card, dellMat, card, card, cardDark];
+
+  const pile = (cx: number, cz: number, cols: number, rows: number, seed: number) => {
+    let s = seed;
+    const rnd = () => ((s = (s * 9301 + 49297) % 233280) / 233280);
+    for (let i = 0; i < cols; i++)
+      for (let j = 0; j < rows; j++) {
+        let y = 0;
+        const layers = 2 + Math.floor(rnd() * 3);
+        for (let k = 0; k < layers; k++) {
+          const w = 0.45 + rnd() * 0.25;
+          const h = 0.35 + rnd() * 0.25;
+          const d = 0.4 + rnd() * 0.25;
+          const b = box(w, h, d, k === 1 ? dellMat : rnd() < 0.3 ? cardDark : card, cx + i * 0.62 + (rnd() - 0.5) * 0.08, y + h / 2, cz + j * 0.6 + (rnd() - 0.5) * 0.08);
+          b.rotation.y = (rnd() - 0.5) * 0.15;
+          g.add(b, box(0.06, 0.005, d + 0.01, tape, b.position.x, y + h + 0.003, b.position.z));
+          y += h;
+        }
+      }
+  };
+  pile(-5.6, -9.8, 3, 3, 7);
+  pile(3.2, 8.4, 2, 2, 31);
+
+  // Grey steel shelving across the back wall, loaded with boxes.
+  const steel = std(0x3a4150, { roughness: 0.5, metalness: 0.5 });
+  const shelfBoard = std(0xb9a27f, { roughness: 0.95 });
+  for (const sx of [-1.6, 1.8]) {
+    const len = 2.6;
+    const z = -D / 2 + 0.4;
+    for (const dx of [-len / 2, len / 2]) for (const dz of [-0.28, 0.28]) g.add(box(0.05, 2.2, 0.05, steel, sx + dx, 1.1, z + dz));
+    for (let lv = 0; lv < 4; lv++) {
+      const y = 0.15 + lv * 0.62;
+      g.add(box(len, 0.03, 0.6, shelfBoard, sx, y, z), box(len, 0.05, 0.03, std(0xd1d5db), sx, y + 0.02, z + 0.3));
+      for (let k = 0; k < 6; k++) {
+        const bw = 0.32 + ((k * 13 + lv * 7) % 5) * 0.03;
+        const bh = 0.3 + ((k + lv) % 3) * 0.08;
+        g.add(box(bw, bh, 0.5, boxMats[(k + lv * 2) % boxMats.length], sx - len / 2 + 0.25 + k * 0.42, y + 0.02 + bh / 2, z));
+      }
+    }
+  }
+
+  // Fire exit double doors on the front-left wall, sign above; dartboard on a whiteboard.
+  const door = std(0xf4f4f2, { roughness: 0.6 });
+  g.add(box(1.6, 2.1, 0.05, door, -3.5, 1.05, D / 2 - 0.03), box(0.02, 2.1, 0.06, std(0xc8c8c4), -3.5, 1.05, D / 2 - 0.04));
+  const exit = board(['  🏃 Fire exit'], 0.7, 0.18, { bg: '#16a34a', fg: '#ffffff', font: 'bold 44px sans-serif' });
+  exit.position.set(-3.5, 2.35, D / 2 - 0.02);
+  exit.rotation.y = Math.PI;
+  g.add(exit);
+  const darts = new THREE.Group();
+  const rings = [0x111111, 0xdc2626, 0xf5deb3, 0x15803d, 0xdc2626];
+  rings.forEach((c, i) => {
+    const r = new THREE.Mesh(new THREE.CircleGeometry(0.22 - i * 0.04, 24), std(c));
+    r.position.z = i * 0.002;
+    darts.add(r);
+  });
+  darts.position.set(-W / 2 + 0.03, 1.7, 7.5);
+  darts.rotation.y = Math.PI / 2;
+  g.add(darts);
+  const note = board(['KIT TO BUILD', 'Row 1', 'REVENUE', 'Row 3'], 0.5, 0.5, { bg: '#fdf6c7', fg: '#1f2937', font: 'bold 52px "Comic Sans MS", cursive' });
+  note.position.set(-1.6, 2.6, -D / 2 + 0.72);
+  g.add(note);
+
+  // Floor fan, sack truck, blue crates, bin.
+  const fan = new THREE.Group();
+  fan.add(box(0.22, 0.95, 0.22, std(0xeeeae0), 0, 0.5, 0), box(0.34, 0.04, 0.34, std(0xeeeae0), 0, 0.02, 0));
+  fan.position.set(-W / 2 + 0.5, 0, 9.6);
+  g.add(fan);
+  const truck = new THREE.Group();
+  const red = std(0xd9737a, { roughness: 0.6 });
+  truck.add(box(0.5, 1.1, 0.03, red, 0, 0.6, 0), box(0.5, 0.03, 0.3, std(0x9ca3af, { metalness: 0.5 }), 0, 0.05, 0.15));
+  truck.position.set(4.6, 0, -9.7);
+  truck.rotation.x = -0.12;
+  g.add(truck);
+  const crate = std(0x1d4ed8, { roughness: 0.5 });
+  g.add(box(0.55, 0.35, 0.4, crate, 5.6, 0.18, -8.9), box(0.55, 0.35, 0.4, crate, 5.6, 0.53, -8.9));
+
+  // Speckled blue-grey vinyl floor.
+  const vinyl = canvasTexture(
+    256,
+    256,
+    (ctx) => {
+      ctx.fillStyle = '#6f8aa6';
+      ctx.fillRect(0, 0, 256, 256);
+      for (let i = 0; i < 1600; i++) {
+        ctx.fillStyle = Math.random() < 0.5 ? 'rgba(255,255,255,0.1)' : 'rgba(30,45,65,0.14)';
+        ctx.fillRect(Math.random() * 256, Math.random() * 256, 2, 2);
+      }
+    },
+    [12, 12],
   );
 
-  let acc = 0;
   return makeVenue('server', g, {
-    background: 0x070a10,
-    fog: [0x070a10, 8, 24],
-    hemi: [0x9cc3ff, 0x0b0f17, 0.6],
-    key: [0xdbeafe, 2.1],
-    env: 0.18,
-    floor: tiles,
-    update: (dt) => {
-      acc += dt;
-      if (acc < 0.15) return;
-      acc = 0;
-      // Blink a few LEDs each step.
-      for (let k = 0; k < 40; k++) {
-        const i = Math.floor(Math.random() * leds.length);
-        ledMesh.setColorAt(i, palette[Math.floor(Math.random() * palette.length)]);
-      }
-      ledMesh.instanceColor!.needsUpdate = true;
-    },
+    background: 0xeef0ee,
+    fog: [0xeef0ee, 14, 30],
+    hemi: [0xf4f8ff, 0x7d8fa3, 1.0],
+    key: [0xffffff, 2.2],
+    env: 0.4,
+    floor: vinyl,
   });
 }
 
@@ -1564,7 +1704,7 @@ function makeVenue(id: VenueId, group: THREE.Group, look: Look): Venue {
   };
 }
 
-const BUILDERS: Record<Exclude<VenueId, 'sandbox'>, () => Venue> = { office, mem, server: serverRoom, conference, rooftop, park, beach };
+const BUILDERS: Record<Exclude<VenueId, 'sandbox'>, () => Venue> = { office, mem, server: testBay, conference, rooftop, park, beach };
 
 const SANDBOX_LOOK: Look = { background: 0x14161c, fog: [0x14161c, 12, 30], hemi: [0xdfe8ff, 0x22252c, 0.85], key: [0xffffff, 2.2], env: 0.35 };
 

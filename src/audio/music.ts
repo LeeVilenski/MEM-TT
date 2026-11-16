@@ -80,7 +80,7 @@ export const SONGS: Record<Exclude<SongId, 'none'>, Song> = {
     hat: [2, 6, 10, 14],
     cutoff: 1100,
   },
-  // Slow, dark half-time dub for the server room: deep sub bass, sparse bleeps, lots of space.
+  // Slow, dark half-time dub for the Test Bay: deep sub bass, sparse bleeps, lots of space.
   servers: {
     name: 'Cold Aisle',
     bpm: 70,
