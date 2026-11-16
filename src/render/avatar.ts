@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { STYLES, type StyleId } from '../game/styles';
+import { BRYONY, ED, LEE, PAUL, RYAN, heightUVs, paint, type Fabric } from './fabric';
 
 /**
  * Characters built from smooth primitives: a tapered torso, jointed arms and legs,
@@ -51,14 +52,17 @@ interface Look {
   watch?: number;
   /** Something held in the free hand (a water bottle), by colour. */
   bottle?: number;
+  /** A painted fabric for the shirt and sleeves (prints, panels, crests); see fabric.ts. */
+  fabric?: Fabric;
   accessory?: (g: THREE.Group, mat: Mat, torso: TorsoShape) => void;
 }
 
 const LOOKS: Record<StyleId, Look> = {
-  // Lee: black cap, navy tee with orange-red shoulders and sleeves.
+  // Lee: black cap, slate-navy tee with orange-red striped raglan shoulders and sleeves.
   allround: {
-    shirt: 0x26386e,
-    sleeves: 0xc8452c,
+    shirt: 0x36466f,
+    sleeves: 0xd4492a,
+    fabric: LEE,
     legs: { kind: 'shorts', color: 0x16181d },
     skin: 0xf0c4a8,
     hair: 0x6b4b2e,
@@ -66,14 +70,11 @@ const LOOKS: Record<StyleId, Look> = {
     height: 1.0,
     build: 0.95,
     cap: { color: 0x15161a, badge: 0xd1d5db },
-    accessory: (g, _m, t) => {
-      // Raglan shoulders in the sleeve colour, with a darker stripe beneath.
-      g.add(t.band(1.3, 1.475, 0xc8452c, 1.012), t.band(1.27, 1.3, 0x8f2a1c, 1.012));
-    },
   },
-  // Ryan: tall, dark tousled hair and stubble, black rugby-style jersey with white trim.
+  // Ryan: tall, dark tousled hair and stubble, black rugby jersey with a crest and a sponsor across the chest.
   looper: {
-    shirt: 0x121315,
+    shirt: 0x131416,
+    fabric: RYAN,
     legs: { kind: 'shorts', color: 0x1f2a24 },
     skin: 0xe0ac86,
     hair: 0x3b2618,
@@ -82,16 +83,13 @@ const LOOKS: Record<StyleId, Look> = {
     build: 1.04,
     beard: 0x8f6448, // stubble: between skin and hair
     watch: 0x111111,
-    accessory: (g, m, t) => {
-      // White collar, a chest band and a small crest.
-      const collar = new THREE.Mesh(new THREE.TorusGeometry(0.068, 0.013, 8, 24), m(0xf3f4f6));
+    accessory: (g, m) => {
+      // A dark rugby collar.
+      const collar = new THREE.Mesh(new THREE.TorusGeometry(0.068, 0.013, 8, 24), m(0x0a0a0b));
       collar.position.set(0, 1.455, 0);
       collar.rotation.x = Math.PI / 2;
       collar.scale.set(1, 0.85, 1);
-      const crest = new THREE.Mesh(new THREE.CircleGeometry(0.026, 16), m(0xf3f4f6));
-      crest.position.set(t.halfW * 0.45, 1.31, t.front(1.31, t.halfW * 0.45) - 0.002);
-      crest.rotation.y = Math.PI;
-      g.add(collar, crest, t.band(1.19, 1.225, 0xe5e7eb, 1.01));
+      g.add(collar);
       // Tousled hair: a few tufts on top.
       for (const [x, z, r] of [[-0.05, -0.04, 0.04], [0.02, -0.06, 0.045], [0.06, -0.01, 0.035], [-0.02, 0.02, 0.045], [0.03, 0.05, 0.04]]) {
         const tuft = new THREE.Mesh(new THREE.SphereGeometry(r, 10, 8), m(0x3b2618));
@@ -125,9 +123,11 @@ const LOOKS: Record<StyleId, Look> = {
       g.add(badge, stripe);
     },
   },
-  // Ed: black cap, teal speckled tee, black shorts, and a watch.
+  // Ed: black cap, teal tee breaking into a dark-green speckle, black shorts, a watch and a blue water bottle.
   blocker: {
-    shirt: 0x1d5a57,
+    shirt: 0x22707a,
+    fabric: ED,
+    bottle: 0x2f80ed,
     legs: { kind: 'shorts', color: 0x111214 },
     skin: 0xe8b896,
     hair: 0x4b4038,
@@ -136,34 +136,18 @@ const LOOKS: Record<StyleId, Look> = {
     build: 1.12,
     cap: { color: 0x1a1b1f },
     watch: 0x111111,
-    accessory: (g, m, t) => {
-      // Speckled print on the front and back of the shirt.
-      const dots = [0x7dd3c0, 0x0f3b39, 0x9ee6d6];
-      const geo = new THREE.CircleGeometry(1, 8);
-      for (let i = 0; i < 30; i++) {
-        const dot = new THREE.Mesh(geo, m(dots[i % 3]));
-        const back = i % 2 === 1;
-        const x = (((i * 37) % 100) / 100 - 0.5) * t.halfW * 1.1;
-        const y = 0.92 + (((i * 53) % 100) / 100) * 0.42;
-        const z = t.front(y, x) - 0.002;
-        dot.position.set(x, y, back ? -z : z);
-        dot.scale.setScalar(0.009 + (i % 3) * 0.003);
-        dot.rotation.y = back ? 0 : Math.PI;
-        g.add(dot);
-      }
-    },
   },
   // Will: blue cap, royal-blue running vest (bare arms), grey shorts, a watch.
   penhold: {
-    shirt: 0x1f4fb0,
+    shirt: 0x2b4f9c,
     sleeves: 'none',
-    legs: { kind: 'shorts', color: 0x8c8f80 },
+    legs: { kind: 'shorts', color: 0x8e9682 },
     skin: 0xf2c8aa,
-    hair: 0x9a6b3f,
+    hair: 0xb07a45,
     shoes: 0xf3f4f6,
     height: 1.02,
     build: 0.92,
-    cap: { color: 0x2f5bd3, badge: 0xf3f4f6 },
+    cap: { color: 0x3a6fd0, badge: 0xf3f4f6 },
     watch: 0x111111,
   },
   // Dan: dark hair, full dark beard, dark rectangular glasses, grey v-neck jumper.
@@ -190,11 +174,12 @@ const LOOKS: Record<StyleId, Look> = {
       g.add(v, under);
     },
   },
-  // Paul: bright turquoise Hawaiian shirt with a hot-pink, orange, red, white and yellow hibiscus print, open collar,
-  // jeans, dark sunglasses, short dark hair and a goatee.
+  // Paul: navy Hawaiian shirt with pink hibiscus, teal palm leaves and toucans, open collar,
+  // mid-blue jeans, dark sunglasses, short dark hair and a goatee.
   patient: {
-    shirt: 0x10c4d0,
-    legs: { kind: 'trousers', color: 0x3b5b8f },
+    shirt: 0x1b2142,
+    fabric: PAUL,
+    legs: { kind: 'trousers', color: 0x4f75ab },
     skin: 0xe9b996,
     hair: 0x3a2a20,
     shoes: 0x1f2937,
@@ -204,55 +189,9 @@ const LOOKS: Record<StyleId, Look> = {
     lenses: 0x1b2230,
     goatee: 0x4a3426,
     accessory: (g, m, t) => {
-      // A busy hibiscus print front and back: big blossoms (petals round a yellow centre) among leaves.
-      const petals = [0xff2d8a, 0xff7a00, 0xef233c, 0xffffff, 0xffd60a, 0xc026d3];
-      const disc = new THREE.CircleGeometry(1, 10);
-      const leaf = new THREE.CircleGeometry(1, 6);
-      const place = (o: THREE.Object3D, i: number, back: boolean, x: number, y: number) => {
-        const z = t.front(y, x) - 0.002 - (i % 3) * 0.0003;
-        o.position.set(x, y, back ? -z : z);
-        o.rotation.y = back ? 0 : Math.PI;
-        g.add(o);
-      };
-      // A jittered grid over the front and back, so the print covers the shirt evenly.
-      const COLS = 5;
-      const ROWS = 6;
-      const jitter = (n: number) => ((Math.sin(n * 12.9898) * 43758.5453) % 1 + 1) % 1 - 0.5;
-      for (let i = 0; i < COLS * ROWS * 2; i++) {
-        const back = i >= COLS * ROWS;
-        const cell = i % (COLS * ROWS);
-        const col = cell % COLS;
-        const row = Math.floor(cell / COLS);
-        const x = ((col + 0.5) / COLS - 0.5 + jitter(i) * 0.12) * t.halfW * 1.6;
-        const y = 0.93 + ((row + 0.5) / ROWS + jitter(i + 99) * 0.08) * 0.45;
-        if (i % 3 === 0) {
-          // A leaf.
-          const l = new THREE.Mesh(leaf, m(i % 2 ? 0x22c55e : 0x84cc16));
-          l.scale.set(0.012, 0.028, 1);
-          l.rotation.z = i;
-          const w = new THREE.Group();
-          w.add(l);
-          place(w, i, back, x, y);
-          continue;
-        }
-        const r = 0.022 + (i % 4) * 0.005;
-        const flower = new THREE.Group();
-        for (let k = 0; k < 5; k++) {
-          const petal = new THREE.Mesh(disc, m(petals[i % petals.length]));
-          petal.scale.setScalar(r * 0.5);
-          const a = (k * Math.PI * 2) / 5 + i;
-          petal.position.set(Math.cos(a) * r * 0.5, Math.sin(a) * r * 0.5, 0);
-          flower.add(petal);
-        }
-        const centre = new THREE.Mesh(disc, m(0xfde047));
-        centre.scale.setScalar(r * 0.25);
-        centre.position.z = -0.0005;
-        flower.add(centre);
-        place(flower, i, back, x, y);
-      }
       // Open collar: two lapels either side of the neck.
       for (const side of [-1, 1]) {
-        const lapel = new THREE.Mesh(new THREE.CircleGeometry(0.04, 3), m(0x0b8f99));
+        const lapel = new THREE.Mesh(new THREE.CircleGeometry(0.04, 3), m(0x12162e));
         lapel.position.set(side * 0.03, 1.415, t.front(1.415, side * 0.03) - 0.004);
         lapel.rotation.set(0, Math.PI, side * 0.6 - Math.PI / 2);
         lapel.scale.set(1.2, 0.7, 1);
@@ -269,6 +208,7 @@ const LOOKS: Record<StyleId, Look> = {
   // glasses, a berry long-sleeved top with a small white star print, dark trousers.
   wheelchair: {
     shirt: 0x8e1d55,
+    fabric: BRYONY,
     longSleeves: true,
     legs: { kind: 'trousers', color: 0x1c1d22 },
     skin: 0xf0c6ae,
@@ -278,23 +218,7 @@ const LOOKS: Record<StyleId, Look> = {
     build: 1.08,
     glasses: 0x2b1d1d,
     wheelchair: { frame: 0xc3c8cf, tyre: 0x1b1d22 },
-    accessory: (g, m, t) => {
-      // Star print: small white (and a few gold) stars front and back.
-      const star = new THREE.CircleGeometry(1, 5);
-      const jitter = (n: number) => ((Math.sin(n * 78.233) * 43758.5453) % 1 + 1) % 1 - 0.5;
-      for (let i = 0; i < 90; i++) {
-        const back = i % 2 === 1;
-        const col = (i >> 1) % 6;
-        const row = Math.floor((i >> 1) / 6);
-        const x = ((col + 0.5) / 6 - 0.5 + jitter(i) * 0.14) * t.halfW * 1.6;
-        const y = 0.9 + ((row + 0.5) / 8 + jitter(i + 7) * 0.06) * 0.5;
-        const z = t.front(y, x) - 0.002;
-        const s = new THREE.Mesh(star, m(i % 7 === 0 ? 0xfacc15 : 0xf8fafc));
-        s.scale.setScalar(0.007 + (i % 3) * 0.002);
-        s.position.set(x, y, back ? -z : z);
-        s.rotation.set(0, back ? 0 : Math.PI, i);
-        g.add(s);
-      }
+    accessory: (g, m) => {
       // Ponytail: a hair tie at the back of the head and the tail hanging down.
       const tie = new THREE.Mesh(new THREE.TorusGeometry(0.022, 0.008, 6, 12), m(0x1f2937));
       tie.position.set(0, 1.62, 0.1);
@@ -453,6 +377,15 @@ export class Avatar {
       }
       return m;
     };
+    // Painted fabrics: one material for the torso, one for the sleeves (null: plain colours).
+    const texMat = (tex: THREE.Texture | null) => {
+      if (!tex) return null;
+      const m = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.82, transparent: !solid, opacity, depthWrite: solid });
+      this.materials.push(m);
+      return m;
+    };
+    const shirtMat = look.fabric ? texMat(paint(`${style}:torso`, look.fabric.torso, 1024, 512)) : null;
+    const sleeveMat = look.fabric?.sleeve ? texMat(paint(`${style}:sleeve`, look.fabric.sleeve, 256, 256, true)) : null;
     this.upper.position.y = HIP;
     this.upperAbs.position.y = -HIP;
     this.upper.add(this.upperAbs);
@@ -524,9 +457,15 @@ export class Avatar {
         return new THREE.Mesh(lathe(prof, halfW * grow, halfD * grow), mat(color));
       },
     };
-    add(lathe(TORSO, halfW, halfD), look.shirt, 0, 0, 0);
+    const torsoGeo = lathe(TORSO, halfW, halfD);
+    heightUVs(torsoGeo);
+    const torsoMesh = add(torsoGeo, look.shirt, 0, 0, 0);
+    if (shirtMat) torsoMesh.material = shirtMat;
     // Shoulder caps: sleeves (or bare skin for a vest) round off where the arms join.
-    for (const side of [-1, 1]) add(new THREE.SphereGeometry(0.062, 14, 10), sleeveColor ?? look.skin, side * this.shoulderX, SHOULDER_Y, 0);
+    for (const side of [-1, 1]) {
+      const cap = add(new THREE.SphereGeometry(0.062, 14, 10), sleeveColor ?? look.skin, side * this.shoulderX, SHOULDER_Y, 0);
+      if (sleeveColor !== null && sleeveMat) cap.material = sleeveMat;
+    }
     if (sleeveColor === null) {
       // Vest straps over bare shoulders.
       for (const side of [-1, 1]) {
@@ -538,9 +477,9 @@ export class Avatar {
     this.buildHead(look, add);
 
     // ---- arms
-    this.arm = this.buildArm(look, mat, sleeveColor);
+    this.arm = this.buildArm(look, mat, sleeveColor, sleeveMat);
     this.upperAbs.add(this.arm.upper);
-    const free = this.buildArm(look, mat, sleeveColor);
+    const free = this.buildArm(look, mat, sleeveColor, sleeveMat);
     this.freeArm = free.upper;
     this.freeElbow = free.fore;
     free.upperMesh.scale.y = UPPER;
@@ -714,24 +653,25 @@ export class Avatar {
     }
   }
 
-  private buildArm(look: Look, mat: Mat, sleeveColor: number | null): ArmRig {
+  private buildArm(look: Look, mat: Mat, sleeveColor: number | null, sleeveMat: THREE.Material | null): ArmRig {
     const upper = new THREE.Group();
     // Long sleeves cover the arm down to the wrist (a touch thicker than bare skin).
     const armColor = look.longSleeves && sleeveColor !== null ? sleeveColor : look.skin;
     const thick = armColor === look.skin ? 1 : 1.15;
-    const upperMesh = new THREE.Mesh(limb(0.043 * thick, 0.035 * thick), mat(armColor));
+    const armMat = armColor !== look.skin && sleeveMat ? sleeveMat : mat(armColor);
+    const upperMesh = new THREE.Mesh(limb(0.043 * thick, 0.035 * thick), armMat);
     upper.add(upperMesh);
     if (sleeveColor !== null) {
       // A short sleeve over the top of the upper arm (not stretched with it).
-      const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.056, 0.06, 0.15, 14), mat(sleeveColor));
+      const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.056, 0.06, 0.15, 14), sleeveMat ?? mat(sleeveColor));
       sleeve.position.y = 0.045;
       sleeve.name = 'sleeve';
       upper.add(sleeve);
     }
     const fore = new THREE.Group();
-    const elbow = new THREE.Mesh(new THREE.SphereGeometry(0.036 * thick, 12, 8), mat(armColor));
+    const elbow = new THREE.Mesh(new THREE.SphereGeometry(0.036 * thick, 12, 8), armMat);
     fore.add(elbow);
-    const foreMesh = new THREE.Mesh(limb(0.035 * thick, 0.027 * thick), mat(armColor));
+    const foreMesh = new THREE.Mesh(limb(0.035 * thick, 0.027 * thick), armMat);
     fore.add(foreMesh);
     const hand = new THREE.Mesh(new THREE.SphereGeometry(0.036, 12, 10), mat(look.skin));
     hand.scale.set(0.85, 1.15, 0.7);
