@@ -71,14 +71,14 @@ Progression lives in three places on the title screen: **World Tour** (the caree
 |---|---|---|---|
 | 1 | MEM HQ: Department Cup | MEM | Knockout, final best of 3 |
 | 2 | Office League | Open-plan office | Group, final best of 3 |
-| 3 | Data Centre Knockout | Server room | Knockout, final best of 3 |
+| 3 | Data Centre Knockout | Test Bay | Knockout, final best of 3 |
 | 4 | Park Open | **City Park** (new, outdoors) | Group, final best of 3 |
 | 5 | Boardroom Showdown | Conference room | Knockout, all best of 3 |
 | 6 | Beach Classic | **Offsite beach** (new, outdoors) | Group best of 3, final best of 5 |
 | 7 | Company Championship | Rooftop | Knockout, final best of 5 vs an Expert opponent |
 
 **Unlocks**
-- **Venues:** Server room (Club Player), Conference room (League Player), Rooftop (win the Cup), City Park (win the Data Centre Knockout), Offsite beach (win the Boardroom Showdown). Tour stops are always played at their own venue.
+- **Venues:** Test Bay (Club Player), Conference room (League Player), Rooftop (win the Cup), City Park (win the Data Centre Knockout), Offsite beach (win the Boardroom Showdown). Tour stops are always played at their own venue.
 - **Styles:** Lee, Ryan, Ed and Will from the start; the Sysadmin appears only as a tournament opponent (including World Tour stops).
 - **Rubbers:** Rapid (Club Player), Twister (Chop defence), Deadener (win the Championship).
 - **Unlock everything** (Unlocks tab) switches gating off for free play. Online lobbies aren't gated.
@@ -127,11 +127,11 @@ The game plays on phones and tablets, in landscape (portrait shows a "turn your 
 
 Everything is generated in code: geometry, textures and sound. There are no asset files.
 
-**Lighting:** neutral tone mapping (highlights roll off rather than clip), a soft environment light so the table, paddles and metal pick up reflections, PCF-filtered soft shadows and a satin table top. Each venue sets its own environment strength (the server room stays dark).
+**Lighting:** neutral tone mapping (highlights roll off rather than clip), a soft environment light so the table, paddles and metal pick up reflections, PCF-filtered soft shadows and a satin table top. Each venue sets its own environment strength (the Test Bay is bright and airy).
 
 **Venues** (panel → **Look & sound → Venue**; your choice is remembered):
 - **Open-plan office:** a window wall, desks with code on the monitors, and a "SPRINT 42" whiteboard.
-- **Server room:** rows of racks with blinking status LEDs, cable trays and cold-aisle lighting.
+- **Test Bay:** the IT build bay — suspended ceiling with panel lights, blue vertical blinds, maple worktops of monitors and laptops being imaged, stacks of Dell boxes and steel shelving.
 - **Conference room:** a wood floor, a glass wall, a "Q4 OKRs" whiteboard, and a TV showing the live score.
 - **Rooftop (company offsite):** a sunset sky, a city skyline, string lights and an "OFFSITE 2026" banner.
 - **Sandbox:** the original plain hall.

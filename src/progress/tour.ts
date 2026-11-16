@@ -77,10 +77,10 @@ export const TOUR_STOPS: TourStop[] = [
   {
     id: 'datacentre-knockout',
     name: 'Data Centre Knockout',
-    place: 'Server room',
+    place: 'Test Bay',
     venue: 'server',
     format: 'knockout',
-    blurb: 'Three rounds among the humming racks. The final is best of 3.',
+    blurb: 'Three rounds among the Dell boxes in the Test Bay. The final is best of 3.',
     xp: 400,
     rounds: [
       { name: 'Round 1', level: 'medium', style: 'chopper', bestOf: 1, venue: 'server' },
