@@ -353,6 +353,8 @@ export class Sandbox implements MenuHost {
   private recorder = new RallyRecorder();
   private replay: ReplayPlayer | null = null;
   private autoReplayed: unknown = null;
+  /** The viewer has moved the replay camera themselves (the broadcast shot stops). */
+  private replayFreeCam = false;
   private savedCamera: { pos: THREE.Vector3; target: THREE.Vector3; visible: Map<string, boolean> } | null = null;
 
   // Progression
@@ -433,6 +435,10 @@ export class Sandbox implements MenuHost {
     this.post = new PostFx(this.renderer, this.scene, this.camera);
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
+    // Grabbing the camera during a replay hands it over from the broadcast shot to the viewer.
+    this.controls.addEventListener('start', () => {
+      if (this.replay) this.replayFreeCam = true;
+    });
     this.setCamera('Player');
 
     this.ball = new BallView(this.scene);
@@ -493,6 +499,7 @@ export class Sandbox implements MenuHost {
     this.touch.onServeEnd = () => this.releaseToss();
     this.hud.onReplaySpeed = (sp) => this.setReplaySpeed(sp);
     this.hud.onReplaySkip = () => this.stopReplay();
+    this.hud.onReplayResetCam = () => this.resetReplayCamera();
     this.touch.onReplay = () => (this.replay ? this.stopReplay() : this.startReplay());
     this.touch.onMenu = () => this.setPlaying(false);
     this.autoQuality = new AutoQuality(this.isTouch ? 1 : 2);
@@ -587,7 +594,10 @@ export class Sandbox implements MenuHost {
       { passive: false },
     );
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
-    document.addEventListener('pointerlockchange', () => this.setPlaying(document.pointerLockElement === canvas));
+    document.addEventListener('pointerlockchange', () => {
+      this.setPlaying(document.pointerLockElement === canvas);
+      this.syncControlsEnabled();
+    });
     this.hud.onStartPlay = () => this.requestPlay();
 
     this.resize();
@@ -632,7 +642,7 @@ export class Sandbox implements MenuHost {
       if (!this.match && !this.drill && !this.online && !this.tutorial) this.practicing = true;
       this.menu.hide();
     }
-    this.controls.enabled = !on;
+    this.syncControlsEnabled();
     this.touch.show(on && this.isTouch);
     document.body.classList.toggle('playing', on);
     this.playerView.visible = on;
@@ -2093,6 +2103,18 @@ export class Sandbox implements MenuHost {
     this.ball.clearTrail();
     this.playerView.setMarker(null);
     this.hud.setReplay({ caption: '…', speed });
+    this.replayFreeCam = false;
+    this.syncControlsEnabled();
+  }
+
+  /** Camera controls: off during play (the mouse swings the bat), except to steer a replay. */
+  private syncControlsEnabled() {
+    this.controls.enabled = !this.playing || (!!this.replay && !document.pointerLockElement);
+  }
+
+  /** Back to the broadcast shot after the viewer moved the replay camera. */
+  resetReplayCamera() {
+    this.replayFreeCam = false;
   }
 
   stopReplay() {
@@ -2107,6 +2129,8 @@ export class Sandbox implements MenuHost {
       for (const [id, v] of this.replayViews()) v.visible = saved.visible.get(id) ?? false;
     }
     this.savedCamera = null;
+    this.replayFreeCam = false;
+    this.syncControlsEnabled();
   }
 
   private runReplay(dt: number) {
@@ -2130,11 +2154,13 @@ export class Sandbox implements MenuHost {
       this.ball.rotate(f.ball.spin, dt * r.speed);
       this.ball.update(f.ball.pos, { pos: f.ball.pos, vel: f.ball.vel, spin: f.ball.spin });
     }
-    // Broadcast camera: side-on, slowly drifting.
-    const k = r.time / Math.max(0.5, r.rally.duration);
-    this.camera.position.set(3.6 - k * 0.6, 1.75, 0.9 - k * 1.8);
-    this.controls.target.set(0, 0.85, 0);
-    this.camera.lookAt(this.controls.target);
+    // Broadcast camera: side-on, slowly drifting (until the viewer drags/zooms it themselves).
+    if (!this.replayFreeCam) {
+      const k = r.time / Math.max(0.5, r.rally.duration);
+      this.camera.position.set(3.6 - k * 0.6, 1.75, 0.9 - k * 1.8);
+      this.controls.target.set(0, 0.85, 0);
+      this.camera.lookAt(this.controls.target);
+    }
     this.hud.setReplay({ caption: r.caption || '…', speed: r.speed });
     if (r.done) this.stopReplay();
   }
@@ -2652,6 +2678,8 @@ export class Sandbox implements MenuHost {
       this.gui.controllersRecursive().forEach((c) => c.updateDisplay());
     } else if (e.code === 'Period') {
       this.step();
+    } else if (e.code === 'KeyV' && this.replay) {
+      this.resetReplayCamera();
     } else if (e.code === 'KeyC') {
       this.clearMarkers();
     } else if (e.code === 'KeyR' && !e.repeat) {

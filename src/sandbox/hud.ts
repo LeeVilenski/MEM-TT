@@ -130,6 +130,7 @@ export class Hud {
 
   onReplaySpeed: (speed: number) => void = () => {};
   onReplaySkip: () => void = () => {};
+  onReplayResetCam: () => void = () => {};
   private replayCaption: HTMLDivElement | null = null;
   private replaySlider: HTMLInputElement | null = null;
   private replaySpeedLabel: HTMLSpanElement | null = null;
@@ -162,7 +163,16 @@ export class Hud {
         e.stopPropagation();
         this.onReplaySkip();
       });
-      row.append(slider, label, skip);
+      const cam = document.createElement('button');
+      cam.type = 'button';
+      cam.className = 'skip';
+      cam.textContent = 'Reset cam';
+      cam.title = 'Drag to move the replay camera; this returns to the broadcast view (V)';
+      cam.addEventListener('pointerdown', (e) => {
+        e.stopPropagation();
+        this.onReplayResetCam();
+      });
+      row.append(slider, label, cam, skip);
       this.replayEl.append(this.replayCaption, row);
       this.replaySlider = slider;
       this.replaySpeedLabel = label;
