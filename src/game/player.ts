@@ -1,5 +1,5 @@
-import { RUBBERS, TABLE, UP, length, lerp, normalize, scale, type BallState, type ContactAdjust, type PaddleCollider, type PaddlePose, type PhysicsParams, type Rubber, type Vec3 } from '../physics';
-import { makeAngleAssist, pitchRotator, rotate, type ShotMode } from './assist';
+import { RUBBERS, TABLE, UP, cloneState, length, lerp, normalize, paddleImpulse, scale, type BallState, type ContactAdjust, type PaddleCollider, type PaddlePose, type PhysicsParams, type Rubber, type Vec3 } from '../physics';
+import { landingOutcome, makeAngleAssist, pitchRotator, rotate, type ShotMode } from './assist';
 import { NO_GRADING, gradeContact, type ContactResult, type GradeParams } from './contact';
 import { realismSettings } from './realism';
 import { STYLES, type PlayStyle, type StyleId } from './styles';
@@ -7,8 +7,7 @@ import { DEFAULT_SWING } from './swing';
 import { BLADES, batRubbers, defaultBat, withControl, type Bat, type Blade } from './equipment';
 import { REACH, SwingController, type StrokeSide, type SwingInput } from './swing';
 import type { IncomingPrediction, PathPoint } from './intercept';
-import { serveContact, tossEffect, type ServeType } from './serves';
-import { landingOutcome } from './assist';
+import { planServe, serveEdge, serveRisk, tossEffect, type ServePlan, type ServeType } from './serves';
 import { faceNormal } from './swing';
 
 /**
@@ -172,6 +171,7 @@ export class Player {
 
   /** Apply the realism slider (0 = simulation, 1 = arcade) to this player's assists. */
   applyRealism(arcade: number) {
+    this.realism = arcade;
     const r = realismSettings(arcade);
     this.assists.angle = r.angleAssist;
     this.assists.hitArea = r.hitArea;
@@ -183,6 +183,9 @@ export class Player {
     this.swing.params.autoFace = r.autoFace;
     this.grading = r.grading;
   }
+
+  /** The realism slider (0 = simulation, 1 = arcade), for the serve's execution error. */
+  realism = 0.85;
 
   /** Contact grading windows (set by the realism slider; off until then). */
   grading: GradeParams = NO_GRADING;
@@ -457,13 +460,29 @@ export class Player {
         return smash;
       }
     }
-    if (!rally && this.serveType !== 'auto') {
-      // A chosen serve: a poorly struck one gets less help finding a version that lands,
-      // keeps less of its spin, and strays a little after; a high toss adds a little spin.
+    if (!rally) {
+      // A serve: the swipe aims it (its angle the line, the contact height the depth), the
+      // type and the swipe's speed set the spin, and the assist looks for a version that
+      // lands near the aim. A poorly struck one gets less help; a high toss adds a little
+      // spin. Then the execution error: a demanding serve (short, heavy spin), a poor
+      // contact, a high toss and less assist all make a net or a long serve likelier.
       const power = tossEffect(this.tossHeight).power * g.paceScale;
       const swing = { ...pose, vel: scale(pose.vel, power) };
-      const adj = serveContact(this.serveType, ball, swing, rubber, this.params, this.assists.angle * g.assistScale, false, this.doubles);
-      if (adj) return this.withError(adj, g.faceError * 0.6);
+      const plan = planServe(this.serveType, ball, swing, rubber, this.params, this.assists.angle * g.assistScale, { diagonal: this.doubles });
+      this.lastServePlan = plan;
+      if (plan) {
+        let adj = plan.adj;
+        if (!adj) {
+          this.assistScale = g.assistScale;
+          try {
+            const base = { ...swing, vel: plan.base.vel! };
+            adj = withVel(this.angleAssist(ball, base, plan.base.normal, rubber), base.vel);
+          } finally {
+            this.assistScale = 1;
+          }
+        }
+        return this.serveError(adj, plan, ball, swing, rubber);
+      }
     }
     // A clean contact keeps the full assist; a poor one is rescued less often, loses pace
     // (mistimed or off-centre), and the face goes a little astray after the assist.
@@ -479,6 +498,43 @@ export class Player {
     if (g.faceError <= 0 && pace === 1) return r;
     return this.withError(withVel(r, hit.vel), g.faceError);
   }
+
+  /** The last serve's plan (aim, demand), read on the paddle event; null for a serve without a swing. */
+  lastServePlan: ServePlan | null = null;
+
+  /** A serve's execution error: mostly the face's pitch and the bat speed (net or long), a little sideways. */
+  private serveError(adj: ContactAdjust, plan: ServePlan, ball: BallState, pose: PaddlePose, rubber: Rubber): ContactAdjust {
+    // The slip, in units of the serve's margin (past 1 = a fault), and which way the face
+    // goes: open (long or high) or closed (into the net).
+    const slip = this.gauss() * serveRisk(plan.demand, this.realism, this.tossHeight);
+    let sign: 1 | -1 = slip >= 0 ? 1 : -1;
+    let edge = serveEdge(ball, pose, adj, rubber, this.params, sign, this.doubles);
+    // A fault that can't happen this way (the face would miss the ball first) happens the other way.
+    if (edge === null && Math.abs(slip) >= 1) {
+      const other = serveEdge(ball, pose, adj, rubber, this.params, -sign as 1 | -1, this.doubles);
+      if (other !== null) ((sign = -sign as 1 | -1), (edge = other));
+    }
+    this.lastServeSlip = slip;
+    const at = pitchRotator(adj.normal);
+    if (!at) return adj;
+    const vel = adj.vel ?? pose.vel;
+    // A face turned so far it no longer drives into the ball isn't a stroke at all: keep the serve.
+    const hits = (n: Vec3) => paddleImpulse(cloneState(ball), { ...pose, normal: n, vel }, rubber) > 0;
+    const faceErr = this.gauss() * 0.6 * (this.lastContact?.faceError ?? 0);
+    if (Math.abs(slip) < 1 || edge === null) {
+      // Inside the margin it only scatters the serve: a few degrees of face at most, a touch
+      // of pace and direction. A poor contact adds its own face error.
+      const n = normalize(rotate(at(slip * 0.6 * Math.min(edge ?? 4, 4) + faceErr), UP, (this.gauss() * 0.8 * Math.PI) / 180));
+      return hits(n) ? { normal: n, vel: adj.vel ? scale(adj.vel, 1 + this.gauss() * 0.02) : undefined } : adj;
+    }
+    // Past it: the face goes beyond the edge, further for a bigger slip, until it misses.
+    let deg = sign * (edge + 1.5 + 4 * (Math.abs(slip) - 1)) + faceErr;
+    for (let i = 0; i < 4 && landingOutcome(ball, { ...pose, vel }, at(deg), rubber, this.params, 'serve').outcome === 'in'; i++) deg += sign * 2;
+    return hits(at(deg)) ? { normal: at(deg), vel: adj.vel } : adj;
+  }
+
+  /** The last serve's slip (|slip| > 1: a fault by the server's error), for tests and tuning. */
+  lastServeSlip = 0;
 
   /** Execution error on the face (degrees, standard deviation; sideways error is smaller). */
   private withError(adj: ContactAdjust, sd: number): ContactAdjust {

@@ -38,6 +38,7 @@ import { NO_INPUT, type SwingInput, type SwipeMode } from '../game/swing';
 import { BallView, SPIN_PALETTES, setSpinPalette, spinColor, spinKind, type SpinPalette } from '../render/ballView';
 import { Juice, hitPower } from '../render/juice';
 import { PlayerView } from '../render/playerView';
+import { ServeAimView } from '../render/serveAim';
 import { createScene } from '../render/scene';
 import { PostFx } from '../render/post';
 import { Hud, MatchHud, type ShotReport, type ReturnReport, type PracticeStats } from './hud';
@@ -60,7 +61,7 @@ import { CareerScreen } from './career';
 import { HowToPlay } from './howto';
 import { Coach } from './coach';
 import { Tutorial, tutorialHint } from '../progress/tutorial';
-import { SERVE_TYPES, serveReport, tossHeightFor, type ServeReport, type ServeType } from '../game/serves';
+import { SERVE_TYPES, describeSpot, serveAim, serveReport, tossHeightFor, type ServeReport, type ServeType } from '../game/serves';
 import { Menu, type MenuHost, type PauseContext } from './menu';
 import { OPEN_BOUNDS, VENUES, setVenue, type Venue, type VenueId } from '../render/venues';
 import { OnlineClient } from '../net/client';
@@ -426,6 +427,8 @@ export class Sandbox implements MenuHost {
   private predictionLine: THREE.Line;
   private machineMesh: THREE.Group;
   private targetRing: THREE.Mesh;
+  /** After a serve, a ring where it was aimed (with the intercept marker setting). */
+  private serveAimView: ServeAimView;
   private raycaster = new THREE.Raycaster();
 
   constructor(private container: HTMLElement) {
@@ -495,6 +498,7 @@ export class Sandbox implements MenuHost {
     );
     this.targetRing.rotation.x = -Math.PI / 2;
     this.scene.add(this.targetRing);
+    this.serveAimView = new ServeAimView(this.scene);
 
     this.machine = this.settingsFromPreset(PRESETS.find((p) => p.name === 'Long push')!);
     // Touch controls (phones/tablets) and adaptive quality.
@@ -1196,6 +1200,7 @@ export class Sandbox implements MenuHost {
     // Players and ball.
     this.playerView.update(this.player);
     this.playerView.setMarker(this.settings.showIntercept ? match.interceptFor('near') : null, this.markerEta());
+    this.serveAimView.update();
     const pose = ai.worldPose;
     const body = ai.worldBody;
     this.aiView.updatePose(pose, body, ai.wing);
@@ -1267,10 +1272,14 @@ export class Sandbox implements MenuHost {
   private servePrompt() {
     const t = SERVE_TYPES.find((x) => x.id === this.serveType)!;
     const how = this.isTouch
-      ? 'Hold <b>Serve</b> to toss, release, then swipe as it drops'
-      : 'Hold <kbd>Space</kbd> to toss, release, then swing as it drops';
+      ? 'Hold <b>Serve</b> to toss, release, then swipe as it drops · angle the swipe to aim · meet it low for short, high for long'
+      : 'Hold <kbd>Space</kbd> to toss, release, then swing as it drops · angle the swing to aim · meet it low for short, high for long';
     const pick = this.isTouch ? 'tap a serve below to change' : '<kbd>1</kbd>–<kbd>6</kbd> or <kbd>Q</kbd>/<kbd>E</kbd> to change';
-    return `<b>${t.name} serve</b> · ${this.isTouch ? t.touch : t.mouse}<br><small>${how} · ${pick}</small>`;
+    // The length your bat's height would play (where you'll meet the dropping ball).
+    const depth = serveAim(this.serveType, v3(0, -1, 0), this.player.swing.y - TABLE.height).depth;
+    const at = depth < 1 / 3 ? 0 : depth < 2 / 3 ? 1 : 2;
+    const length = ['short', 'half-long', 'long'].map((l, i) => (i === at ? `<b>${l}</b>` : l)).join(' · ');
+    return `<b>${t.name} serve</b> · ${this.isTouch ? t.touch : t.mouse}<br><small>Length at this bat height: ${length}</small><br><small>${how} · ${pick}</small>`;
   }
 
   // ---------------------------------------------------------------- career, drills, tournaments
@@ -1941,13 +1950,21 @@ export class Sandbox implements MenuHost {
     }
   }
 
-  /** After your serve: how good it was (height over the net, length, spin), and its contact grade. */
+  /** After your serve: how good it was (height over the net, length, spin), where it was aimed, and its contact grade. */
   private reportMyServe(ball: BallState) {
     const r = serveReport(ball, this.params);
     this.lastServe = r;
     const g = this.player.lastContact?.grade;
     const graded = g && g !== 'GOOD' ? ` <span class="toast-grade${g === 'PERFECT' ? ' gold' : ''}">${GRADE_TEXT[g].title}</span>` : '';
-    this.hud.toast(`🏓 Serve: <b>${r.text}</b>${graded}`);
+    const aim = this.player.lastServePlan?.aim;
+    let placed = '';
+    if (aim) {
+      if (this.settings.showIntercept) this.serveAimView.showAim(aim.x, aim.z);
+      const want = describeSpot(aim.x, aim.z);
+      const got = r.landing && r.length !== 'fault' ? describeSpot(r.landing.x, r.landing.z) : null;
+      placed = `<br><small>Aimed ${want}${got && got !== want ? ` · landed ${got}` : ''}</small>`;
+    }
+    this.hud.toast(`🏓 Serve: <b>${r.text}</b>${graded}${placed}`);
   }
 
   /** The last serve you hit (for objectives and stats). */
@@ -2450,6 +2467,7 @@ export class Sandbox implements MenuHost {
     this.playerView.visible = !!c.seat && inMatch;
     this.playerView.update(this.player);
     this.playerView.setMarker(this.settings.showIntercept ? c.interceptView() : null, this.markerEta(), this.partnerTurn);
+    this.serveAimView.update();
     const seats = Object.keys(c.room?.seats ?? {}) as Seat[];
     for (const seat of seats) {
       if (seat === c.seat) continue;
