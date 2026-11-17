@@ -1,11 +1,11 @@
 import { RUBBERS, type Rubber } from '../physics';
 
 /**
- * Player styles: the characters (Lee, Ryan, Ed, Will, Dan, Paul, Bryony and a Sysadmin), each with an IT job. A style changes handling (not the
+ * Player styles: the characters (Lee, Ryan, Ed, Will, Dan, Paul, Bryony, George and a Sysadmin), each with an IT job. A style changes handling (not the
  * physics): swing power, reach, footwork speed, where you stand, and your default
  * rubbers. For the AI it also sets stroke preferences and playing distance.
  */
-export type StyleId = 'allround' | 'looper' | 'chopper' | 'blocker' | 'penhold' | 'pusher' | 'patient' | 'wheelchair';
+export type StyleId = 'allround' | 'looper' | 'chopper' | 'blocker' | 'penhold' | 'pusher' | 'patient' | 'wheelchair' | 'attacker';
 
 /** AI stroke kinds that styles can weight (see ai.ts), serves included. */
 export type StyleStroke = 'loop' | 'drive' | 'push' | 'block' | 'smash' | 'flick' | 'chop' | 'serve-short' | 'serve-long' | 'serve-side';
@@ -34,6 +34,11 @@ export interface Personality {
   steady?: number;
   /** Multiplier on how fast it moves about (a wheelchair player covers less ground sideways). */
   mobility?: number;
+  /** 0–1: attacks the opening balls of the point: the third ball after its serve (and, less
+   *  often, the receive and the ball after). Harder, spinnier strokes. */
+  firstStrike?: number;
+  /** Extra execution error per stroke once a rally goes past its opening few shots (0 = none). */
+  rallyFade?: number;
 }
 
 export interface PlayStyle {
@@ -178,12 +183,31 @@ export const STYLES: Record<StyleId, PlayStyle> = {
     // covers less ground sideways than standing players.
     personality: { placement: 0.75, blockPace: 0.5, smashHeight: 0.45, mobility: 0.7 },
   },
+  attacker: {
+    id: 'attacker',
+    character: 'George',
+    role: 'George',
+    label: 'Third-ball attacker',
+    description: 'Short, heavy backspin serves, then goes all out on the next ball. Deadly in the first three shots; survive those and he gets shakier the longer the rally goes.',
+    power: 1.1,
+    reach: 1,
+    footwork: 1.1,
+    distance: 0.65,
+    rubbers: { forehand: RUBBERS.inverted, backhand: RUBBERS.inverted },
+    ai: { loop: 2.2, smash: 1.6, flick: 1.5, drive: 1.2, push: 0.8, block: 0.6, chop: 0.1, 'serve-short': 2.2, 'serve-side': 1.3, 'serve-long': 0.4 },
+    // Everything is built around the serve: heavy backspin to force a push, then the attack.
+    personality: { firstStrike: 0.85, rallyFade: 0.12, spin: 1.3, smashHeight: 0.32, smashAppetite: 1.3 },
+  },
 };
 
 export const STYLE_IDS = Object.keys(STYLES) as StyleId[];
 
-/** Characters you only meet as opponents in tournaments and the World Tour. */
-export const OPPONENT_ONLY_STYLE_IDS: StyleId[] = ['chopper', 'patient', 'wheelchair'];
+/**
+ * Characters you only meet as opponents in tournaments and the World Tour: just the generic
+ * Sysadmin. Everyone else (Paul, Bryony and George included) is playable. To gate one behind
+ * progress instead, add a { kind: 'style', id } rule to UNLOCKS in progress/unlocks.ts.
+ */
+export const OPPONENT_ONLY_STYLE_IDS: StyleId[] = ['chopper'];
 
 /** Characters offered in the "Your character" chooser. */
 export const PLAYABLE_STYLE_IDS: StyleId[] = STYLE_IDS.filter((id) => !OPPONENT_ONLY_STYLE_IDS.includes(id));
@@ -191,7 +215,7 @@ export const PLAYABLE_STYLE_IDS: StyleId[] = STYLE_IDS.filter((id) => !OPPONENT_
 /**
  * Characters you can pick (or get at random) as AI opponents and partners in free play:
  * Match vs AI, doubles and online AI seats. Everyone but the Sysadmin, who stays a
- * tournament-only opponent. Paul and Bryony are in for now, to try out how they play;
+ * tournament-only opponent. Paul, Bryony and George are in for now, to try out how they play;
  * to take them out again, add them back to the exclusion here.
  */
 export const FREE_PLAY_OPPONENT_IDS: StyleId[] = STYLE_IDS.filter((id) => id !== 'chopper');

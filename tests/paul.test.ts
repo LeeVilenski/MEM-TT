@@ -40,12 +40,13 @@ function returns(style: StyleId, seeds = 6) {
 }
 
 describe('Paul: patient, flat (no spin of his own)', () => {
-  it('is an opponent only: not in the character chooser, but on the World Tour and in free play', () => {
+  it('is playable, on the World Tour and in free play', () => {
     expect(STYLES.patient.character).toBe('Paul');
-    expect(PLAYABLE_STYLE_IDS).not.toContain('patient');
-    // …but you can pick them as an opponent in free play (Match vs AI, doubles, online AI seats).
+    expect(PLAYABLE_STYLE_IDS).toContain('patient');
     expect(FREE_PLAY_OPPONENT_IDS).toContain('patient');
     expect(FREE_PLAY_OPPONENT_IDS).not.toContain('chopper');
+    // The Sysadmin stays a tournament-only opponent.
+    expect(PLAYABLE_STYLE_IDS).not.toContain('chopper');
     expect(TOUR_STOPS.some((s) => (s.format === 'group' ? s.opponents.some((o) => o.style === 'patient') : s.rounds.some((r) => r.style === 'patient')))).toBe(true);
   });
 

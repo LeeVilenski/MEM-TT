@@ -625,3 +625,84 @@ export const BRYONY: Fabric = {
   torso: (p) => bryonyStars(p, 5, 260, 7),
   sleeve: (p) => bryonyStars(p, 9, 40, 6),
 };
+
+/** A button placket down the front of a shirt, with buttons. */
+const placket = (p: Canvas2D, line: string, button: string) => {
+  const { c, w } = p;
+  const x = w * 0.5 + 4;
+  c.fillStyle = line;
+  c.fillRect(x - 1, p.y(1.42), 3, p.h);
+  c.fillStyle = button;
+  for (let y = p.y(1.34); y < p.h - 10; y += 50) {
+    c.beginPath();
+    c.arc(x + 9, y, 3.5, 0, Math.PI * 2);
+    c.fill();
+  }
+};
+
+/** Navy, burgundy and white tartan check: wide navy bands with burgundy and pale over-checks. */
+const tartan = (p: Canvas2D, scale: number) => {
+  const { c, w, h } = p;
+  fill(p, '#ece9e6');
+  const pitch = 64 * scale;
+  const bands: [number, number, string][] = [
+    // offset, width (fractions of the pitch), colour
+    [0, 0.34, 'rgba(32,38,74,0.88)'],
+    [0.42, 0.1, 'rgba(128,30,50,0.85)'],
+    [0.62, 0.16, 'rgba(32,38,74,0.6)'],
+    [0.86, 0.04, 'rgba(128,30,50,0.7)'],
+  ];
+  for (const [o, bw, col] of bands) {
+    c.fillStyle = col;
+    for (let x = o * pitch; x < w + pitch; x += pitch) c.fillRect(x, 0, bw * pitch, h);
+    for (let y = o * pitch; y < h + pitch; y += pitch) c.fillRect(0, y, w, bw * pitch);
+  }
+  // Thin white over-check lines.
+  c.fillStyle = 'rgba(255,255,255,0.55)';
+  for (let x = 0.38 * pitch; x < w; x += pitch) c.fillRect(x, 0, Math.max(1, 2 * scale), h);
+  for (let y = 0.38 * pitch; y < h; y += pitch) c.fillRect(0, y, w, Math.max(1, 2 * scale));
+};
+
+/** A fine weave texture over a plain colour (oxford cloth, knit). */
+const weave = (p: Canvas2D, base: string, fleck: string, seed: number, n: number) => {
+  fill(p, base);
+  const r = rng(seed);
+  p.c.fillStyle = fleck;
+  for (let i = 0; i < n; i++) p.c.fillRect(r() * p.w, r() * p.h, 2, 1);
+};
+
+/**
+ * George's wardrobe (from photos): a navy-and-burgundy tartan check shirt, a white oxford
+ * button-down, and a black v-neck jumper over a burgundy collared shirt.
+ */
+export const GEORGE_SHIRTS: Fabric[] = [
+  {
+    id: 'george-tartan',
+    base: 0x2a2f55,
+    torso: (p) => {
+      tartan(p, 1);
+      placket(p, 'rgba(0,0,0,0.3)', '#f5f5f4');
+    },
+    sleeve: (p) => tartan(p, 0.5),
+  },
+  {
+    id: 'george-oxford',
+    base: 0xf2f1ee,
+    torso: (p) => {
+      weave(p, '#f2f1ee', 'rgba(150,160,180,0.25)', 3, 6000);
+      placket(p, 'rgba(0,0,0,0.12)', '#d6d3d1');
+    },
+    sleeve: (p) => weave(p, '#f2f1ee', 'rgba(150,160,180,0.25)', 4, 900),
+  },
+  {
+    id: 'george-jumper',
+    base: 0x1c1c20,
+    torso: (p) => {
+      weave(p, '#1c1c20', 'rgba(255,255,255,0.05)', 6, 8000);
+      // Ribbed hem.
+      p.c.fillStyle = 'rgba(255,255,255,0.06)';
+      for (let x = 0; x < p.w; x += 8) p.c.fillRect(x, p.h - 26, 3, 26);
+    },
+    sleeve: (p) => weave(p, '#1c1c20', 'rgba(255,255,255,0.05)', 7, 1200),
+  },
+];
