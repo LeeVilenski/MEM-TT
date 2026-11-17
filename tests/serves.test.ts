@@ -6,17 +6,21 @@ import { NO_INPUT } from '../src/game/swing';
 import { classifyShot } from '../src/game/shots';
 import type { ServeType } from '../src/game/serves';
 import { DEFAULT_PARAMS as P, TABLE } from '../src/physics';
+import { PLAYABLE_STYLE_IDS, STYLES, type StyleId } from '../src/game/styles';
 import { mulberry32 } from './helpers/rng';
 
 /** Serve through the real match pipeline: toss, then a 3-frame flick (dx, dy px/frame) as the ball drops. */
-function serve(type: ServeType, dx: number, dy: number, seed: number, flickAt = 0.15, bodyX = -0.2) {
+function serve(type: ServeType, dx: number, dy: number, seed: number, flickAt = 0.15, bodyX = -0.2, style?: StyleId) {
   const human = new Player('h', { ...P });
+  // Standing where the character plays from.
+  if (style) ((human.applyStyle(style)), (human.body.z = human.homeZ));
   // Serving from near the middle by default (the default stance puts the bat at the forehand edge).
   human.body.x = bodyX;
   human.applyRealism(0.75);
   human.serveType = type;
   const m = new Match(P, { near: { kind: 'human', player: human }, far: { kind: 'ai', ai: new AiPlayer('far', AI_LEVELS.medium, P, mulberry32(seed)) } }, { bestOf: 1, pointsToWin: 11, firstServer: 'near' });
   let outcome = '';
+  let detail = '';
   let top = 0;
   let side = 0;
   m.on((e) => {
@@ -25,7 +29,7 @@ function serve(type: ServeType, dx: number, dy: number, seed: number, flickAt = 
       top = i.top;
       side = i.side;
     }
-    if (e.type === 'point' && !outcome) outcome = e.result.reason;
+    if (e.type === 'point' && !outcome) ((outcome = e.result.reason), (detail = e.result.detail ?? ''));
     if (e.type === 'hit' && e.side === 'far' && !outcome) outcome = 'returned';
   });
   human.swing.y = TABLE.height + 0.15;
@@ -44,7 +48,7 @@ function serve(type: ServeType, dx: number, dy: number, seed: number, flickAt = 
     m.frame(1 / 60, 1 / 60, { side: 'near', input, move: { x: 0, z: 0 } });
   }
   const legal = outcome === 'returned' || outcome === 'ace' || outcome === 'not-returned' || outcome === 'double-bounce';
-  return { legal, outcome, top, side };
+  return { legal, outcome, detail, top, side };
 }
 
 function run(type: ServeType, dx: number, dy: number, bodyX = -0.2) {
@@ -55,6 +59,15 @@ function run(type: ServeType, dx: number, dy: number, bodyX = -0.2) {
 }
 
 describe('serves', { timeout: 60000 }, () => {
+  it('every character serves from behind the end line, even tight to the table (Bryony)', () => {
+    expect(STYLES.wheelchair.distance).toBeLessThan(0.42); // closer than the bat's reach in front of the body
+    for (const id of PLAYABLE_STYLE_IDS) {
+      const r = Array.from({ length: 4 }, (_, i) => serve('backspin', 0, 40, i + 1, 0.15, -0.2, id));
+      for (const x of r) expect(x.detail, id).not.toMatch(/end line/);
+      expect(r.filter((x) => x.legal).length, id).toBeGreaterThanOrEqual(3);
+    }
+  });
+
   it('a backspin serve lands with heavy backspin, more for a harder swipe', () => {
     const gentle = run('backspin', 0, 20);
     const hard = run('backspin', 0, 90);

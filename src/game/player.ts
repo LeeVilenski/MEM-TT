@@ -64,6 +64,12 @@ const AIM_LIMIT = 0.6;
  * hitting face, not the bat's edge or back (which knocked it back onto your own side).
  */
 export const SERVE_TOSS_AHEAD = 0.012;
+/**
+ * Serving: the bat's plane (and so the toss and the contact) stays at least this far behind
+ * the end line, however close you play. Without it a player tight to the table (Bryony in her
+ * wheelchair) struck the serve over the table: an illegal serve.
+ */
+const SERVE_BEHIND_LINE = 0.06;
 
 /** Serving: without a swing the bat is held this far back from the falling ball (m). */
 const SERVE_HOLD_BACK = 0.12;
@@ -240,6 +246,11 @@ export class Player {
     return this.body.z - ARM_REACH - this.lean;
   }
 
+  /** The bat's plane for serving: the usual plane, but never in front of the end line. */
+  get serveZ() {
+    return Math.max(this.restZ, TABLE.halfLength + SERVE_BEHIND_LINE);
+  }
+
   private magnetLocked = false;
   /** The wing the footwork assist is setting up for. */
   private wing: StrokeSide = 'forehand';
@@ -290,6 +301,7 @@ export class Player {
 
   /** Paddle plane for this frame: the contact point's depth, as far as the arm can reach. */
   private contactZ(): number {
+    if (this.shotMode === 'serve') return this.serveZ;
     const rest = this.restZ;
     // Within a few cm of the usual plane, stay on it (the ball is met there as it crosses).
     if (!this.intercept || Math.abs(this.intercept.z - rest) < 0.06) return rest;

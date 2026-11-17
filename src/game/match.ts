@@ -95,7 +95,7 @@ export class Match {
     }
     // Human: in line with the paddle and in its plane, so the dropping ball meets it.
     const pose = c.player.swing.pose;
-    return v3(pose.pos.x, TABLE.height + 0.06, c.player.restZ - SERVE_TOSS_AHEAD);
+    return v3(pose.pos.x, TABLE.height + 0.06, c.player.serveZ - SERVE_TOSS_AHEAD);
   }
 
   /** Is a human waiting to serve? */
