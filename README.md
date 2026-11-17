@@ -320,10 +320,14 @@ Play against the ball machine with a mouse-driven paddle. Click **▶ Play**: th
 
 **Serving:**
 - Choose a serve before you toss: **Free** (your swing decides), **Backspin**, **Sidespin**, **Topspin**, **Fast long** or **No-spin**. Keys **1–6** or **Q/E**; on touch, tap one of the serve buttons.
-- The type sets the face angle and the brush; the swipe's speed sets the spin (a hard backspin serve is nearly 5,000 rpm), and for sidespin its direction sets the curve. The assist finds a version that lands without taking the spin out.
+- The type sets the face angle and the brush; the swipe's speed sets the spin (a hard backspin serve is over 3,000 rpm), and for sidespin its direction sets the curve.
+- **You place the serve:**
+  - **Line:** the swipe's sideways angle, as for rally strokes: angle a backspin flick down-left and it goes to the left. A sidespin is swiped sideways, so a flat swipe goes wide and a steeper one comes in to the middle.
+  - **Length:** how high you meet the dropping ball. Meet it low, near the table, for a short serve; high for a long one. Each type starts from its own length (backspin and no-spin short, topspin and fast long). The serve prompt shows the length your bat's height would play (*short · half-long · long*).
+  - The assist then finds a version that lands near that aim without taking the spin out (it changes the pace into the face, not the brush across it). After the serve a ring shows where you aimed (with the intercept marker on), and the serve toast says e.g. *Aimed short left · landed half-long left*.
+- **Free serves** are placed the same way: your swipe's direction (down, up, across) and your face set the spin, at a serve's pace.
 - While you swing, the bat meets the falling ball (a serve magnet); without a swing it holds back, so the ball doesn't just drop onto a still bat.
-- Free serves keep their spin too: the assist only trims the pace into the face, not the brush across it.
-- **Serves can go wrong:** serves are graded like rally shots (below). A mistimed or off-centre serve gets less help landing, keeps less spin and can fault.
+- **Serves can go wrong:** every serve has an execution "slip", scaled to how much margin that serve has. A slip past the margin is a fault, into the net (face too closed) or long (too open). It's likelier for a demanding serve (a hard flick, very short, or right to the end line), with less assist (realism slider) and with a high toss. On the default setting about 1 in 15 plain serves miss and 1 in 4–5 very short, heavy-spin ones; on Arcade hardly any. Serves are also graded like rally shots (below): a mistimed or off-centre serve gets less help landing, keeps less spin and strays further.
 - **The toss is a skill:** the red start of the toss meter is an illegal toss (a quick tap, under 16 cm). A higher toss allows a little more spin, but the ball drops faster, so the timing window is tighter.
 - **Serve report:** after each serve a toast rates it, e.g. *Low · Short · 3,800 rpm backspin*. Low, short and spinny is hard to attack; a high serve invites a kill.
 - **The AI has to read your serve:** it sees where the ball goes but judges its spin with error (Easy badly, Expert well). Misjudged backspin goes into the net or pops up, and a no-spin serve can look like backspin. Repeating the same kind of serve in a match lets it read that serve better, so mix them up. Rally balls are read exactly.

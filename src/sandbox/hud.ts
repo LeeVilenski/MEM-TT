@@ -610,7 +610,11 @@ export class MatchHud {
     this.edgeEl.classList.add('show');
   }
 
+  private promptHtml: string | null | undefined;
   setPrompt(html: string | null) {
+    // Set every frame: only touch the DOM when it changes.
+    if (html === this.promptHtml) return;
+    this.promptHtml = html;
     this.prompt.innerHTML = html ?? '';
     this.prompt.style.display = html ? 'block' : 'none';
   }
