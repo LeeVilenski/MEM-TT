@@ -180,5 +180,5 @@ describe('AI stroke at the hit event', () => {
     expect(rallyHits).toBeGreaterThan(20);
     expect(withPlan).toBeGreaterThanOrEqual(rallyHits * 0.9);
     expect(smashes).toBeGreaterThan(0);
-  });
+  }, 30000); // a whole AI match: about 5 s alone, longer under the full suite
 });
