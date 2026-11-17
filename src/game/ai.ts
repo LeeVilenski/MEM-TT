@@ -196,6 +196,10 @@ export class AiPlayer {
   private moveFrom = 0;
   /** Serves seen this match, by kind: each repeat of a kind is read better. */
   private serveMemory: Record<string, number> = {};
+  /** Its own strokes this point, serve included (first-strike players attack the opening ones). */
+  private shots = 0;
+  /** Whether it served this point. */
+  private served = false;
   /** The last ball's read: true and perceived topspin (rps), for tests and debugging. */
   lastRead: { kind: string; top: number; seenTop: number } | null = null;
 
@@ -241,6 +245,9 @@ export class AiPlayer {
 
   /** Plan a return for a ball (world state at absolute time `now`) heading to this side. */
   planReturn(world: BallState, now: number, opts: { serve?: boolean } = {}): AiPlan | null {
+    // Count its own strokes this point: receiving a serve starts a new one.
+    if (opts.serve) ((this.shots = 0), (this.served = false));
+    this.shots++;
     const local = mapState(this.side, world);
     const pred = new IncomingPrediction(local, this.params, now);
     // Where it meets the ball depends on the style: blockers stay close, choppers deep.
@@ -288,6 +295,16 @@ export class AiPlayer {
     if (pers.lowLoop && at.pos.y < TABLE.height + 0.02 && !overTable && this.rng() < pers.lowLoop) {
       return (this.plan = this.solve(at, ic.t, ['loop', 'chop', 'block'], 'rally', now));
     }
+    // First strike (George): the ball after its own serve (the third ball) is the one it has
+    // set up, so go for it: smash a high one, flick a short one, rip a hard loop otherwise.
+    // Receiving, it attacks the return and the next ball too, a little less often.
+    if (pers.firstStrike && this.shots <= 2) {
+      const chance = this.served ? pers.firstStrike : 0.6 * pers.firstStrike;
+      if (this.rng() < chance) {
+        const attack: StrokeKind[] = height > (pers.smashHeight ?? 0.42) ? ['smash', 'loop', 'drive'] : overTable ? ['flick', 'loop', 'push'] : ['loop', 'drive', 'smash'];
+        return (this.plan = this.solve(at, ic.t, attack, 'rally', now, { attack: true }));
+      }
+    }
 
     // Slicers (Will): when it isn't a ball to smash, often slice it back with backspin.
     const smashable = height > (pers.smashHeight ?? 0.42);
@@ -314,6 +331,8 @@ export class AiPlayer {
    * spawns the ball there. The plan strikes the ball on its way down.
    */
   planServe(now: number): { hand: Vec3; tossVy: number } {
+    this.shots = 1;
+    this.served = true;
     this.body = { ...READY, z: TABLE.halfLength + 0.65 };
     // Doubles: serve from the right half (+x locally) so the ball can go diagonally.
     const handX = this.doubles ? 0.25 + this.rng() * 0.3 : this.body.x + this.hand * 0.3 + (this.rng() - 0.5) * 0.3;
@@ -357,7 +376,7 @@ export class AiPlayer {
   }
 
   /** Pick the first stroke in `choices` that can be made to land, aiming at a target. */
-  private solve(at: BallState, t: number, choices: StrokeKind[], mode: ShotMode, now: number, opts: { steady?: number } = {}): AiPlan {
+  private solve(at: BallState, t: number, choices: StrokeKind[], mode: ShotMode, now: number, opts: { steady?: number; attack?: boolean } = {}): AiPlan {
     const p = this.profile;
     const pers = this.style.personality ?? {};
     const spin = pers.spin ?? 1;
@@ -398,6 +417,9 @@ export class AiPlayer {
       if (pers.flat) vel = v3(vel.x * (1 - pers.flat), vel.y * (1 - pers.flat), vel.z);
       // Patient players hit a little softer in the rally.
       if (pers.steady && mode === 'rally') vel = scale(vel, 1 - 0.15 * pers.steady);
+      // A first-strike attack is hit harder, with more brush on the loop.
+      if (opts.attack && stroke === 'loop') vel = v3(vel.x, vel.y * 1.15, vel.z * 1.05);
+      else if (opts.attack && (stroke === 'drive' || stroke === 'flick')) vel = scale(vel, 1.06);
       const yaw = (Math.atan2(target.x - pos.x, -(target.z - pos.z)) * 180) / Math.PI;
       const pose: PaddlePose = { pos, normal: v3(0, 0, -1), vel };
 
@@ -432,6 +454,8 @@ export class AiPlayer {
       if (stroke === 'smash') personal *= pers.smashError ?? 1;
       if (stroke === 'block' && opts.steady) personal *= 1 - 0.6 * opts.steady;
       if (pers.steady) personal *= 1 - 0.4 * pers.steady;
+      // Fades in a long rally: each stroke past the opening few is a little less accurate.
+      if (pers.rallyFade && mode === 'rally') personal *= 1 + pers.rallyFade * Math.min(6, Math.max(0, this.shots - 3));
       const pitch = bestPitch + this.gauss() * p.pitchError * errScale * personal;
       // (Aim and pace are rehearsed too: a doubles serve must also land in the right half.)
       const yawErr = yaw + this.gauss() * p.yawError * errScale * personal;

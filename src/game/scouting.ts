@@ -63,6 +63,11 @@ const NOTES: Record<StyleId, { headline: string; traits: string[]; plan: string 
     traits: ['Takes the ball early and works the angles', 'Blocks pace well', 'Covers less ground sideways in the chair'],
     plan: 'Make her move: go wide to the corners, then switch. She’s left-handed, so her forehand is on your right. Expect your pace to come straight back.',
   },
+  attacker: {
+    headline: 'Serves short with heavy backspin, then attacks the very next ball.',
+    traits: ['Short backspin serves, built to make you push', 'Loops, flicks or smashes the third ball hard', 'Less accurate the longer the rally goes'],
+    plan: 'Don’t hand George the push he wants: flick his short serve, or push it short and low so there’s nothing to attack. Get through the first three shots and keep the ball in play; the longer the rally, the more he misses.',
+  },
 };
 
 const LEVEL_NOTES: Record<AiLevel, string> = {

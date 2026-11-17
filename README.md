@@ -154,6 +154,7 @@ Everything is generated in code: geometry, textures and sound. There are no asse
 | Sysadmin | Sysadmin | beard, black t-shirt, lanyard and badge |
 | Paul | Patient flat hitter (World Tour opponent) | a different loud Hawaiian shirt each time (seven: navy toucan, mint flamingo, turquoise hibiscus, classic red, pineapple, sunset palms, blue plumeria), jeans, aviators, spiky hair greying at the sides, salt-and-pepper goatee |
 | Bryony | Wheelchair counter-hitter (World Tour opponent) | plays seated in a sports wheelchair (cambered wheels, push rims); berry star-print top, ponytail, glasses |
+| George | Third-ball attacker (World Tour opponent) | tall; short dark-brown hair, dark stubble, big grin; one of three outfits each time (navy-and-burgundy tartan check shirt, white oxford button-down, or a black v-neck jumper over a burgundy shirt), navy chinos |
 
 In first person you see only your paddle, so nothing hides the ball. Replays and the other cameras show your full character.
 
@@ -199,6 +200,7 @@ Online, the whole room runs at the slider's game speed: the server and every cli
 | Sysadmin | Chopper | deep, +12% reach | Classic / Twister (long pips) |
 | Paul | Patient flat hitter | mid, +5% reach | Rapid / Rapid (short pips) |
 | Bryony | Wheelchair counter-hitter | tight to the table, +5% reach, 30% less sideways movement | Classic / Classic |
+| George | Third-ball attacker | mid, +10% power, +10% footwork | Classic / Classic |
 | Ed | Counter-attacker | deep, +10% reach | Classic / Classic |
 | Will | Spinner & slammer | close, +15% power | Classic / Classic |
 
@@ -210,6 +212,7 @@ Online, the whole room runs at the slider's game speed: the server and every cli
 - **Sysadmin:** chops from about 2.6 m back.
 - **Paul:** never puts spin on the ball: every stroke is flat (no brush), on short pips. Patient: aims well inside the lines, hits a little softer and makes fewer errors, and almost never smashes. A World Tour opponent only (Sprint League and Beach Classic groups).
 - **Bryony:** plays from her wheelchair right at the table: takes the ball early, blocks pace and works the angles, but covers less ground sideways (the AI's movement speed is scaled down). A World Tour opponent only (Park Open group, Boardroom Showdown quarter-final).
+- **George:** a third-ball attacker. Serves short and low with heavy backspin (some sidespin) to force a push, then goes all out on the next ball: a hard, spinny loop, a flick over the table, or a smash on anything high. Receiving, he attacks the return and the ball after it too, a little less often. The weakness: he fades in a long rally, missing a little more with each stroke past the opening few. A World Tour opponent (Data Centre Knockout, Round 1) and pickable in free play.
 
 You choose the AI's style in **Match vs AI** or in the online lobby (or leave it random).
 

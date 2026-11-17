@@ -1,11 +1,11 @@
 import * as THREE from 'three';
 import { STYLES, type StyleId } from '../game/styles';
-import { BRYONY, ED, LEE, PAUL_SHIRTS, RYAN, heightUVs, paint, type Fabric } from './fabric';
+import { BRYONY, ED, GEORGE_SHIRTS, LEE, PAUL_SHIRTS, RYAN, heightUVs, paint, type Fabric } from './fabric';
 
 /**
  * Characters built from smooth primitives: a tapered torso, jointed arms and legs,
  * hands and a proper head. One look per player style; four are modelled on real
- * people (Lee, Ed, Ryan, Will, Dan, Paul, Bryony) from their clothes, hair and build.
+ * people (Lee, Ed, Ryan, Will, Dan, Paul, Bryony, George) from their clothes, hair and build.
  * Bryony plays seated in a table tennis wheelchair: the upper body sits lower and the
  * legs rest on the footplate. The racket arm is
  * a two-bone chain (shoulder, elbow, hand) solved each frame to hold the paddle handle.
@@ -262,6 +262,48 @@ const LOOKS: Record<StyleId, Look> = {
       tail.position.set(0, 1.52, 0.115);
       tail.rotation.x = 0.18;
       g.add(tail);
+    },
+  },
+  // George: tall, short dark-brown hair with a side parting, dark stubble, a big grin.
+  // One of three outfits from his photos: tartan check shirt, white oxford, or a black
+  // v-neck jumper over a burgundy shirt; dark navy chinos.
+  attacker: {
+    shirt: 0x2a2f55,
+    fabric: GEORGE_SHIRTS,
+    longSleeves: true,
+    legs: { kind: 'trousers', color: 0x232838 },
+    skin: 0xecbf9f,
+    hair: 0x3a2717,
+    shoes: 0x2b2118,
+    height: 1.05,
+    build: 1.02,
+    face: { eyes: 0x5a4330, mouth: 'grin', stubble: { color: 0x3a2717, density: 0.85 }, jaw: 1.02, long: 1.04, browWeight: 1.15 },
+    accessory: (g, m, t) => {
+      const jumper = t.shirt === 0x1c1c20;
+      // The jumper's v-neck shows the burgundy shirt underneath.
+      if (jumper) {
+        const v = new THREE.Mesh(new THREE.CircleGeometry(0.06, 3), m(0x4a1626));
+        v.position.set(0, 1.42, t.front(1.42) - 0.004);
+        v.rotation.set(0, Math.PI, -Math.PI / 2);
+        v.scale.set(1.35, 0.8, 1);
+        g.add(v);
+      }
+      // Shirt collar: two points either side of the neck (burgundy under the jumper).
+      const collar = jumper ? 0x4a1626 : t.shirt === 0xf2f1ee ? 0xe7e5e1 : 0x232848;
+      for (const side of [-1, 1]) {
+        const point = new THREE.Mesh(new THREE.CircleGeometry(0.036, 3), m(collar));
+        point.position.set(side * 0.034, 1.44, t.front(1.44, side * 0.034) - 0.006);
+        point.rotation.set(0, Math.PI, side * 0.5 - Math.PI / 2);
+        point.scale.set(1.25, 0.65, 1);
+        g.add(point);
+      }
+      // Hair: short on the sides, a little fuller on top, parted and swept to one side.
+      for (const [x, y, z, r] of [[-0.04, 1.712, -0.03, 0.04], [0.01, 1.718, -0.035, 0.044], [0.05, 1.708, -0.02, 0.036], [0.015, 1.715, 0.02, 0.05], [-0.035, 1.71, 0.03, 0.042]]) {
+        const tuft = new THREE.Mesh(new THREE.SphereGeometry(r, 10, 8), m(0x3a2717));
+        tuft.position.set(x, y, z);
+        tuft.scale.set(1.1, 0.4, 1);
+        g.add(tuft);
+      }
     },
   },
 };

@@ -83,7 +83,7 @@ export const TOUR_STOPS: TourStop[] = [
     blurb: 'Three rounds among the Dell boxes in the Test Bay. The final is best of 3.',
     xp: 400,
     rounds: [
-      { name: 'Round 1', level: 'medium', style: 'chopper', bestOf: 1, venue: 'server' },
+      { name: 'Round 1', level: 'medium', style: 'attacker', bestOf: 1, venue: 'server' },
       { name: 'Semi-final', level: 'medium', style: 'penhold', bestOf: 1, venue: 'server' },
       { name: 'Final', level: 'medium', style: 'blocker', bestOf: 3, venue: 'server' },
     ],
