@@ -2144,7 +2144,8 @@ body.menu-open .mhud-meter {
 
 .cs-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  /* Eight characters: two even rows of four. */
+  grid-template-columns: repeat(4, 1fr);
   gap: 8px;
 }
 
@@ -3058,7 +3059,7 @@ body {
     width: 100%;
   }
   .cs-list {
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(4, 1fr);
   }
   .cs-stage {
     height: auto;

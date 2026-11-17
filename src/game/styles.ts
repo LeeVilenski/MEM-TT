@@ -202,8 +202,12 @@ export const STYLES: Record<StyleId, PlayStyle> = {
 
 export const STYLE_IDS = Object.keys(STYLES) as StyleId[];
 
-/** Characters you only meet as opponents in tournaments and the World Tour. */
-export const OPPONENT_ONLY_STYLE_IDS: StyleId[] = ['chopper', 'patient', 'wheelchair', 'attacker'];
+/**
+ * Characters you only meet as opponents in tournaments and the World Tour: just the generic
+ * Sysadmin. Everyone else (Paul, Bryony and George included) is playable. To gate one behind
+ * progress instead, add a { kind: 'style', id } rule to UNLOCKS in progress/unlocks.ts.
+ */
+export const OPPONENT_ONLY_STYLE_IDS: StyleId[] = ['chopper'];
 
 /** Characters offered in the "Your character" chooser. */
 export const PLAYABLE_STYLE_IDS: StyleId[] = STYLE_IDS.filter((id) => !OPPONENT_ONLY_STYLE_IDS.includes(id));

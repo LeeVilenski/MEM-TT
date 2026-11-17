@@ -152,9 +152,9 @@ Everything is generated in code: geometry, textures and sound. There are no asse
 | Ryan | Full-Stack Dev | tall; dark tousled hair and stubble, black rugby jersey with a crest, a white sponsor wordmark and a row of coloured dots |
 | Will | Network Engineer | blue cap, royal-blue running vest, sage shorts, watch |
 | Sysadmin | Sysadmin | beard, black t-shirt, lanyard and badge |
-| Paul | Patient flat hitter (World Tour opponent) | a different loud Hawaiian shirt each time (seven: navy toucan, mint flamingo, turquoise hibiscus, classic red, pineapple, sunset palms, blue plumeria), jeans, aviators, spiky hair greying at the sides, salt-and-pepper goatee |
-| Bryony | Wheelchair counter-hitter (World Tour opponent) | plays seated in a sports wheelchair (cambered wheels, push rims); berry star-print top, ponytail, glasses |
-| George | Third-ball attacker (World Tour opponent) | tall; short dark-brown hair, dark stubble, big grin; one of three outfits each time (navy-and-burgundy tartan check shirt, white oxford button-down, or a black v-neck jumper over a burgundy shirt), navy chinos |
+| Paul | Patient flat hitter | a different loud Hawaiian shirt each time (seven: navy toucan, mint flamingo, turquoise hibiscus, classic red, pineapple, sunset palms, blue plumeria), jeans, aviators, spiky hair greying at the sides, salt-and-pepper goatee |
+| Bryony | Wheelchair counter-hitter | plays seated in a sports wheelchair (cambered wheels, push rims); berry star-print top, ponytail, glasses |
+| George | Third-ball attacker | tall; short dark-brown hair, dark stubble, big grin; one of three outfits each time (navy-and-burgundy tartan check shirt, white oxford button-down, or a black v-neck jumper over a burgundy shirt), navy chinos |
 
 In first person you see only your paddle, so nothing hides the ball. Replays and the other cameras show your full character.
 
@@ -191,7 +191,7 @@ In first person you see only your paddle, so nothing hides the ball. Replays and
 
 Online, the whole room runs at the slider's game speed: the server and every client share the slowed clock.
 
-**Player styles:** choose under **Player → Your style**. Each changes handling (swing power, reach, footwork, stance) and sets your rubbers.
+**Player styles:** choose under **Player → Your style**. Everyone but the Sysadmin is playable (to lock a character behind progress, add a `style` rule to `UNLOCKS` in `src/progress/unlocks.ts`). Each changes handling (swing power, reach, footwork, stance) and sets your rubbers.
 
 | Character | Style | Stance | Rubbers (FH / BH) |
 |---|---|---|---|
@@ -210,9 +210,9 @@ Online, the whole room runs at the slider's game speed: the server and every cli
 - **Ed:** defends deep, counter-loops topspin (including from below the table: he lets pushes drop and lifts them), and blocks smashes steadily. He returns about 70% of smashes and power loops, against roughly 25% for the others.
 - **Will:** heavy spin, especially on serve (mostly sidespin), and smashes often and wildly.
 - **Sysadmin:** chops from about 2.6 m back.
-- **Paul:** never puts spin on the ball: every stroke is flat (no brush), on short pips. Patient: aims well inside the lines, hits a little softer and makes fewer errors, and almost never smashes. A World Tour opponent only (Sprint League and Beach Classic groups).
-- **Bryony:** plays from her wheelchair right at the table: takes the ball early, blocks pace and works the angles, but covers less ground sideways (the AI's movement speed is scaled down). A World Tour opponent only (Park Open group, Boardroom Showdown quarter-final).
-- **George:** a third-ball attacker. Serves short and low with heavy backspin (some sidespin) to force a push, then goes all out on the next ball: a hard, spinny loop, a flick over the table, or a smash on anything high. Receiving, he attacks the return and the ball after it too, a little less often. The weakness: he fades in a long rally, missing a little more with each stroke past the opening few. A World Tour opponent (Data Centre Knockout, Round 1) and pickable in free play.
+- **Paul:** never puts spin on the ball: every stroke is flat (no brush), on short pips. Patient: aims well inside the lines, hits a little softer and makes fewer errors, and almost never smashes. Playable, and on the World Tour (Sprint League and Beach Classic groups).
+- **Bryony:** plays from her wheelchair right at the table: takes the ball early, blocks pace and works the angles, but covers less ground sideways (the AI's movement speed is scaled down). Playable (your footwork is slower sideways too), and on the World Tour (Park Open group, Boardroom Showdown quarter-final).
+- **George:** a third-ball attacker. Serves short and low with heavy backspin (some sidespin) to force a push, then goes all out on the next ball: a hard, spinny loop, a flick over the table, or a smash on anything high. Receiving, he attacks the return and the ball after it too, a little less often. The weakness: he fades in a long rally, missing a little more with each stroke past the opening few. Playable, and on the World Tour (Data Centre Knockout, Round 1). Played by you, George gets his power and footwork; the serve-then-attack plan is yours to carry out.
 
 You choose the AI's style in **Match vs AI** or in the online lobby (or leave it random).
 

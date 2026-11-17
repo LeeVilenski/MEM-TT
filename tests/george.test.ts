@@ -48,9 +48,9 @@ function play(style: StyleId, served: boolean, before: number, seeds = 12) {
 }
 
 describe('George: third-ball attacker', () => {
-  it('is an opponent only: not in the character chooser, but on the World Tour and in free play', () => {
+  it('is playable, on the World Tour and in free play', () => {
     expect(STYLES.attacker.character).toBe('George');
-    expect(PLAYABLE_STYLE_IDS).not.toContain('attacker');
+    expect(PLAYABLE_STYLE_IDS).toContain('attacker');
     expect(FREE_PLAY_OPPONENT_IDS).toContain('attacker');
     expect(TOUR_STOPS.some((s) => (s.format === 'group' ? s.opponents.some((o) => o.style === 'attacker') : s.rounds.some((r) => r.style === 'attacker')))).toBe(true);
   });
