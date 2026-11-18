@@ -928,10 +928,10 @@ export class Avatar {
       }
     }
     if (look.cap) {
-      const crown = add(new THREE.SphereGeometry(0.108, look.lowPolyDetail ? 12 : 22, look.lowPolyDetail ? 7 : 12, 0, Math.PI * 2, 0, Math.PI / 2), look.cap.color, 0, HY + 0.035, 0.004);
+      const crown = add(new THREE.SphereGeometry(0.108, 22, 12, 0, Math.PI * 2, 0, Math.PI / 2), look.cap.color, 0, HY + 0.035, 0.004);
       crown.scale.set(0.98, 0.95, 1.04);
       // Peak: a half disc out in front, tipped down a touch.
-      const peak = add(new THREE.CylinderGeometry(0.1, 0.1, 0.008, look.lowPolyDetail ? 12 : 20, 1, false, Math.PI / 2, Math.PI), look.cap.color, 0, HY + 0.04, -0.06);
+      const peak = add(new THREE.CylinderGeometry(0.1, 0.1, 0.008, 20, 1, false, Math.PI / 2, Math.PI), look.cap.color, 0, HY + 0.04, -0.06);
       peak.scale.set(0.9, 1, 1.05);
       peak.rotation.x = -0.14;
       if (look.cap.badge !== undefined) {
