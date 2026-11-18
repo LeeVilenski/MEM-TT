@@ -81,6 +81,8 @@ interface Look {
    *  A list is a wardrobe: one is picked each time the character is made. */
   fabric?: Fabric | Fabric[];
   accessory?: (g: THREE.Group, mat: Mat, torso: TorsoShape) => void;
+  /** Use the restrained faceted geometry pass for the Lee prototype. */
+  lowPolyDetail?: boolean;
 }
 
 const LOOKS: Record<StyleId, Look> = {
@@ -95,6 +97,7 @@ const LOOKS: Record<StyleId, Look> = {
     shoes: 0x2b2f38,
     height: 1.0,
     build: 0.95,
+    lowPolyDetail: true,
     cap: { color: 0x15161a, badge: 0xd1d5db },
     // Young, lean and clean-shaven; a closed-mouth half smile.
     face: { eyes: 0x5d7f9e, mouth: 'smirk', jaw: 0.93, long: 1.03, cheeks: 0xe79a8a },
@@ -457,7 +460,7 @@ export class Avatar {
       let m = cache.get(c);
       if (!m) {
         const skin = c === look.skin;
-        m = new THREE.MeshStandardMaterial({ color: c, roughness: skin ? 0.62 : 0.82, transparent: !solid, opacity, depthWrite: solid });
+        m = new THREE.MeshStandardMaterial({ color: c, roughness: skin ? 0.62 : 0.82, flatShading: !!look.lowPolyDetail, transparent: !solid, opacity, depthWrite: solid });
         cache.set(c, m);
         this.materials.push(m);
       }
@@ -466,7 +469,7 @@ export class Avatar {
     // Painted fabrics: one material for the torso, one for the sleeves (null: plain colours).
     const texMat = (tex: THREE.Texture | null) => {
       if (!tex) return null;
-      const m = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.82, transparent: !solid, opacity, depthWrite: solid });
+      const m = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.82, flatShading: !!look.lowPolyDetail, transparent: !solid, opacity, depthWrite: solid });
       this.materials.push(m);
       return m;
     };
@@ -524,6 +527,15 @@ export class Avatar {
       shoe.scale.set(1.15, 0.72, 1);
       const sole = add(new THREE.CapsuleGeometry(0.047, 0.15, 4, 12).rotateX(Math.PI / 2), 0xe5e7eb, 0, -0.026, -0.045, foot);
       sole.scale.set(1.18, 0.3, 1.02);
+      if (look.lowPolyDetail) {
+        // Three understated lace bars and a darker toe overlay give the trainer a clearer silhouette.
+        for (let i = 0; i < 3; i++) {
+          const lace = add(new THREE.BoxGeometry(0.028, 0.0035, 0.006), 0xb9bdc5, 0, 0.026, -0.025 - i * 0.025, foot);
+          lace.rotation.z = (i - 1) * 0.04;
+        }
+        const toe = add(new THREE.SphereGeometry(0.035, 8, 5), 0x3b414d, 0, 0.006, -0.125, foot);
+        toe.scale.set(1.12, 0.48, 0.72);
+      }
     }
     // Hips and waistband move with the legs, not the twisting upper body.
     this.pelvis = new THREE.Mesh(lathe(PELVIS, halfW * 0.98, halfD * 0.98), mat(look.legs.color));
@@ -551,13 +563,13 @@ export class Avatar {
         return new THREE.Mesh(lathe(prof, halfW * grow, halfD * grow), mat(color));
       },
     };
-    const torsoGeo = lathe(TORSO, halfW, halfD);
+    const torsoGeo = lathe(TORSO, halfW, halfD, look.lowPolyDetail ? 16 : 28);
     heightUVs(torsoGeo);
     const torsoMesh = add(torsoGeo, look.shirt, 0, 0, 0);
     if (shirtMat) torsoMesh.material = shirtMat;
     // Shoulder caps: sleeves (or bare skin for a vest) round off where the arms join.
     for (const side of [-1, 1]) {
-      const cap = add(new THREE.SphereGeometry(0.062, 14, 10), sleeveColor ?? look.skin, side * this.shoulderX, SHOULDER_Y, 0);
+      const cap = add(new THREE.SphereGeometry(0.062, look.lowPolyDetail ? 9 : 14, look.lowPolyDetail ? 7 : 10), sleeveColor ?? look.skin, side * this.shoulderX, SHOULDER_Y, 0);
       if (sleeveColor !== null && sleeveMat) cap.material = sleeveMat;
     }
     if (sleeveColor === null) {
@@ -567,7 +579,14 @@ export class Avatar {
         strap.rotation.z = side * -0.35;
       }
     }
-    add(new THREE.CylinderGeometry(0.046, 0.052, 0.12, 12), look.skin, 0, 1.5, 0);
+    add(new THREE.CylinderGeometry(0.046, 0.052, 0.12, look.lowPolyDetail ? 9 : 12), look.skin, 0, 1.5, 0);
+    if (look.lowPolyDetail) {
+      // A fine crew-neck rib sits at the base of the neck without changing the torso rig.
+      const collar = new THREE.Mesh(new THREE.TorusGeometry(0.047, 0.004, 5, 12), mat(0x263454));
+      collar.position.set(0, 1.466, 0);
+      collar.rotation.x = Math.PI / 2;
+      this.upperAbs.add(collar);
+    }
     this.buildHead(look, add, decal);
 
     // ---- arms
@@ -691,10 +710,10 @@ export class Avatar {
     const long = f.long ?? 1;
     /** How far the lower face (jaw, mouth, stubble) drops for a longer face. */
     const drop = (long - 1) * 0.06;
-    const head = add(new THREE.SphereGeometry(0.1, 24, 18), look.skin, 0, HY, 0);
+    const head = add(new THREE.SphereGeometry(0.1, look.lowPolyDetail ? 12 : 24, look.lowPolyDetail ? 9 : 18), look.skin, 0, HY, 0);
     head.scale.set(0.94, 1.1 * long, 1);
     // Jaw: a slightly narrower sphere low and forward, so the face isn't a ball.
-    const jaw = add(new THREE.SphereGeometry(0.08, 18, 12), look.skin, 0, HY - 0.045 - drop, -0.018);
+    const jaw = add(new THREE.SphereGeometry(0.08, look.lowPolyDetail ? 10 : 18, look.lowPolyDetail ? 7 : 12), look.skin, 0, HY - 0.045 - drop, -0.018);
     jaw.scale.set(0.95 * jawW, 0.85, 1);
     const browColor = f.brows ?? look.hair;
     for (const s of [-1, 1]) {
@@ -829,7 +848,7 @@ export class Avatar {
     }
 
     // Hair (sides and back show under a cap); greying temples fade in towards the bottom.
-    const hair = add(new THREE.SphereGeometry(0.106, 22, 14, 0, Math.PI * 2, 0, Math.PI / 1.9), look.hair, 0, HY + 0.008, 0.01);
+    const hair = add(new THREE.SphereGeometry(0.106, look.lowPolyDetail ? 12 : 22, look.lowPolyDetail ? 8 : 14, 0, Math.PI * 2, 0, Math.PI / 1.9), look.hair, 0, HY + 0.008, 0.01);
     hair.scale.set(0.97, 1.1 * long, 1.04);
     hair.rotation.x = 0.2;
     if (f.temples !== undefined) {
@@ -907,12 +926,25 @@ export class Avatar {
       }
     }
     if (look.cap) {
-      const crown = add(new THREE.SphereGeometry(0.108, 22, 12, 0, Math.PI * 2, 0, Math.PI / 2), look.cap.color, 0, HY + 0.035, 0.004);
+      const crown = add(new THREE.SphereGeometry(0.108, look.lowPolyDetail ? 12 : 22, look.lowPolyDetail ? 7 : 12, 0, Math.PI * 2, 0, Math.PI / 2), look.cap.color, 0, HY + 0.035, 0.004);
       crown.scale.set(0.98, 0.95, 1.04);
       // Peak: a half disc out in front, tipped down a touch.
-      const peak = add(new THREE.CylinderGeometry(0.1, 0.1, 0.008, 20, 1, false, Math.PI / 2, Math.PI), look.cap.color, 0, HY + 0.04, -0.06);
+      const peak = add(new THREE.CylinderGeometry(0.1, 0.1, 0.008, look.lowPolyDetail ? 12 : 20, 1, false, Math.PI / 2, Math.PI), look.cap.color, 0, HY + 0.04, -0.06);
       peak.scale.set(0.9, 1, 1.05);
       peak.rotation.x = -0.14;
+      if (look.lowPolyDetail) {
+        // A small top button and two restrained panel seams make the cap read as sewn fabric.
+        add(new THREE.SphereGeometry(0.007, 6, 4), 0x303137, 0, HY + 0.143, 0.004);
+        const seam = (a: THREE.Vector3, b: THREE.Vector3) => {
+          const d = b.clone().sub(a);
+          const line = add(new THREE.CylinderGeometry(0.0015, 0.0015, d.length(), 5), 0x303137,
+            (a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2);
+          line.quaternion.setFromUnitVectors(Y_AXIS, d.normalize());
+        };
+        for (const side of [-1, 1]) {
+          seam(new THREE.Vector3(0, HY + 0.14, 0.004), new THREE.Vector3(side * 0.066, HY + 0.092, -0.052));
+        }
+      }
       if (look.cap.badge !== undefined) {
         const badge = add(new THREE.CircleGeometry(0.016, 14), look.cap.badge, 0, HY + 0.085, -0.093);
         badge.rotation.set(-0.5, Math.PI, 0);
@@ -940,9 +972,22 @@ export class Avatar {
     fore.add(elbow);
     const foreMesh = new THREE.Mesh(limb(0.035 * thick, 0.027 * thick), armMat);
     fore.add(foreMesh);
-    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.036, 12, 10), mat(look.skin));
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.036, look.lowPolyDetail ? 9 : 12, look.lowPolyDetail ? 7 : 10), mat(look.skin));
     hand.scale.set(0.85, 1.15, 0.7);
     fore.add(hand);
+    if (look.lowPolyDetail) {
+      // Small finger forms sit on the palm; the hand's origin remains the paddle-grip anchor.
+      for (let i = 0; i < 3; i++) {
+        const finger = new THREE.Mesh(new THREE.CapsuleGeometry(0.0042, 0.012, 2, 5), mat(look.skin));
+        finger.position.set(-0.012 + i * 0.012, -0.004, -0.022);
+        finger.rotation.z = (i - 1) * 0.12;
+        hand.add(finger);
+      }
+      const thumb = new THREE.Mesh(new THREE.CapsuleGeometry(0.0048, 0.014, 2, 5), mat(look.skin));
+      thumb.position.set(0.025, -0.002, -0.008);
+      thumb.rotation.z = -0.85;
+      hand.add(thumb);
+    }
     upper.add(fore);
     return { upper, upperMesh, fore, foreMesh, hand };
   }
