@@ -23,7 +23,7 @@ import type { Look } from './looks';
 /** How much narrower the sculpted head is than the old round one (for the hair and cap made to fit it). */
 const NARROW = HEAD_W / 0.094;
 
-export function dressHead(joint: THREE.Object3D, eyes: THREE.Object3D[], look: Look, kit: MaterialKit): THREE.Group {
+export function dressHead(joint: THREE.Bone, eyes: THREE.Object3D[], look: Look, kit: MaterialKit, tail: THREE.Bone | null = null): THREE.Group {
   // Built at heights on the standing body: an inner group cancels the joint's offset.
   const abs = new THREE.Group();
   abs.position.copy(HEAD_PIVOT).negate();
@@ -126,6 +126,7 @@ export function dressHead(joint: THREE.Object3D, eyes: THREE.Object3D[], look: L
     kit,
     look.hair,
     f.temples,
+    { head: joint, tail },
   );
   if (look.glasses !== undefined) {
     const c = look.glasses;

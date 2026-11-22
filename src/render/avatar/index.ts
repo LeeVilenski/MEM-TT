@@ -5,6 +5,7 @@ import { MaterialKit, dressBody } from './body';
 import { LOOKS, type Look } from './looks';
 import { AvatarRig, type PoseInput, type Reaction } from './rig';
 import { skinize } from './skin';
+import { PONYTAIL_TIE } from './hair';
 
 /**
  * A player character: a rig (rig.ts: the joints and the procedural animation that poses
@@ -37,7 +38,12 @@ export class Avatar {
       fabric = base.fabric[(((variant ?? Math.floor(Math.random() * n)) % n) + n) % n];
     } else fabric = base.fabric;
     const look: Look = { ...base, fabric, shirt: fabric?.base ?? base.shirt };
-    this.rig = new AvatarRig({ build: look.build ?? 1, seated: look.wheelchair !== undefined, batHand: STYLES[style].leftHanded ? -1 : 1 });
+    this.rig = new AvatarRig({
+      build: look.build ?? 1,
+      seated: look.wheelchair !== undefined,
+      batHand: STYLES[style].leftHanded ? -1 : 1,
+      ponytail: look.hairStyle?.ponytail ? PONYTAIL_TIE : undefined,
+    });
     this.group = this.rig.group;
     const kit = new MaterialKit(
       {

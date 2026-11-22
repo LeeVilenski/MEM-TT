@@ -2,6 +2,10 @@ import * as THREE from 'three';
 import type { MaterialKit } from './body';
 import { HEAD_W, shell, type Layout } from './face';
 import { tube, type Ring } from './shapes';
+import { blend } from './skin';
+
+/** Where a ponytail is tied (the head's own frame, m): rig.ts hangs its swinging bone here. */
+export const PONYTAIL_TIE = new THREE.Vector3(0, -0.01, 0.11);
 
 /**
  * Hair, in the head's own frame (the middle of the head at the origin, the face toward −z):
@@ -93,6 +97,7 @@ export function dressHair(
   kit: MaterialKit,
   color: number,
   temples?: number,
+  bones?: { head: THREE.Bone; tail: THREE.Bone | null },
 ) {
   const thick = (p: THREE.Vector3) => {
     let t = style.thickness + (style.top ?? 0) * smooth(0.02, 0.09, p.y);
@@ -155,8 +160,8 @@ export function dressHair(
   }
   if (style.ponytail) {
     // Gathered at the back of the head, a tie, the tail hanging down and back.
-    const tieY = -0.01;
-    const back = 0.104;
+    const tieY = PONYTAIL_TIE.y;
+    const back = PONYTAIL_TIE.z - 0.006;
     const tie = add(new THREE.TorusGeometry(0.016, 0.006, 8, 18), kit.mat(style.ponytail.tie));
     tie.position.set(0, tieY, back + 0.006);
     const rings: Ring[] = [];
@@ -169,7 +174,18 @@ export function dressHair(
         cz: back + 0.012 + 0.032 * Math.sin(t * Math.PI * 0.8),
       });
     }
-    add(tube(rings, { segments: 14, capStart: 0.01, capEnd: 0.012 }), solid);
+    const tail = add(tube(rings, { segments: 14, capStart: 0.01, capEnd: 0.012 }), solid);
+    // It swings: going from the head at the tie to the ponytail's bone along its length.
+    if (bones?.tail) {
+      const { head, tail: bone } = bones;
+      blend(tail, (q) => {
+        const t = Math.min(1, Math.max(0, (tieY - q.y) / 0.06));
+        return [
+          [head, 1 - t],
+          [bone, t],
+        ];
+      });
+    }
   }
 }
 

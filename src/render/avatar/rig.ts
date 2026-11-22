@@ -6,6 +6,7 @@ import {
   EYE,
   FORE,
   HEAD_PIVOT,
+  HEAD_Y,
   HIP,
   HIP_X,
   REACT_TIME,
@@ -111,6 +112,28 @@ export interface RigOptions {
   seated: boolean;
   /** +1 right-handed (bat at local +x), −1 left. */
   batHand: 1 | -1;
+  /** A ponytail tied here (head-centre frame, m): it gets a bone that swings. */
+  ponytail?: THREE.Vector3;
+}
+
+/** Ready stance: half the distance between the ankles (m), and the bat-side foot this far back. */
+const STANCE_X = 0.19;
+const STANCE_BACK = 0.07;
+/** A foot steps once it's this far from where it should be (m). */
+const STEP_AT = 0.11;
+/** Ankle height above the floor when standing (m). */
+const ANKLE_Y = HIP - THIGH - SHIN;
+/** Toes turned out (rad). */
+const TOE_OUT = 0.28;
+
+/** One foot's footwork: where it's planted (world), and a step in progress. */
+interface FootState {
+  plant: THREE.Vector3;
+  from: THREE.Vector3;
+  to: THREE.Vector3;
+  /** 0..1 through a step, or −1 standing. */
+  t: number;
+  dur: number;
 }
 
 const arm = (): ArmJoints => {
@@ -141,6 +164,8 @@ export class AvatarRig {
   readonly free = arm();
   /** Hips and waistband: follows the legs' bend and hop. */
   readonly pelvis = new THREE.Bone();
+  /** A ponytail's root (if any): swings with the head's movement. */
+  readonly ponytail: THREE.Bone | null = null;
   /** Chair, legs and hips: turns (yaws) as she wheels about, under the upper body. */
   readonly chair = new THREE.Group();
   /** Rear wheels, left then right: spin group (rolls) and camber group (the push rim's frame). */
@@ -149,6 +174,8 @@ export class AvatarRig {
   /** Front casters: swivel pivot (trails the travel), wheel spin and its local x. */
   readonly casters: { pivot: THREE.Group; spin: THREE.Group; x: number; roll: number }[] = [];
   readonly shoulderX: number;
+  /** Hip joints: out from the middle (m). */
+  private hipX: number;
   /** Seated in a wheelchair (lower body, legs on the footplate, wheels that roll). */
   readonly seated: boolean;
   /** Bat hand: +1 right (local +x), −1 left. */
@@ -165,11 +192,19 @@ export class AvatarRig {
     this.seated = o.seated;
     this.batHand = o.batHand;
     this.shoulderX = shoulderOffset(o.build);
+    this.hipX = HIP_X * o.build;
     this.upper.position.y = HIP;
     this.upperAbs.position.y = -HIP;
     this.upper.add(this.upperAbs);
     this.group.add(this.upper);
     this.head.position.copy(HEAD_PIVOT);
+    if (o.ponytail) {
+      const tail = new THREE.Bone();
+      tail.name = 'ponytail';
+      tail.position.set(o.ponytail.x, HEAD_Y + o.ponytail.y - HEAD_PIVOT.y, o.ponytail.z);
+      this.head.add(tail);
+      this.ponytail = tail;
+    }
     this.eyes.forEach((eye, i) => {
       eye.position.set((i === 0 ? -1 : 1) * EYE.x, EYE.y, EYE.z).sub(HEAD_PIVOT);
       this.head.add(eye);
@@ -272,6 +307,7 @@ export class AvatarRig {
     this.animate(dt, now, body, local, side);
     this.group.updateMatrixWorld(true);
     this.look(dt, input.gaze ?? null);
+    this.swingTail(dt);
     // The bat in the character's frame, and the wrist that holds it there.
     const groupQ = this.group.getWorldQuaternion(new THREE.Quaternion());
     const bat = input.grip ? groupQ.clone().invert().multiply(input.grip) : BAT_AHEAD.clone();
@@ -411,7 +447,6 @@ export class AvatarRig {
   private lastTime: number | null = null;
   private lastBody: { x: number; z: number } | null = null;
   private lastHand: THREE.Vector3 | null = null;
-  private walkPhase = 0;
   private stride = 0;
   private twist = 0;
   private lean = 0;
@@ -426,7 +461,7 @@ export class AvatarRig {
    * Critically damped spring toward `target` (natural frequency `w`, rad/s): eases in
    * and out instead of snapping off at full speed the moment the target moves.
    */
-  private spring(key: 'twist' | 'lean' | 'sideLean' | 'reachLean' | 'chairYaw' | 'headYaw' | 'headPitch', target: number, w: number, dt: number) {
+  private spring(key: 'twist' | 'lean' | 'sideLean' | 'reachLean' | 'chairYaw' | 'headYaw' | 'headPitch' | 'hipYaw', target: number, w: number, dt: number) {
     const x = this[key];
     let v = this.springVel[key] ?? 0;
     if (dt <= 0) return x;
@@ -454,14 +489,19 @@ export class AvatarRig {
     const hipY = seated ? HIP - SEAT_DROP : HIP;
     this.group.position.set(0, 0, 0);
     this.group.rotation.set(0, 0, 0);
-    this.upper.position.y = hipY;
+    this.upper.position.set(0, hipY, 0);
     this.upper.rotation.set(0, 0, 0);
     this.head.rotation.set(0, 0, 0);
+    this.pelvis.rotation.set(0, 0, 0);
+    this.ponytail?.rotation.set(0, 0, 0);
+    this.feet = null;
+    this.lastFootBody = null;
+    this.tailLast = null;
     for (const eye of this.eyes) eye.rotation.set(0, 0, 0);
-    this.pelvis.position.y = hipY - HIP;
+    this.pelvis.position.set(0, hipY - HIP, 0);
     this.chair.rotation.y = 0;
     this.legs.forEach((leg, i) => {
-      leg.hip.position.y = hipY;
+      leg.hip.position.set((i === 0 ? -1 : 1) * this.hipX, hipY, 0);
       if (seated) {
         // As in animate(): thighs along the cushion, shins down to the footplate.
         leg.hip.rotation.set(Math.PI / 2 - 0.04, 0, (i === 0 ? -1 : 1) * 0.05);
@@ -580,9 +620,8 @@ export class AvatarRig {
       this.wheelAbout(dt, body);
       speed = 0;
     }
+    // How much the body is on the move (calms the ready bounce while stepping).
     this.stride = approach(this.stride, clamp(speed * 0.35, 0, 0.32), 12, dt);
-    this.walkPhase += dt * (4 + speed * 9);
-    const step = Math.sin(this.walkPhase) * this.stride;
 
     // Swing speed of the hand across the body (follow-through twists the torso).
     if (this.lastHand && dt > 0) this.swingVel = approach(this.swingVel, (hand.x - this.lastHand.x) / dt, 20, dt);
@@ -605,8 +644,9 @@ export class AvatarRig {
 
     // Ready stance: knees bent, a light bounce on the toes.
     const bounce = Math.sin(time * Math.PI * 2 * 1.4) * (1 - this.stride * 2);
-    let bend = 0.24 + this.lean * 0.35 + bounce * 0.03;
-    let lean = this.lean;
+    let bend = 0.4 + this.lean * 0.3 + bounce * 0.03;
+    // Breathing: a slow rise and fall of the chest.
+    let lean = this.lean + 0.012 * Math.sin(time * Math.PI * 2 * 0.27);
     // Seated, the shoulders turn part of the way with the chair under them.
     let twist = this.twist + this.chairYaw * 0.5;
     let freeZ = 0.2 + this.stride * 0.6;
@@ -645,25 +685,41 @@ export class AvatarRig {
     }
     // Bent knees lower the hips: thigh and shin each lose height to the bend.
     const drop = this.seated ? SEAT_DROP : THIGH * (1 - Math.cos(bend)) + SHIN * (1 - Math.cos(bend));
-    this.upper.position.y = HIP - drop + jump;
+    const hipY = HIP - drop + jump;
     // Seated: a little lean into each push on the rim.
     if (this.seated && !r) lean += this.push.w * (this.push.rec < 0 ? 0.1 : 0.03);
-    this.upper.rotation.set(-(lean + this.reachLean), twist, this.sideLean, 'YXZ');
-    this.legs.forEach((leg, i) => {
-      const s = i === 0 ? -1 : 1;
-      leg.hip.position.y = HIP - drop + jump;
-      if (this.seated) {
+    if (this.seated) {
+      this.upper.position.set(0, hipY, 0);
+      this.upper.rotation.set(-(lean + this.reachLean), twist, this.sideLean, 'YXZ');
+      this.legs.forEach((leg, i) => {
+        const s = i === 0 ? -1 : 1;
+        leg.hip.position.y = hipY;
         // Thighs forward along the cushion, shins down to the footplate.
         leg.hip.rotation.set(Math.PI / 2 - 0.04, 0, s * 0.05);
         leg.knee.rotation.x = -Math.PI / 2 + 0.12;
         leg.foot.rotation.x = -0.05;
-        return;
-      }
-      leg.hip.rotation.set(bend + (i === 0 ? step : -step) * 0.5, 0, s * (Math.abs(step) * 0.9 + 0.05));
-      leg.knee.rotation.x = -2 * bend;
-      leg.foot.rotation.x = bend;
-    });
-    this.pelvis.position.y = -drop + jump;
+      });
+      this.pelvis.position.set(0, -drop + jump, 0);
+    } else {
+      // The hips turn part of the way into the stroke, a little ahead of the shoulders.
+      const hipYaw = this.spring('hipYaw', this.twist * 0.45, 15, dt);
+      this.hipYaw = hipYaw;
+      // Feet: planted, stepping when they must; the hips carry the weight over them.
+      const fw = this.footwork(dt, hand, side, jump);
+      const shift = fw.shift;
+      this.upper.position.set(shift.x, hipY, shift.z);
+      this.upper.rotation.set(-(lean + this.reachLean), twist, this.sideLean, 'YXZ');
+      this.pelvis.position.set(shift.x, -drop + jump, shift.z);
+      this.pelvis.rotation.set(0, hipYaw, 0);
+      const c = Math.cos(hipYaw);
+      const sn = Math.sin(hipYaw);
+      this.legs.forEach((leg, i) => {
+        const s = i === 0 ? -1 : 1;
+        const x = s * this.hipX;
+        leg.hip.position.set(shift.x + x * c, hipY, shift.z - x * sn);
+        this.solveLeg(leg, fw.ankles[i], s, fw.lift[i]);
+      });
+    }
     // Free arm on the side away from the paddle.
     const fs = -side;
     this.free.upper.position.set(fs * this.shoulderX, SHOULDER_Y, 0);
@@ -676,6 +732,155 @@ export class AvatarRig {
     }
     this.free.upper.rotation.set(freeX, 0, fs * freeZ, 'XYZ');
     this.free.fore.rotation.set(elbow, 0, 0);
+  }
+
+  private hipYaw = 0;
+  private feet: FootState[] | null = null;
+  /** The body's velocity over the floor (world, m/s), smoothed. */
+  private bodyVel = new THREE.Vector3();
+  private lastFootBody: THREE.Vector3 | null = null;
+
+  /**
+   * Footwork. Each foot has a place it should be (the ready stance, wide and low, the
+   * bat-side foot back; further out for a wide ball, in for a short one), and stays
+   * planted on the floor until it's too far from it: then it steps there, leading the
+   * movement, one foot at a time (both at once only for a big move). The hips sit over the
+   * middle of the feet, swaying over the standing foot during a step.
+   * Returns the ankles (character's frame), how far through a step each foot is (0 if
+   * planted), and the hips' shift.
+   */
+  private footwork(dt: number, hand: THREE.Vector3, side: number, jump: number) {
+    const g = this.group;
+    const here = g.position.clone();
+    if (this.lastFootBody && dt > 0) {
+      const v = here.clone().sub(this.lastFootBody).divideScalar(dt);
+      this.bodyVel.lerp(v, 1 - Math.exp(-12 * dt));
+    }
+    const teleported = !this.lastFootBody || here.distanceTo(this.lastFootBody) > 0.8;
+    this.lastFootBody = here;
+    const speed = this.bodyVel.length();
+    const homes = [-1, 1].map((s) => {
+      const home = new THREE.Vector3(s * STANCE_X, 0, s === side ? STANCE_BACK : -0.02);
+      // A wide ball: the foot on that side steps out toward it.
+      const out = hand.x * s - 0.42;
+      if (out > 0) home.x += s * out * 0.75;
+      // A short, low ball: the bat-side foot steps in under it.
+      if (s === side && hand.z < -0.45 && hand.y < 0.75) home.z += (hand.z + 0.45) * 0.9;
+      const w = g.localToWorld(home);
+      w.y = 0;
+      return w.addScaledVector(this.bodyVel, 0.12);
+    });
+    if (teleported || !this.feet) {
+      this.feet = homes.map((h) => ({ plant: h.clone(), from: h.clone(), to: h.clone(), t: -1, dur: 0.2 }));
+    }
+    const feet = this.feet;
+    for (const f of feet) {
+      if (f.t < 0) continue;
+      f.t += dt / f.dur;
+      if (f.t >= 1) {
+        f.plant.copy(f.to);
+        f.t = -1;
+      }
+    }
+    // The foot furthest from where it should be steps, if it's far enough.
+    const far = feet.map((f, i) => (f.t < 0 ? f.plant.distanceTo(homes[i]) : 0));
+    const j = far[0] > far[1] ? 0 : 1;
+    const other = feet[1 - j];
+    if (far[j] > STEP_AT && (other.t < 0 || other.t > 0.85 || far[j] > 0.45)) {
+      const f = feet[j];
+      f.from.copy(f.plant);
+      f.to.copy(homes[j]).addScaledVector(this.bodyVel, 0.08);
+      f.dur = THREE.MathUtils.clamp(0.2 - speed * 0.05, 0.1, 0.2); // quicker steps when moving quickly
+      f.t = 0;
+    }
+    const ankles: THREE.Vector3[] = [];
+    const lift: number[] = [];
+    feet.forEach((f) => {
+      const k = f.t < 0 ? 1 : f.t * f.t * (3 - 2 * f.t);
+      const p = f.t < 0 ? f.plant.clone() : f.from.clone().lerp(f.to, k);
+      const up = f.t < 0 ? 0 : Math.sin(Math.PI * f.t) * Math.min(0.07, 0.025 + f.from.distanceTo(f.to) * 0.25);
+      const a = g.worldToLocal(p);
+      a.y = ANKLE_Y + up + jump;
+      ankles.push(a);
+      lift.push(f.t < 0 ? 0 : f.t);
+    });
+    // Hips over the middle of the feet, swaying over the standing one during a step.
+    const mid = ankles[0].clone().add(ankles[1]).multiplyScalar(0.5);
+    let sway = 0;
+    feet.forEach((f, i) => {
+      if (f.t >= 0) sway += (ankles[1 - i].x - mid.x) * 0.3 * Math.sin(Math.PI * f.t);
+    });
+    const shift = new THREE.Vector3(THREE.MathUtils.clamp(mid.x * 0.6 + sway, -0.15, 0.15), 0, THREE.MathUtils.clamp(mid.z * 0.4, -0.12, 0.12));
+    return { ankles, lift, shift };
+  }
+
+  /**
+   * Two-bone leg: the hip turns the thigh so the knee (pointing forward and a little out)
+   * and the shin reach the ankle; the foot stays flat on the floor, toes turned out, the
+   * toe dipping as it lifts in a step. `lift`: how far through a step (0 planted).
+   */
+  private solveLeg(leg: LegJoints, ankle: THREE.Vector3, s: number, lift: number) {
+    const hip = leg.hip.position;
+    const d = ankle.clone().sub(hip);
+    const dist = clamp(d.length(), 0.05, THIGH + SHIN - 1e-4);
+    const dir = d.normalize();
+    const pole = new THREE.Vector3(s * 0.25, 0, -1);
+    pole.addScaledVector(dir, -pole.dot(dir)).normalize();
+    const cosA = clamp((THIGH * THIGH + dist * dist - SHIN * SHIN) / (2 * THIGH * dist), -1, 1);
+    const sinA = Math.sqrt(1 - cosA * cosA);
+    const knee = hip.clone().addScaledVector(dir, cosA * THIGH).addScaledVector(pole, sinA * THIGH);
+    const reach = hip.clone().addScaledVector(dir, dist);
+    const X = new THREE.Vector3().crossVectors(dir, pole).normalize();
+    const Y = hip.clone().sub(knee).normalize();
+    const Z = new THREE.Vector3().crossVectors(X, Y);
+    leg.hip.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(X, Y, Z));
+    const thigh = knee.clone().sub(hip).normalize();
+    const shin = reach.sub(knee).normalize();
+    leg.knee.rotation.set(-Math.acos(clamp(thigh.dot(shin), -1, 1)), 0, 0);
+    // The foot: flat, toes out, in the character's frame; undo the leg's turn above it.
+    const want = new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.3 * Math.sin(Math.PI * lift), -s * TOE_OUT, 0, 'YXZ'));
+    const above = leg.hip.quaternion.clone().multiply(leg.knee.quaternion);
+    leg.foot.quaternion.copy(above.invert().multiply(want));
+  }
+
+  /** The ponytail's swing: angles (about x, then z) and their speeds. */
+  private tail = { x: 0, z: 0, vx: 0, vz: 0 };
+  private tailLast: THREE.Vector3 | null = null;
+  private tailVel = new THREE.Vector3();
+
+  /**
+   * The ponytail hangs down whichever way the head is turned, and swings behind the head's
+   * movement: a lightly damped spring toward hanging straight, pushed by the head's
+   * acceleration.
+   */
+  private swingTail(dt: number) {
+    const tail = this.ponytail;
+    if (!tail || dt <= 0) return;
+    this.group.updateMatrixWorld(true);
+    const at = tail.getWorldPosition(new THREE.Vector3());
+    const vel = this.tailLast ? at.clone().sub(this.tailLast).divideScalar(dt) : new THREE.Vector3();
+    const acc = vel.clone().sub(this.tailVel).divideScalar(dt);
+    this.tailLast = at;
+    this.tailVel.copy(vel);
+    // Down, and the head's acceleration, in the head's frame.
+    const inv = this.head.getWorldQuaternion(new THREE.Quaternion()).invert();
+    const down = new THREE.Vector3(0, -1, 0).applyQuaternion(inv);
+    const a = acc.clamp(new THREE.Vector3(-40, -40, -40), new THREE.Vector3(40, 40, 40)).applyQuaternion(inv);
+    // Angles that would point the tail along `down`, then lag behind the acceleration.
+    const tx = clamp(Math.atan2(-down.z, -down.y) + a.z * 0.012, -1.1, 1.1);
+    const tz = clamp(Math.atan2(down.x, -down.y) - a.x * 0.012, -1.1, 1.1);
+    const w = 9;
+    const zeta = 0.35;
+    const n = Math.ceil(dt / (1 / 120));
+    const h = dt / n;
+    const t = this.tail;
+    for (let i = 0; i < n; i++) {
+      t.vx += (w * w * (tx - t.x) - 2 * zeta * w * t.vx) * h;
+      t.vz += (w * w * (tz - t.z) - 2 * zeta * w * t.vz) * h;
+      t.x += t.vx * h;
+      t.z += t.vz * h;
+    }
+    tail.rotation.set(t.x, 0, t.z, 'XYZ');
   }
 
   /**

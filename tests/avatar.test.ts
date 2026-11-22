@@ -61,6 +61,85 @@ describe('avatar rig', () => {
     }
   });
 
+  it('feet stay planted while the body sways, on the floor, about shoulder-width apart', () => {
+    const a = new Avatar('allround', 1, 0);
+    const hand = new THREE.Vector3();
+    const ankles = () => a.rig.legs.map((l) => l.foot.getWorldPosition(new THREE.Vector3()));
+    // Settle, then sway the body a few centimetres for a second.
+    let first: THREE.Vector3[] | null = null;
+    for (let i = 0; i < 180; i++) {
+      const x = i < 60 ? 0 : 0.03 * Math.sin(i * 0.2);
+      hand.set(x + 0.38, 1.0, 0.4 - 0.38);
+      a.update({ x, z: 0.4 }, hand, true, { now: 3 + i * DT });
+      a.group.updateMatrixWorld(true);
+      if (i === 60) first = ankles();
+      if (i > 60) ankles().forEach((p, k) => expect(p.distanceTo(first![k]), `foot ${k} slid`).toBeLessThan(0.002));
+    }
+    const [l, r] = ankles();
+    expect(Math.abs(l.y - r.y)).toBeLessThan(1e-3);
+    expect(l.y).toBeCloseTo(0.04 * a.group.scale.y, 2);
+    expect(r.x - l.x).toBeGreaterThan(0.3);
+    expect(r.x - l.x).toBeLessThan(0.5);
+  });
+
+  it('steps rather than slides: moving across, a foot is nearly always planted, and they catch up', () => {
+    const a = new Avatar('looper', 1, 0);
+    const hand = new THREE.Vector3();
+    let prev: THREE.Vector3[] | null = null;
+    let planted = 0;
+    let frames = 0;
+    for (let i = 0; i < 150; i++) {
+      // Stand, then move 1.2 m to the right at 1.5 m/s, then stand again.
+      const t = i * DT;
+      const x = Math.min(1.2, Math.max(0, (t - 0.5) * 1.5));
+      hand.set(x + 0.38, 1.0, 0.4 - 0.38);
+      a.update({ x, z: 0.4 }, hand, true, { now: 3 + t });
+      a.group.updateMatrixWorld(true);
+      const now = a.rig.legs.map((l) => l.foot.getWorldPosition(new THREE.Vector3()));
+      if (prev && t > 0.5 && t < 1.3) {
+        frames++;
+        if (now.some((p, k) => p.distanceTo(prev![k]) < 1e-4)) planted++;
+      }
+      prev = now;
+    }
+    expect(planted / frames).toBeGreaterThan(0.6);
+    // Settled at the new place: feet either side of the body.
+    const [l, r] = prev!;
+    expect(l.x).toBeLessThan(1.2);
+    expect(r.x).toBeGreaterThan(1.2);
+    expect(Math.abs((l.x + r.x) / 2 - 1.2)).toBeLessThan(0.12);
+  });
+
+  it("a ponytail hangs down when still and swings when she moves", () => {
+    const a = new Avatar('wheelchair', 1, 0);
+    const tail = a.rig.ponytail!;
+    expect(tail).toBeTruthy();
+    const hand = new THREE.Vector3();
+    const hanging = () => {
+      a.group.updateMatrixWorld(true);
+      return new THREE.Vector3(0, -1, 0).applyQuaternion(tail.getWorldQuaternion(new THREE.Quaternion()));
+    };
+    // Still, looking down at a low ball: the tail turns in the head to keep hanging down.
+    for (let i = 0; i < 120; i++) {
+      hand.set(0.38, 0.9, 0);
+      a.update({ x: 0, z: 0.4 }, hand, true, { now: 3 + i * DT, gaze: new THREE.Vector3(0.2, 0.3, -0.2) });
+    }
+    expect(hanging().y).toBeLessThan(-0.95);
+    // Wheeling off sideways and stopping: it swings, then settles.
+    let most = 0;
+    for (let i = 0; i < 90; i++) {
+      const x = Math.min(0.6, i * DT * 2.5);
+      hand.set(x + 0.38, 0.9, 0.4);
+      a.update({ x, z: 0.4 }, hand, true, { now: 6 + i * DT });
+      // How far from straight down it swings (rad).
+      most = Math.max(most, Math.acos(Math.min(1, -hanging().y)));
+    }
+    expect(most).toBeGreaterThan(0.1);
+    // Still again: back to hanging down.
+    for (let i = 0; i < 150; i++) a.update({ x: 0.6, z: 0.4 }, hand, true, { now: 8 + i * DT });
+    expect(hanging().y).toBeLessThan(-0.95);
+  });
+
   it('poses the same way every time with the same clock', () => {
     const joints = (a: Avatar) => {
       const r = a.rig;

@@ -76,11 +76,19 @@ No visible change. The refactor was checked against the old code: every mesh in 
 
 Each character drops from 50–100 pieces to about 5–8.
 
-## Phase 3: movement
+## Phase 3: movement ✅
 
-Feet that plant and weight that shifts over the front foot; real footwork steps and crossovers;
-strokes led by the hips and shoulders, then elbow, then wrist; a swinging ponytail, a moving shirt
-hem, breathing between points.
+- **Footwork:** each foot has a place it should be (a wide, low ready stance, the bat-side foot
+  back; out toward a wide ball; in under a short one) and stays planted until it's too far
+  from it, then steps there, leading the movement, one foot at a time (quicker steps when
+  moving quickly; both at once only for a big move). No more sliding feet.
+- **Legs** reach the feet with two-bone IK, knees forward and a little out, feet flat with the
+  toes turned out, the toe dipping as a foot lifts.
+- **Hips** sit over the middle of the feet, swaying over the standing foot during a step, and
+  turn into the stroke ahead of the shoulders (the waist's skin shares the twist).
+- **Breathing:** a slow rise and fall of the chest.
+- **Bryony's ponytail** swings on a spring behind her head's movement and keeps hanging down
+  whichever way she looks.
 
 ## Phase 4: rendering
 

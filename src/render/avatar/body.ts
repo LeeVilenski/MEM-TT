@@ -400,7 +400,7 @@ export function dressBody(rig: AvatarRig, look: Look, fabric: Fabric | undefined
       [rig.head, w],
     ];
   });
-  const headAbs = dressHead(rig.head, rig.eyes, look, kit);
+  const headAbs = dressHead(rig.head, rig.eyes, look, kit, rig.ponytail);
 
   // ---- arms
   // The racket arm runs along +y from the shoulder; the free arm hangs along −y.
