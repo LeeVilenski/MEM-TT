@@ -29,12 +29,20 @@ function pose(
 const worldPos = (o: THREE.Object3D) => o.getWorldPosition(new THREE.Vector3());
 
 describe('avatar rig', () => {
-  it('builds every character without a page (no painted textures)', () => {
+  /** The character's skinned meshes. */
+  const skins = (a: Avatar) => {
+    const out: THREE.SkinnedMesh[] = [];
+    a.group.traverse((o) => (o as THREE.SkinnedMesh).isSkinnedMesh && out.push(o as THREE.SkinnedMesh));
+    return out;
+  };
+
+  it('builds every character without a page (no painted textures), as a few skinned meshes on one skeleton', () => {
     for (const s of AVATAR_STYLES) {
       const a = new Avatar(s, 1, 0);
-      let meshes = 0;
-      a.group.traverse((o) => (meshes += (o as THREE.Mesh).isMesh ? 1 : 0));
-      expect(meshes, s).toBeGreaterThan(30);
+      const sk = skins(a);
+      expect(sk.length, s).toBeGreaterThan(4);
+      expect(sk.length, s).toBeLessThan(25);
+      expect(new Set(sk.map((m) => m.skeleton)).size, s).toBe(1);
       expect(a.rig.seated, s).toBe(s === 'wheelchair');
       a.dispose();
     }
@@ -120,21 +128,23 @@ describe('avatar rig', () => {
   it('hangs everything on the head from the head joint, so a head can be turned or swapped whole', () => {
     for (const s of AVATAR_STYLES) {
       const a = new Avatar(s, 1, 0);
-      // The standing pose before any animation: everything above the neck belongs to the head.
-      a.group.updateMatrixWorld(true);
-      const scale = a.group.scale.y;
       const onHead = new Set<THREE.Object3D>();
       a.rig.head.traverse((o) => onHead.add(o));
-      const box = new THREE.Box3();
-      let headMeshes = 0;
-      a.group.traverse((o) => {
-        if (!(o as THREE.Mesh).isMesh) return;
-        const y = box.setFromObject(o).getCenter(new THREE.Vector3()).y / scale;
-        if (onHead.has(o)) headMeshes++;
-        else expect(y, `${s}: a mesh at ${y.toFixed(3)} m is not on the head joint`).toBeLessThan(HEAD_PIVOT.y + 0.01);
-      });
-      expect(headMeshes, s).toBeGreaterThan(10);
-      expect(HEAD_PIVOT.y).toBeGreaterThan(SHOULDER_Y);
+      let headPoints = 0;
+      // The skin is built standing at height scale 1: everything above the neck must go with the head.
+      for (const m of skins(a)) {
+        const pos = m.geometry.getAttribute('position');
+        const idx = m.geometry.getAttribute('skinIndex');
+        const wt = m.geometry.getAttribute('skinWeight');
+        for (let i = 0; i < pos.count; i++) {
+          if (pos.getY(i) < HEAD_PIVOT.y + 0.02) continue;
+          let w = 0;
+          for (let k = 0; k < 4; k++) if (onHead.has(m.skeleton.bones[idx.getComponent(i, k)])) w += wt.getComponent(i, k);
+          expect(w, `${s}: a point at ${pos.getY(i).toFixed(3)} m is not on the head`).toBeGreaterThan(0.99);
+          headPoints++;
+        }
+      }
+      expect(headPoints, s).toBeGreaterThan(1000);
     }
   });
 
@@ -195,17 +205,21 @@ describe('avatar rig', () => {
 
   it('turning the head joint turns the face with it', () => {
     const a = new Avatar('patient', 1, 0);
-    a.group.updateMatrixWorld(true);
-    const before: THREE.Vector3[] = [];
-    a.rig.head.traverse((o) => (o as THREE.Mesh).isMesh && before.push(worldPos(o)));
+    const faceUp = (m: THREE.SkinnedMesh) => {
+      a.group.updateMatrixWorld(true);
+      m.skeleton.update();
+      const out: THREE.Vector3[] = [];
+      const pos = m.geometry.getAttribute('position');
+      for (let i = 0; i < pos.count; i += 7) if (pos.getY(i) > HEAD_PIVOT.y + 0.03) out.push(m.getVertexPosition(i, new THREE.Vector3()));
+      return out;
+    };
+    const before = skins(a).flatMap(faceUp);
     a.rig.head.rotation.y = 0.6;
-    a.group.updateMatrixWorld(true);
-    let moved = 0;
-    let i = 0;
-    a.rig.head.traverse((o) => {
-      if ((o as THREE.Mesh).isMesh && worldPos(o).distanceTo(before[i++]) > 0.005) moved++;
-    });
-    // Nearly everything on the head swings round (only pieces on the turning axis stay put).
+    const after = skins(a).flatMap(faceUp);
+    expect(before.length).toBeGreaterThan(100);
+    const moved = before.filter((p, i) => p.distanceTo(after[i]) > 0.005).length;
+    // Nearly everything on the head swings round (only points near the turning axis stay put).
     expect(moved / before.length).toBeGreaterThan(0.8);
   });
+
 });

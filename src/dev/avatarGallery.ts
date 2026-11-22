@@ -205,25 +205,10 @@ function posed(style: StyleId, pose: Pose, scene: THREE.Scene) {
   return avatar;
 }
 
-/**
- * Where the head is: the middle of everything in the top 28 cm of the character
- * (head, hair, cap, glasses), whatever the model is made of.
- */
+/** The middle of the face, wherever the pose put the head: a little above the head joint (top of the neck), in front. */
 function headCentre(avatar: Avatar) {
   avatar.group.updateMatrixWorld(true);
-  const top = new THREE.Box3().setFromObject(avatar.group).max.y;
-  const near = new THREE.Box3();
-  const box = new THREE.Box3();
-  avatar.group.traverse((o) => {
-    const m = o as THREE.Mesh;
-    if (!m.isMesh) return;
-    box.setFromObject(m);
-    if (box.getCenter(new THREE.Vector3()).y > top - 0.28) near.union(box);
-  });
-  const c = near.getCenter(new THREE.Vector3());
-  // The face sits a little below the middle of head plus hair or cap.
-  c.y = top - 0.13;
-  return c;
+  return avatar.rig.head.localToWorld(new THREE.Vector3(0, 0.07, -0.03));
 }
 
 function characterCells(style: StyleId, renderer: THREE.WebGLRenderer, env: THREE.Texture): Cell[] {

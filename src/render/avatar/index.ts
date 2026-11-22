@@ -4,6 +4,7 @@ import type { Fabric } from '../fabric';
 import { MaterialKit, dressBody } from './body';
 import { LOOKS, type Look } from './looks';
 import { AvatarRig, type PoseInput, type Reaction } from './rig';
+import { skinize } from './skin';
 
 /**
  * A player character: a rig (rig.ts: the joints and the procedural animation that poses
@@ -22,7 +23,7 @@ export class Avatar {
   /** The joints and their animation (for tools and tests; the game only calls update). */
   readonly rig: AvatarRig;
   private materials: THREE.MeshStandardMaterial[];
-  private body: { fit(): void };
+  private skeleton: THREE.Skeleton;
   private firstPerson = false;
 
   /**
@@ -46,11 +47,14 @@ export class Avatar {
       },
       opacity,
     );
-    this.body = dressBody(this.rig, look, fabric, kit);
-    this.materials = kit.list;
+    dressBody(this.rig, look, fabric, kit);
     this.group.traverse((o) => {
       o.castShadow = kit.solid;
     });
+    // The body becomes skinned meshes (one per material) on the rig's skeleton.
+    this.skeleton = skinize(this.rig, kit.solid).skeleton;
+    this.materials = kit.list;
+    this.rig.rest();
     this.group.scale.setScalar(look.height ?? 1);
   }
 
@@ -61,13 +65,11 @@ export class Avatar {
    */
   update(body: { x: number; z: number }, hand: THREE.Vector3, facingNegZ: boolean, input?: PoseInput) {
     this.rig.update(body, hand, facingNegZ, input);
-    this.body.fit();
   }
 
   /** Stand (or sit) still in the rest pose: arms a little out, head level (see AvatarRig.rest). */
   restPose() {
     this.rig.rest();
-    this.body.fit();
   }
 
   /** Play a short reaction to a point: a jump and fist pump, or a slump. */
@@ -95,5 +97,6 @@ export class Avatar {
   dispose() {
     this.group.traverse((o) => (o as THREE.Mesh).geometry?.dispose());
     this.materials.forEach((m) => m.dispose());
+    this.skeleton.dispose();
   }
 }

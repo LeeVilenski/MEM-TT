@@ -52,13 +52,16 @@ No visible change. The refactor was checked against the old code: every mesh in 
 
 ## Phase 2: one continuous body
 
-1. Turn the joints into a real skeleton (`THREE.Bone`s) and hang the current pieces on it. No
-   visible change.
-2. Build the body as one smooth mesh from shape tables, with the skin blending between bones at
-   each joint: elbows and knees bend with no balls showing. A forearm twist bone stops the wrist
-   pinching.
-3. Clothes as a second layer on the same skeleton; the shirt keeps its texture layout, so the
-   painted shirts carry over.
+1. ✅ The joints are a real skeleton (`THREE.Bone`s), with helper bones on each arm: two that
+   stretch along the arm for a ball out of reach, three that share the forearm's twist.
+2. ✅ Skinned body (`skin.ts`): the body is built as meshes on the bones, then baked into skinned
+   meshes, one per material (about 15 draw calls per character, from 50–100), bound standing.
+   Each leg is one tube from hip to ankle and each arm one tube from shoulder to wrist, the skin
+   shared between bones over the knee and elbow, so they bend in one piece; the forearm twists
+   along its length. The bottom of the shirt goes with the hips (it bends at the waist), the top
+   of the neck with the head.
+3. ✅ Clothes on the same skeleton: shorts hang from the waist and follow the thigh, trousers bend
+   with the leg, sleeves go with the shoulder; the shirt keeps its texture layout.
 4. A sculpted head (brow, cheekbones, nose bridge, jaw, chin) with the face painted on and 3D
    eyes. This is the point to switch to Blender heads instead, if preferred.
 5. Hair from layered strips with a strand texture.
