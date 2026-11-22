@@ -234,10 +234,14 @@ export function dressHead(joint: THREE.Group, eyes: THREE.Group[], look: Look, k
       p.c.fillStyle = g;
       p.c.fillRect(0, 0, p.w, p.h);
     }, 16, 64);
-    const m = tex && decal(tex);
+    // The strands over the greying: the colour from the gradient, the bumps from the hair material.
+    const m = tex && (decal(tex) as THREE.MeshStandardMaterial | null);
     if (m) {
-      (m as THREE.MeshStandardMaterial).transparent = false;
-      (m as THREE.MeshStandardMaterial).depthWrite = true;
+      m.transparent = !kit.solid;
+      m.depthWrite = kit.solid;
+      m.roughness = 0.62;
+      m.bumpMap = (kit.mat(look.hair) as THREE.MeshStandardMaterial).bumpMap;
+      m.bumpScale = 1.2;
       hair.material = m;
     }
   }

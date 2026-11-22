@@ -40,6 +40,19 @@ describe('avatar rig', () => {
     }
   });
 
+  it('a see-through character (a doubles partner) fades every part of it', () => {
+    for (const s of AVATAR_STYLES) {
+      const a = new Avatar(s, 0.35, 0);
+      a.setOpacity(0.2);
+      a.group.traverse((o) => {
+        const m = (o as THREE.Mesh).material as THREE.Material | undefined;
+        if (!m) return;
+        expect(m.transparent, `${s}: ${o.name || o.type}`).toBe(true);
+        expect(m.opacity, `${s}: ${o.name || o.type}`).toBeCloseTo(0.2, 5);
+      });
+    }
+  });
+
   it('poses the same way every time with the same clock', () => {
     const joints = (a: Avatar) => {
       const r = a.rig;

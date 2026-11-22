@@ -140,38 +140,123 @@ const NECK: Ring[] = [
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
 
+/** Which colours of a look are skin, hair and clothes (they get their own kinds of material). */
+export interface Palette {
+  skin: number;
+  hair: number[];
+  cloth: number[];
+}
+
+/**
+ * Hair strands: fine streaks running from the crown down (along the hair cap's v), as a
+ * grey bump map.
+ */
+function strands() {
+  return paint('hair:strands', (p) => {
+    let seed = 7;
+    const r = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    p.c.fillStyle = 'rgb(200,200,200)';
+    p.c.fillRect(0, 0, p.w, p.h);
+    for (let i = 0; i < 900; i++) {
+      const x = r() * p.w;
+      const y = r() * p.h;
+      const len = 30 + r() * 90;
+      const g = Math.round(140 + r() * 115);
+      p.c.strokeStyle = `rgba(${g},${g},${g},${0.5 + r() * 0.5})`;
+      p.c.lineWidth = 0.6 + r() * 1.4;
+      p.wrap(x, (wx) => {
+        p.c.beginPath();
+        p.c.moveTo(wx, y);
+        p.c.quadraticCurveTo(wx + (r() - 0.5) * 6, y + len / 2, wx + (r() - 0.5) * 8, y + len);
+        p.c.stroke();
+      });
+    }
+  }, 256, 256, true);
+}
+
 /**
  * The character's materials: plain colours shared by colour, painted fabrics and
  * see-through decals. All of them fade together for a see-through character.
+ *
+ * Skin and clothes get a sheen, a soft glow at grazing angles: on skin, warm and reddish
+ * (light scattering just under the surface); on cloth, the soft rim of a woven fabric.
+ * Hair gets fine strands. Everything else (eyes, teeth, glasses, the wheelchair) is plain.
  */
 export class MaterialKit {
   readonly list: THREE.MeshStandardMaterial[] = [];
   readonly solid: boolean;
   private cache = new Map<number, THREE.MeshStandardMaterial>();
+  private hair: Set<number>;
+  private cloth: Set<number>;
 
   constructor(
-    private skin: number,
+    private palette: Palette,
     private opacity: number,
   ) {
     this.solid = opacity >= 1;
+    this.hair = new Set(palette.hair);
+    this.cloth = new Set(palette.cloth);
   }
 
-  /** A plain colour (skin is a little glossier than cloth). */
+  /** Fading for a see-through character. */
+  private get fade() {
+    return { transparent: !this.solid, opacity: this.opacity, depthWrite: this.solid };
+  }
+
+  /** A colour, as skin, hair, cloth or plain by which of the look's colours it is. */
   mat = (c: number) => {
     let m = this.cache.get(c);
     if (!m) {
-      const skin = c === this.skin;
-      m = new THREE.MeshStandardMaterial({ color: c, roughness: skin ? 0.62 : 0.82, transparent: !this.solid, opacity: this.opacity, depthWrite: this.solid });
+      if (c === this.palette.skin) m = this.skin(c);
+      else if (this.hair.has(c)) m = this.hairOf(c);
+      else if (this.cloth.has(c)) m = this.cloth_(c);
+      else m = new THREE.MeshStandardMaterial({ color: c, roughness: 0.82, ...this.fade });
       this.cache.set(c, m);
       this.list.push(m);
     }
     return m;
   };
 
+  private skin(c: number) {
+    return new THREE.MeshPhysicalMaterial({
+      color: c,
+      roughness: 0.55,
+      sheen: 0.55,
+      sheenRoughness: 0.4,
+      sheenColor: new THREE.Color(c).lerp(new THREE.Color(0xff5a3c), 0.45),
+      ...this.fade,
+    });
+  }
+
+  private hairOf(c: number) {
+    const tex = strands();
+    return new THREE.MeshPhysicalMaterial({
+      color: c,
+      roughness: 0.62,
+      sheen: 0.5,
+      sheenRoughness: 0.35,
+      sheenColor: new THREE.Color(c).lerp(new THREE.Color(0xffffff), 0.35),
+      bumpMap: tex,
+      bumpScale: 1.2,
+      ...this.fade,
+    });
+  }
+
+  private cloth_(c: number) {
+    return new THREE.MeshPhysicalMaterial({
+      color: c,
+      roughness: 0.86,
+      sheen: 0.3,
+      sheenRoughness: 0.55,
+      sheenColor: new THREE.Color(c).lerp(new THREE.Color(0xffffff), 0.12),
+      ...this.fade,
+    });
+  }
+
   /** A painted fabric (null where nothing can be painted: plain colours are used instead). */
   tex = (tex: THREE.Texture | null) => {
     if (!tex) return null;
-    const m = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.82, transparent: !this.solid, opacity: this.opacity, depthWrite: this.solid });
+    const m = new THREE.MeshPhysicalMaterial({ map: tex, roughness: 0.86, sheen: 0.3, sheenRoughness: 0.55, sheenColor: 0x3a3a3a, ...this.fade });
     this.list.push(m);
     return m;
   };
@@ -186,7 +271,7 @@ export class MaterialKit {
 
   /** A material of its own (not shared by colour), still faded and disposed with the rest. */
   own = (params: THREE.MeshStandardMaterialParameters) => {
-    const m = new THREE.MeshStandardMaterial(params);
+    const m = new THREE.MeshStandardMaterial({ ...this.fade, ...params });
     this.list.push(m);
     return m;
   };

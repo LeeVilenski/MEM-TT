@@ -38,7 +38,14 @@ export class Avatar {
     const look: Look = { ...base, fabric, shirt: fabric?.base ?? base.shirt };
     this.rig = new AvatarRig({ build: look.build ?? 1, seated: look.wheelchair !== undefined, batHand: STYLES[style].leftHanded ? -1 : 1 });
     this.group = this.rig.group;
-    const kit = new MaterialKit(look.skin, opacity);
+    const kit = new MaterialKit(
+      {
+        skin: look.skin,
+        hair: [look.hair, ...(look.beard !== undefined ? [look.beard] : [])],
+        cloth: [look.shirt, look.legs.color, ...(typeof look.sleeves === 'number' ? [look.sleeves] : []), ...(look.cap ? [look.cap.color] : [])],
+      },
+      opacity,
+    );
     this.body = dressBody(this.rig, look, fabric, kit);
     this.materials = kit.list;
     this.group.traverse((o) => {

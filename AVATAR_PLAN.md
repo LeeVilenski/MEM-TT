@@ -33,13 +33,22 @@ No visible change. The refactor was checked against the old code: every mesh in 
 - **Tests** (`tests/avatar.test.ts`): same clock gives the same pose, the hand reaches the handle
   (or stops at full reach), and everything on the head hangs from the head joint.
 
-## Phase 1: quick wins on the current shapes
+## Phase 1: quick wins on the current shapes ✅
 
-- The head and eyes follow the ball (the ball's position is already in replays).
-- Shaped calves, thighs and shoulders, a sloped neck, flared shorts with a hem, proper trainers.
-- Hands that grip: palm, thumb and curled fingers round the handle, turned with the paddle. The
-  other hand in a loose curl.
-- A soft sheen on skin, a fabric finish on cloth, a strand texture on hair.
+- **Gaze:** the head turns to the ball on a spring, within what a neck can turn; the eyes get
+  there first, each aimed on its own so they converge on a near ball. With no ball shown they
+  look ahead; celebrations lift the chin, a slump drops it. Works in play, replays and online;
+  the character-select turntable looks at you.
+- **Hands** (`hand.ts`): palm, four three-jointed fingers and a thumb, merged into one mesh. The
+  racket hand holds the handle in a shakehand grip (three fingers wrapped round it, their curls
+  solved to fit; index along the back of the blade; thumb on the forehand rubber) and turns with
+  the bat. The arm reaches for the wrist. On a backhand the bat is held turned half round, so
+  the back of the hand faces the ball. The free hand hangs relaxed, or holds Ed's bottle.
+- **Shapes** (`shapes.ts`): thighs, knees, calves and ankles; flared shorts with a hem; trousers
+  to a hem over the shoe; upper arms and forearms; a neck flaring into the shoulders; trainers
+  with a heel collar, tongue and toe spring. The skull and jaw are one smooth mesh.
+- **Materials:** a warm sheen on skin, a soft sheen on cloth, fine strands on hair.
+- About 16k triangles per character (from 9k), slightly fewer meshes.
 
 ## Phase 2: one continuous body
 
