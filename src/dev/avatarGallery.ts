@@ -242,7 +242,7 @@ function lineupCells(renderer: THREE.WebGLRenderer, env: THREE.Texture): Cell[] 
       paddle.position.x += x;
     });
     const camera = new THREE.PerspectiveCamera(30, COLS / 1, 0.05, 80);
-    return { scene, camera, view: { az, el: 0.06, dist: 16.5, y: 0.95 }, target: new THREE.Vector3(), label, w: COLS, h: 1 };
+    return { scene, camera, view: { az, el: 0.05, dist: 6.2, y: 0.95 }, target: new THREE.Vector3(), label, w: COLS, h: 1 };
   };
   return [make(0, 'Line-up, front'), make(0.55, 'Line-up, ¾')];
 }

@@ -122,7 +122,7 @@ const faceV = (y: number) => (y - FACE_UV.y0) / (FACE_UV.y1 - FACE_UV.y0);
 
 /** The sculpted skull, jaw and face as one smooth mesh, with face texture coordinates. */
 export function sculptHead(L: Layout): THREE.BufferGeometry {
-  const sphere = new THREE.SphereGeometry(1, 64, 48);
+  const sphere = new THREE.SphereGeometry(1, 72, 56);
   sphere.deleteAttribute('uv');
   sphere.deleteAttribute('normal');
   const geo = mergeVertices(sphere); // one point at the seam and poles: smooth all round
@@ -203,7 +203,7 @@ export function shell(
     p.fromBufferAttribute(pos, i);
     n.fromBufferAttribute(nor, i);
     m[i] = mask(p);
-    if (rgba) rgba[i * 4 + 3] = Math.min(1, m[i] * 1.6) ** 1.5;
+    if (rgba) rgba[i * 4 + 3] = Math.min(1, m[i] * 1.25) ** 1.2;
     const t = typeof thickness === 'number' ? thickness : thickness(p);
     p.addScaledVector(n, 0.0006 + t * m[i]);
     pos.setXYZ(i, p.x, p.y, p.z);
@@ -249,12 +249,12 @@ export function beardMask(L: Layout) {
     const top = L.eyeY - 0.03 - Math.max(0, 0.035 - ax) * 0.3;
     const mouth = oval(x, y, 0, L.mouthY - 0.001, 0.026, 0.011, 0.25);
     const underNose = smooth(-0.004, 0.004, y - L.noseTipY + 0.008) * smooth(0.014, 0.008, ax);
-    return smooth(top, top - 0.014, y) * smooth(0.05, 0.02, z) * (1 - mouth) * (1 - underNose);
+    return smooth(top, top - 0.02, y) * smooth(0.05, 0.015, z) * (1 - mouth) * (1 - underNose);
   };
 }
 
-export function paintFace(L: Layout, f: Face, skin: number, brow: number, beard?: number) {
-  const key = `face:${skin}:${brow}:${JSON.stringify(f)}:${beard}`;
+export function paintFace(L: Layout, f: Face, skin: number, brow: number, beard?: number, scalp?: { color: number; key: string; mask: (x: number, y: number) => number }) {
+  const key = `face:${skin}:${brow}:${JSON.stringify(f)}:${beard}:${scalp ? `${scalp.color}:${scalp.key}` : ''}`;
   return paint(key, (p) => {
     const W = p.w;
     const H = p.h;
@@ -321,14 +321,14 @@ export function paintFace(L: Layout, f: Face, skin: number, brow: number, beard?
         const top = L.eyeY - 0.03 - Math.max(0, 0.035 - ax) * 0.25;
         return smooth(top, top - 0.012, y) * smooth(0.1, 0.09, ax) * (1 - lips);
       };
-      for (let py = 0; py < H; py += 4)
-        for (let px = 0; px < W; px += 4) {
+      for (let py = 0; py < H; py += 2)
+        for (let px = 0; px < W; px += 2) {
           const x = FACE_UV.x0 + (px / W) * (FACE_UV.x1 - FACE_UV.x0);
           const y = FACE_UV.y1 - (py / H) * (FACE_UV.y1 - FACE_UV.y0);
           const w = grows(x, y);
           if (w <= 0) continue;
-          c.fillStyle = css(col, 0.32 * density * w);
-          c.fillRect(px, py, 4, 4);
+          c.fillStyle = css(col, 0.32 * density * w * smooth(0.075, 0.06, Math.abs(x)));
+          c.fillRect(px, py, 2, 2);
         }
       for (let i = 0; i < 30000 * density; i++) {
         const px = r() * W;
@@ -348,9 +348,23 @@ export function paintFace(L: Layout, f: Face, skin: number, brow: number, beard?
         for (let px = 0; px < W; px += 2) {
           const x = FACE_UV.x0 + (px / W) * (FACE_UV.x1 - FACE_UV.x0);
           const y = FACE_UV.y1 - (py / H) * (FACE_UV.y1 - FACE_UV.y0);
-          const w = grows(x, y, -0.06);
+          const w = grows(x, y, -0.06) * smooth(0.058, 0.042, Math.abs(x)); // the front only (see scalpPaint)
           if (w <= 0.01) continue;
           c.fillStyle = css(col.clone().multiplyScalar(0.8 + r() * 0.4), Math.min(1, w * 1.3));
+          c.fillRect(px, py, 2, 2);
+        }
+    }
+
+    // Hair on the scalp, under the hair layer (whose edge fades out over it).
+    if (scalp) {
+      const col = new THREE.Color(scalp.color);
+      for (let py = 0; py < H; py += 2)
+        for (let px = 0; px < W; px += 2) {
+          const x = FACE_UV.x0 + (px / W) * (FACE_UV.x1 - FACE_UV.x0);
+          const y = FACE_UV.y1 - (py / H) * (FACE_UV.y1 - FACE_UV.y0);
+          const w = scalp.mask(x, y);
+          if (w <= 0.01) continue;
+          c.fillStyle = css(col.clone().multiplyScalar(0.85 + r() * 0.3), w);
           c.fillRect(px, py, 2, 2);
         }
     }

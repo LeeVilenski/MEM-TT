@@ -62,9 +62,17 @@ No visible change. The refactor was checked against the old code: every mesh in 
    of the neck with the head.
 3. ✅ Clothes on the same skeleton: shorts hang from the waist and follow the thigh, trousers bend
    with the leg, sleeves go with the shoulder; the shirt keeps its texture layout.
-4. A sculpted head (brow, cheekbones, nose bridge, jaw, chin) with the face painted on and 3D
-   eyes. This is the point to switch to Blender heads instead, if preferred.
-5. Hair from layered strips with a strand texture.
+4. ✅ Sculpted heads (`face.ts`): one mesh, sculpted (brow ridge, eye sockets, cheekbones, lips,
+   chin, jaw corners), its points gathered toward the face, narrower than before (16.5 cm). The
+   face is painted on: brows as hair strokes, lips and mouth, stubble and goatees with soft
+   edges, warmth and shade. A shaped nose; glossy eyeballs with a painted iris turning under
+   skin-coloured lids, with a lash line. Full beards are a layer grown out of the face, fading
+   out at their edges. **This is the point to switch to Blender heads if these aren't good
+   enough** (docs/avatar-heads.md).
+5. ✅ Hair (`hair.ts`): a layer grown out of the scalp inside a real hairline (forehead, temples,
+   sideburns, over the ears, the nape), fading out at its edges, strands running down from the
+   crown, greying at the sides where the look says so. Styles: tousled with a fringe (Ryan),
+   short spikes (Paul), a side parting (George), a ponytail (Bryony), short under a cap.
 
 Each character drops from 50–100 pieces to about 5–8.
 

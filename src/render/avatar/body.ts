@@ -385,10 +385,11 @@ export function dressBody(rig: AvatarRig, look: Look, fabric: Fabric | undefined
     if (sleeveColor !== null && sleeveMat) cap.material = sleeveMat;
   }
   if (sleeveColor === null) {
-    // Vest straps over bare shoulders.
+    // Vest straps: thin bands over the shoulders, front to back.
     for (const side of [-1, 1]) {
-      const strap = add(new THREE.BoxGeometry(0.05, 0.03, halfD * 1.9), look.shirt, side * halfW * 0.55, 1.455, 0);
-      strap.rotation.z = side * -0.35;
+      const strap = add(new THREE.TorusGeometry(halfD * 0.98, 0.0055, 5, 20, Math.PI).rotateY(Math.PI / 2), look.shirt, side * halfW * 0.5, 1.37, 0.004);
+      strap.scale.set(3.6, 1, 1);
+      strap.rotation.z = side * -0.32;
     }
   }
   // The neck bends as the head turns: its top goes with the head.

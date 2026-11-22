@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { paint } from '../fabric';
 import type { MaterialKit } from './body';
 import { EYE, HEAD_PIVOT, HEAD_Y } from './dimensions';
+import { dressHair, scalpPaint, type HairStyle } from './hair';
 import { FACE_UV, HEAD_W, beardMask, eyeTexture, frontZ, layout, noseGeometry, paintFace, sculptHead, shell } from './face';
 import type { Look } from './looks';
 
@@ -15,7 +15,6 @@ import type { Look } from './looks';
  * the whole head. See docs/avatar-heads.md.
  */
 
-const Y_AXIS = new THREE.Vector3(0, 1, 0);
 
 /**
  * Build the head on the `head` joint. Returns the inner group (positioned so its
@@ -35,7 +34,6 @@ export function dressHead(joint: THREE.Object3D, eyes: THREE.Object3D[], look: L
     abs.add(m);
     return m;
   };
-  const decal = kit.decal;
   /** On an eye joint (left s = −1, right s = 1), at a height on the standing body: turns with the eye. */
   const addEye = (geo: THREE.BufferGeometry, color: number, s: number, x: number, y: number, z: number) => {
     const m = new THREE.Mesh(geo, kit.mat(color));
@@ -45,11 +43,12 @@ export function dressHead(joint: THREE.Object3D, eyes: THREE.Object3D[], look: L
   };
   const HY = HEAD_Y;
   const f = look.face ?? {};
-  const long = f.long ?? 1;
   const L = layout(f);
   // The sculpted head (skull, jaw and face as one mesh), its face painted on. The nose,
   // ears and lids share the painted skin, so their colour matches it exactly.
-  const faceTex = paintFace(L, f, look.skin, f.brows ?? look.hair, look.beard);
+  // Short and close unless the look says otherwise; under a cap, just what shows below it.
+  const style: HairStyle = look.hairStyle ?? { thickness: look.cap ? 0.004 : 0.006, top: look.cap ? 0 : 0.004 };
+  const faceTex = paintFace(L, f, look.skin, f.brows ?? look.hair, look.beard, { color: look.hair, key: JSON.stringify(style), mask: scalpPaint(style, L) });
   const skinMat = faceTex ? kit.skinTex(faceTex) : kit.mat(look.skin);
   const onFace = (geo: THREE.BufferGeometry, x: number, y: number, z: number) => {
     // Face texture coordinates from where each point ends up on the head.
@@ -111,42 +110,23 @@ export function dressHead(joint: THREE.Object3D, eyes: THREE.Object3D[], look: L
   }
 
 
-  // Hair (sides and back show under a cap); greying temples fade in towards the bottom.
-  const hair = add(new THREE.SphereGeometry(0.106, 22, 14, 0, Math.PI * 2, 0, Math.PI / 1.9), look.hair, 0, HY + 0.008, 0.01);
-  hair.scale.set(0.97 * NARROW, 1.1 * long, 1.04);
-  hair.rotation.x = 0.2;
-  if (f.temples !== undefined) {
-    const top = new THREE.Color(look.hair);
-    const side = new THREE.Color(f.temples);
-    const tex = paint(`hair:${look.hair}:${f.temples}`, (p) => {
-      const g = p.c.createLinearGradient(0, 0, 0, p.h);
-      g.addColorStop(0, `#${top.getHexString()}`);
-      g.addColorStop(0.72, `#${top.getHexString()}`);
-      g.addColorStop(0.95, `#${side.getHexString()}`);
-      p.c.fillStyle = g;
-      p.c.fillRect(0, 0, p.w, p.h);
-    }, 16, 64);
-    // The strands over the greying: the colour from the gradient, the bumps from the hair material.
-    const m = tex && (decal(tex) as THREE.MeshStandardMaterial | null);
-    if (m) {
-      m.transparent = !kit.solid;
-      m.depthWrite = kit.solid;
-      m.roughness = 0.62;
-      m.bumpMap = (kit.mat(look.hair) as THREE.MeshStandardMaterial).bumpMap;
-      m.bumpScale = 1.2;
-      hair.material = m;
-    }
-  }
-  if (f.spiky) {
-    // Short spikes, swept up at the front.
-    for (let i = 0; i < 16; i++) {
-      const phi = -Math.PI / 2 + (i - 7.5) * 0.36;
-      const th = 0.25 + (i % 3) * 0.17;
-      const n = new THREE.Vector3(Math.cos(phi) * Math.sin(th), Math.cos(th), Math.sin(phi) * Math.sin(th));
-      const spike = add(new THREE.ConeGeometry(0.015, 0.03, 6), look.hair, n.x * 0.1 * NARROW, HY + 0.012 + n.y * 0.112 * long, 0.006 + n.z * 0.104);
-      spike.quaternion.setFromUnitVectors(Y_AXIS, n.add(new THREE.Vector3(0, 0.9, -0.15)).normalize());
-    }
-  }
+  // Hair: a layer grown out of the scalp inside the hairline (see hair.ts).
+  const hairFrame = new THREE.Group(); // the head's own frame: the middle of the head
+  hairFrame.position.set(0, HY, 0);
+  abs.add(hairFrame);
+  dressHair(
+    (geo, material) => {
+      const m = new THREE.Mesh(geo, material);
+      hairFrame.add(m);
+      return m;
+    },
+    headGeo,
+    style,
+    L,
+    kit,
+    look.hair,
+    f.temples,
+  );
   if (look.glasses !== undefined) {
     const c = look.glasses;
     // Just in front of the face (clear of the nose bridge and brows).

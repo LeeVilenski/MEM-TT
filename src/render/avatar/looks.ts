@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { StyleId } from '../../game/styles';
 import { BRYONY, ED, GEORGE_SHIRTS, LEE, PAUL_SHIRTS, RYAN, type Fabric } from '../fabric';
+import type { HairStyle } from './hair';
 
 /**
  * What each character looks like: clothes, colours, build, face and extras. Eight are
@@ -40,8 +41,7 @@ export interface Face {
   browWeight?: number;
   /** Hair colour low on the sides (greying temples). */
   temples?: number;
-  /** Short spiky hair, swept up at the front. */
-  spiky?: boolean;
+
   /** Teardrop aviator lenses (with `glasses` as the frame colour). */
   aviators?: boolean;
 }
@@ -84,6 +84,8 @@ export interface Look {
    * of the head, but carried by the head joint so it moves with the head.
    */
   hairPieces?: (g: THREE.Object3D, mat: Mat) => void;
+  /** How the hair is cut (short and close by default). */
+  hairStyle?: HairStyle;
 }
 
 export const LOOKS: Record<StyleId, Look> = {
@@ -123,15 +125,7 @@ export const LOOKS: Record<StyleId, Look> = {
       collar.scale.set(1, 0.85, 1);
       g.add(collar);
     },
-    hairPieces: (g, m) => {
-      // Tousled hair: a few tufts on top.
-      for (const [x, z, r] of [[-0.05, -0.04, 0.04], [0.02, -0.06, 0.045], [0.06, -0.01, 0.035], [-0.02, 0.02, 0.045], [0.03, 0.05, 0.04]]) {
-        const tuft = new THREE.Mesh(new THREE.SphereGeometry(r, 10, 8), m(0x3b2618));
-        tuft.position.set(x, 1.7, z);
-        tuft.scale.y = 0.5;
-        g.add(tuft);
-      }
-    },
+    hairStyle: { thickness: 0.009, top: 0.01, tousled: 1 },
   },
   // Sysadmin: black t-shirt, beard, lanyard with an access badge.
   chopper: {
@@ -196,6 +190,7 @@ export const LOOKS: Record<StyleId, Look> = {
     hair: 0x2e2119,
     beard: 0x2a1d15,
     glasses: 0x1a1a1a,
+    hairStyle: { thickness: 0.008, top: 0.008 },
     shoes: 0x1f2937,
     height: 1.0,
     build: 1.12,
@@ -225,8 +220,9 @@ export const LOOKS: Record<StyleId, Look> = {
     build: 1.0,
     glasses: 0x3f444b,
     lenses: 0x161b26,
+    hairStyle: { thickness: 0.005, top: 0.003, spikes: true },
     // Short spiky hair greying at the sides, a salt-and-pepper goatee, aviators and a big grin.
-    face: { mouth: 'grin', stubble: { color: 0x4f453d, density: 1.6, goatee: true }, temples: 0x837d77, spiky: true, aviators: true, jaw: 0.97 },
+    face: { mouth: 'grin', stubble: { color: 0x4f453d, density: 1.6, goatee: true }, temples: 0x837d77, aviators: true, jaw: 0.97 },
     accessory: (g, m, t) => {
       // Open collar: two lapels either side of the neck.
       for (const side of [-1, 1]) {
@@ -258,16 +254,7 @@ export const LOOKS: Record<StyleId, Look> = {
     glasses: 0x2b1d1d,
     face: { eyes: 0x6b6a3e },
     wheelchair: { frame: 0xc3c8cf, tyre: 0x1b1d22 },
-    hairPieces: (g, m) => {
-      // Ponytail: a hair tie at the back of the head and the tail hanging down.
-      const tie = new THREE.Mesh(new THREE.TorusGeometry(0.022, 0.008, 6, 12), m(0x1f2937));
-      tie.position.set(0, 1.62, 0.1);
-      g.add(tie);
-      const tail = new THREE.Mesh(new THREE.CapsuleGeometry(0.026, 0.16, 4, 10), m(0x8a6142));
-      tail.position.set(0, 1.52, 0.115);
-      tail.rotation.x = 0.18;
-      g.add(tail);
-    },
+    hairStyle: { thickness: 0.006, top: 0.004, ponytail: { tie: 0x1f2937 } },
   },
   // George: tall, short dark-brown hair with a side parting, dark stubble, a big grin.
   // One of three outfits from his photos: tartan check shirt, white oxford, or a black
@@ -303,15 +290,7 @@ export const LOOKS: Record<StyleId, Look> = {
         g.add(point);
       }
     },
-    hairPieces: (g, m) => {
-      // Hair: short on the sides, a little fuller on top, parted and swept to one side.
-      for (const [x, y, z, r] of [[-0.04, 1.712, -0.03, 0.04], [0.01, 1.718, -0.035, 0.044], [0.05, 1.708, -0.02, 0.036], [0.015, 1.715, 0.02, 0.05], [-0.035, 1.71, 0.03, 0.042]]) {
-        const tuft = new THREE.Mesh(new THREE.SphereGeometry(r, 10, 8), m(0x3a2717));
-        tuft.position.set(x, y, z);
-        tuft.scale.set(1.1, 0.4, 1);
-        g.add(tuft);
-      }
-    },
+    hairStyle: { thickness: 0.006, top: 0.013, parting: 0.026 },
   },
 };
 
