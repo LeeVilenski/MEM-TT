@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { paint } from '../fabric';
 import type { Face } from './looks';
+import { byDetail } from './detail';
 import { tube, type Ring } from './shapes';
 
 /**
@@ -122,7 +123,7 @@ const faceV = (y: number) => (y - FACE_UV.y0) / (FACE_UV.y1 - FACE_UV.y0);
 
 /** The sculpted skull, jaw and face as one smooth mesh, with face texture coordinates. */
 export function sculptHead(L: Layout): THREE.BufferGeometry {
-  const sphere = new THREE.SphereGeometry(1, 72, 56);
+  const sphere = new THREE.SphereGeometry(1, ...byDetail([40, 30], [56, 42], [72, 56]));
   sphere.deleteAttribute('uv');
   sphere.deleteAttribute('normal');
   const geo = mergeVertices(sphere); // one point at the seam and poles: smooth all round

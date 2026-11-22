@@ -38,6 +38,7 @@ import { NO_INPUT, type SwingInput, type SwipeMode } from '../game/swing';
 import { BallView, SPIN_PALETTES, setSpinPalette, spinColor, spinKind, type SpinPalette } from '../render/ballView';
 import { Juice, hitPower } from '../render/juice';
 import { PlayerView } from '../render/playerView';
+import type { Detail } from '../render/avatar';
 import { ServeAimView } from '../render/serveAim';
 import { createScene } from '../render/scene';
 import { PostFx } from '../render/post';
@@ -1818,6 +1819,8 @@ export class Sandbox implements MenuHost {
       key.shadow.map = null;
     }
     this.applyBloom();
+    // Characters built to match: lighter meshes and plainer materials at lower quality.
+    for (const v of [this.playerView, this.aiView, ...this.remoteViews.values()]) v.setDetail(idx as Detail);
     this.resize();
   }
 
@@ -2484,6 +2487,7 @@ export class Sandbox implements MenuHost {
       if (!view) {
         view = new PlayerView(this.scene, { bodyColor: partner ? 0x60a5fa : 0xe8562a, bodyOpacity: 1, style, avatarOpacity: partner ? 0.35 : 1 });
         view.watch(this.ballGaze);
+        view.setDetail(Math.max(0, this.qualityLevel) as Detail);
         this.remoteViews.set(seat, view);
         this.remoteLooks.set(seat, look);
       } else if (this.remoteLooks.get(seat) !== look) {

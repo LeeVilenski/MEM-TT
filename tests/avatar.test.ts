@@ -140,6 +140,25 @@ describe('avatar rig', () => {
     expect(hanging().y).toBeLessThan(-0.95);
   });
 
+  it('builds lighter at lower quality: fewer triangles, plain materials at Low', () => {
+    const tris = (a: Avatar) => {
+      let n = 0;
+      a.group.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (m.isMesh) n += (m.geometry.index ? m.geometry.index.count : m.geometry.getAttribute('position').count) / 3;
+      });
+      return n;
+    };
+    for (const s of ['allround', 'wheelchair'] as const) {
+      const [low, mid, high] = ([0, 1, 2] as const).map((d) => new Avatar(s, 1, 0, d));
+      expect(tris(low), s).toBeLessThan(tris(mid));
+      expect(tris(mid), s).toBeLessThan(tris(high));
+      const physical = (a: Avatar) => skins(a).some((m) => (m.material as THREE.MeshPhysicalMaterial).isMeshPhysicalMaterial);
+      expect(physical(low), s).toBe(false);
+      expect(physical(high), s).toBe(true);
+    }
+  });
+
   it('poses the same way every time with the same clock', () => {
     const joints = (a: Avatar) => {
       const r = a.rig;

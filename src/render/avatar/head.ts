@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { MaterialKit } from './body';
 import { EYE, HEAD_PIVOT, HEAD_Y } from './dimensions';
+import { byDetail } from './detail';
 import { dressHair, scalpPaint, type HairStyle } from './hair';
 import { FACE_UV, HEAD_W, beardMask, eyeTexture, frontZ, layout, noseGeometry, paintFace, sculptHead, shell } from './face';
 import type { Look } from './looks';
@@ -80,7 +81,7 @@ export function dressHead(joint: THREE.Bone, eyes: THREE.Object3D[], look: Look,
     hollow.rotation.y = -s * 0.35;
     // The eyeball (turns with its eye joint), under an upper and a lower lid.
     const ex = s * EYE.x;
-    const ball = addEye(new THREE.SphereGeometry(0.0118, 24, 16), 0xf2eee8, s, ex, EYE.y, EYE.z);
+    const ball = addEye(new THREE.SphereGeometry(0.0118, ...byDetail<[number, number]>([12, 8], [16, 12], [24, 16])), 0xf2eee8, s, ex, EYE.y, EYE.z);
     ball.material = eyeMat;
     const R = 0.0127;
     const front = Math.PI * 1.5; // the sphere's −z, as SphereGeometry's phi

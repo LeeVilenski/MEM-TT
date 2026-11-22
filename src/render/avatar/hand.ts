@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { byDetail } from './detail';
 
 /**
  * Hands: a palm, four fingers of three joints each and a thumb, posed once and merged
@@ -86,9 +87,12 @@ const THUMB = { base: new THREE.Vector3(0.031, 0.045, 0.016), len: [0.036, 0.028
  */
 export const HELD = new THREE.Vector3(0.0, 0.1, 0.028);
 
+/** Points round a knuckle sphere (around, up) for the level of detail. */
+let KNUCKLE: [number, number] = [8, 5];
+
 /** A rounded segment of length `len` along +y from the origin. */
 const bone = (r: number, len: number, tipR = r * 0.92) => {
-  const g = new THREE.CylinderGeometry(tipR, r, len, 8, 1, true).translate(0, len / 2, 0);
+  const g = new THREE.CylinderGeometry(tipR, r, len, byDetail(5, 6, 8), 1, true).translate(0, len / 2, 0);
   return g;
 };
 
@@ -97,6 +101,7 @@ const bone = (r: number, len: number, tipR = r * 0.92) => {
  * hand). `size` scales it (1 for an adult of about 1.75 m).
  */
 export function handGeometry(pose: HandPose, size = 1): THREE.BufferGeometry {
+  KNUCKLE = byDetail([5, 3], [6, 4], [8, 5]);
   const parts: THREE.BufferGeometry[] = [];
   const put = (g: THREE.BufferGeometry, m: THREE.Matrix4) => {
     g.applyMatrix4(m);
@@ -132,9 +137,9 @@ export function handGeometry(pose: HandPose, size = 1): THREE.BufferGeometry {
       const tip = r * 0.9;
       put(bone(r, len, tip), m.clone());
       // A knuckle (or the fingertip) rounding off the joint.
-      put(new THREE.SphereGeometry(j === 2 ? tip : r * 1.02, 8, 5), m.clone());
+      put(new THREE.SphereGeometry(j === 2 ? tip : r * 1.02, ...KNUCKLE), m.clone());
       m.multiply(new THREE.Matrix4().makeTranslation(0, len, 0));
-      if (j === 2) put(new THREE.SphereGeometry(tip, 8, 5), m.clone());
+      if (j === 2) put(new THREE.SphereGeometry(tip, ...KNUCKLE), m.clone());
       r = tip;
     }
   });
@@ -149,9 +154,9 @@ export function handGeometry(pose: HandPose, size = 1): THREE.BufferGeometry {
       const tip = r * 0.9;
       const m = new THREE.Matrix4().compose(at, q, new THREE.Vector3(1, 1, 1));
       put(bone(r, THUMB.len[j], tip), m);
-      put(new THREE.SphereGeometry(r, 8, 5), new THREE.Matrix4().makeTranslation(at.x, at.y, at.z));
+      put(new THREE.SphereGeometry(r, ...KNUCKLE), new THREE.Matrix4().makeTranslation(at.x, at.y, at.z));
       at.addScaledVector(dir, THUMB.len[j]);
-      if (j === 1) put(new THREE.SphereGeometry(tip, 8, 5), new THREE.Matrix4().makeTranslation(at.x, at.y, at.z));
+      if (j === 1) put(new THREE.SphereGeometry(tip, ...KNUCKLE), new THREE.Matrix4().makeTranslation(at.x, at.y, at.z));
       r = tip;
     });
   }

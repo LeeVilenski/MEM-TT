@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { byDetail } from './detail';
 
 /**
  * Body parts as shaped tubes: a stack of oval rings (each with its own size and offset),
@@ -32,7 +33,7 @@ export interface TubeOptions {
  * are smooth all round, including across the seam where u wraps.
  */
 export function tube(rings: Ring[], o: TubeOptions = {}): THREE.BufferGeometry {
-  const n = o.segments ?? 16;
+  const n = o.segments ?? byDetail(10, 12, 16);
   const rs: Ring[] = [];
   const dir = Math.sign(rings[rings.length - 1].y - rings[0].y) || 1;
   // Domes: rings shrinking to a point beyond each end.

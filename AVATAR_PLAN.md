@@ -90,7 +90,17 @@ Each character drops from 50–100 pieces to about 5–8.
 - **Bryony's ponytail** swings on a spring behind her head's movement and keeps hanging down
   whichever way she looks.
 
-## Phase 4: rendering
+## Phase 4: rendering ✅
 
-A rim light so players stand out from the venue, soft contact shadows, cloth weave detail, and
-lower detail on the Low and Medium quality settings.
+- **Rim light:** a cool glow round the characters' edges, built into their own materials (so it
+  lights nothing else), to lift them off the venue.
+- **Contact shadows:** a soft patch under each foot, fading and shrinking as the foot lifts.
+- **Cloth weave:** a fine twill bump on clothes at High quality.
+- **Detail follows quality:** characters are built at three levels (about 26k, 19k and 14k
+  triangles); Low uses plain materials (no sheen). The game rebuilds them when the quality
+  setting (or the automatic controller) changes level, keeping each character's outfit.
+
+## Next
+
+If the faces still aren't good enough, heads made in Blender can replace the procedural ones
+on the head joint ([docs/avatar-heads.md](docs/avatar-heads.md)).

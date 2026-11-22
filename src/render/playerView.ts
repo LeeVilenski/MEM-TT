@@ -4,7 +4,7 @@ import type { Player } from '../game/player';
 import type { StrokeSide } from '../game/swing';
 import type { PaddlePose } from '../physics';
 import type { StyleId } from '../game/styles';
-import { Avatar, type Reaction } from './avatar';
+import { Avatar, type Detail, type Reaction } from './avatar';
 
 const RED = 0xc8202a;
 /** The ring turns gold this long (s) before contact: flick now for a perfect stroke. */
@@ -146,14 +146,33 @@ export class PlayerView {
     this.avatar?.setFirstPerson(on);
   }
 
+  /** The character shown, which of its outfits, and how detailed it's built. */
+  private style: StyleId | null = null;
+  private variant = 0;
+  private detail: Detail = 2;
+
   /** Show this player as a style's character (replacing the plain torso). */
   setStyle(style: StyleId, avatarOpacity = this.avatarOpacity) {
     this.avatarOpacity = avatarOpacity;
+    this.style = style;
+    this.variant = Math.floor(Math.random() * 6); // a shirt from the wardrobe, kept until the next character
+    this.buildAvatar();
+  }
+
+  /** Build the characters at a level of detail (the quality setting): rebuilt if it changed. */
+  setDetail(detail: Detail) {
+    if (detail === this.detail) return;
+    this.detail = detail;
+    if (this.style) this.buildAvatar();
+  }
+
+  private buildAvatar() {
+    if (!this.style) return;
     if (this.avatar) {
       this.body.remove(this.avatar.group);
       this.avatar.dispose();
     }
-    this.avatar = new Avatar(style, this.avatarOpacity);
+    this.avatar = new Avatar(this.style, this.avatarOpacity, this.variant, this.detail);
     this.avatar.setFirstPerson(this.firstPerson);
     this.body.add(this.avatar.group);
     this.body.getObjectByName('torso')!.visible = false;

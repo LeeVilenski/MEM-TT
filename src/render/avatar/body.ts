@@ -5,6 +5,7 @@ import { GRIP, HELD as HELD_IN_HAND, HOLD, RELAXED, batGrip, handGeometry } from
 import { dressHead } from './head';
 import { trainer, tube, type Ring } from './shapes';
 import { blend, smoothstep } from './skin';
+import { detail } from './detail';
 import type { Look, Mat, TorsoShape } from './looks';
 import type { ArmJoints, AvatarRig } from './rig';
 
@@ -190,6 +191,8 @@ export class MaterialKit {
   private cache = new Map<number, THREE.MeshStandardMaterial>();
   private hair: Set<number>;
   private cloth: Set<number>;
+  /** Built at this level of detail (see detail.ts). */
+  private detail = detail();
 
   constructor(
     private palette: Palette,
@@ -203,6 +206,22 @@ export class MaterialKit {
   /** Fading for a see-through character. */
   private get fade() {
     return { transparent: !this.solid, opacity: this.opacity, depthWrite: this.solid };
+  }
+
+  /**
+   * Skin, hair or cloth: with a sheen (a soft glow at grazing angles) above Low detail, a
+   * plain material at Low; and the rim light either way.
+   */
+  private soft(params: THREE.MeshPhysicalMaterialParameters) {
+    let m: THREE.MeshStandardMaterial;
+    if (this.detail === 0) {
+      const { sheen: _s, sheenRoughness: _r, sheenColor: _c, ...plain } = params;
+      void _s;
+      void _r;
+      void _c;
+      m = new THREE.MeshStandardMaterial({ ...plain, ...this.fade });
+    } else m = new THREE.MeshPhysicalMaterial({ ...params, ...this.fade });
+    return withRim(m);
   }
 
   /** A colour, as skin, hair, cloth or plain by which of the look's colours it is. */
@@ -220,27 +239,24 @@ export class MaterialKit {
   };
 
   private skin(c: number) {
-    return new THREE.MeshPhysicalMaterial({
+    return this.soft({
       color: c,
       roughness: 0.55,
       sheen: 0.55,
       sheenRoughness: 0.4,
       sheenColor: new THREE.Color(c).lerp(new THREE.Color(0xff5a3c), 0.45),
-      ...this.fade,
     });
   }
 
   private hairOf(c: number) {
-    const tex = strands();
-    return new THREE.MeshPhysicalMaterial({
+    return this.soft({
       color: c,
       roughness: 0.62,
       sheen: 0.5,
       sheenRoughness: 0.35,
       sheenColor: new THREE.Color(c).lerp(new THREE.Color(0xffffff), 0.35),
-      bumpMap: tex,
+      bumpMap: strands(),
       bumpScale: 1.2,
-      ...this.fade,
     });
   }
 
@@ -258,13 +274,14 @@ export class MaterialKit {
   };
 
   private cloth_(c: number) {
-    return new THREE.MeshPhysicalMaterial({
+    return this.soft({
       color: c,
       roughness: 0.86,
       sheen: 0.3,
       sheenRoughness: 0.55,
       sheenColor: new THREE.Color(c).lerp(new THREE.Color(0xffffff), 0.12),
-      ...this.fade,
+      // At High detail, a fine weave catching the light.
+      ...(this.detail === 2 ? { bumpMap: weave(), bumpScale: 0.6 } : {}),
     });
   }
 
@@ -272,7 +289,7 @@ export class MaterialKit {
   skinTex = (tex: THREE.Texture) => {
     const m = this.skin(0xffffff);
     m.map = tex;
-    m.sheenColor = new THREE.Color(this.palette.skin).lerp(new THREE.Color(0xff5a3c), 0.45);
+    if ((m as THREE.MeshPhysicalMaterial).isMeshPhysicalMaterial) (m as THREE.MeshPhysicalMaterial).sheenColor = new THREE.Color(this.palette.skin).lerp(new THREE.Color(0xff5a3c), 0.45);
     this.list.push(m);
     return m;
   };
@@ -280,7 +297,14 @@ export class MaterialKit {
   /** A painted fabric (null where nothing can be painted: plain colours are used instead). */
   tex = (tex: THREE.Texture | null) => {
     if (!tex) return null;
-    const m = new THREE.MeshPhysicalMaterial({ map: tex, roughness: 0.86, sheen: 0.3, sheenRoughness: 0.55, sheenColor: 0x3a3a3a, ...this.fade });
+    const m = this.soft({
+      map: tex,
+      roughness: 0.86,
+      sheen: 0.3,
+      sheenRoughness: 0.55,
+      sheenColor: 0x3a3a3a,
+      ...(this.detail === 2 ? { bumpMap: weave(), bumpScale: 0.6 } : {}),
+    });
     this.list.push(m);
     return m;
   };
@@ -299,6 +323,48 @@ export class MaterialKit {
     this.list.push(m);
     return m;
   };
+}
+
+/**
+ * The rim light on the characters: a cool glow round their edges (strongest where the
+ * surface turns away from the camera), so they stand out from the venue. Built into their
+ * own materials, so it lights nothing else.
+ */
+export const RIM = { color: { value: new THREE.Color(0xc4d6ff) }, strength: { value: 0.2 } };
+
+function withRim<T extends THREE.MeshStandardMaterial>(m: T): T {
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.rimColor = RIM.color;
+    sh.uniforms.rimStrength = RIM.strength;
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform vec3 rimColor;\nuniform float rimStrength;')
+      .replace(
+        '#include <emissivemap_fragment>',
+        '#include <emissivemap_fragment>\n{ float rimF = 1.0 - saturate(dot(normal, normalize(vViewPosition))); totalEmissiveRadiance += rimColor * rimStrength * rimF * rimF * rimF; }',
+      );
+  };
+  m.customProgramCacheKey = () => 'avatar-rim';
+  return m;
+}
+
+/** A fine twill weave as a grey bump map, tiled many times over the clothes. */
+function weave() {
+  const tex = paint('cloth:weave', (p) => {
+    const { c, w, h } = p;
+    c.fillStyle = 'rgb(128,128,128)';
+    c.fillRect(0, 0, w, h);
+    // Diagonal ribs, with each thread's over-and-under.
+    for (let y = 0; y < h; y++)
+      for (let x = 0; x < w; x++) {
+        const rib = Math.sin(((x + y) / 4) * Math.PI * 2);
+        const thread = Math.sin((x / 2) * Math.PI) * 0.3;
+        const v = Math.round(128 + 70 * rib + 30 * thread);
+        c.fillStyle = `rgb(${v},${v},${v})`;
+        c.fillRect(x, y, 1, 1);
+      }
+  }, 32, 32, true);
+  if (tex) tex.repeat.set(36, 36);
+  return tex;
 }
 
 /**
@@ -380,8 +446,8 @@ export function dressBody(rig: AvatarRig, look: Look, fabric: Fabric | undefined
   });
   // Shoulder caps: sleeves (or bare skin for a vest) round off where the arms join.
   for (const side of [-1, 1]) {
-    const cap = add(new THREE.SphereGeometry(0.057, 16, 12), sleeveColor ?? look.skin, side * rig.shoulderX, SHOULDER_Y, 0);
-    cap.scale.set(1, 0.9, 1);
+    const cap = add(new THREE.SphereGeometry(0.052, 16, 12), sleeveColor ?? look.skin, side * rig.shoulderX, SHOULDER_Y + 0.004, 0);
+    cap.scale.set(1, 0.82, 1.02);
     if (sleeveColor !== null && sleeveMat) cap.material = sleeveMat;
   }
   if (sleeveColor === null) {
