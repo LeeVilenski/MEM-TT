@@ -56,6 +56,7 @@ describe('doubles', { timeout: 120000 }, () => {
   it("a human's serves go diagonally (the assist aims for your right half, then theirs)", () => {
     for (const type of ['auto', 'backspin', 'sidespin'] as ServeType[]) {
       const player = new Player('H', { ...P });
+      player.rng = mulberry32(1); // serve execution error: seeded, so a clean serve's scatter is repeatable
       player.applyRealism(0.75);
       player.serveType = type;
       const { c, step } = doublesRoom(1, player, 3);

@@ -29,7 +29,9 @@ function world(latency: number, seed = 1) {
   const add = (name: string, create?: { mode: GameMode; bestOf: number }) => {
     // Each client gets its own params: the client applies the room's spin curve to them.
     const params = { ...P };
-    const c = new OnlineClient(server.connect('ROOMA', latency), new Player(name, params), params, clock, { name, create: create && { ...create, aiLevel: 'medium' } });
+    const player = new Player(name, params);
+    player.rng = mulberry32(seed * 100 + clients.length);
+    const c = new OnlineClient(server.connect('ROOMA', latency), player, params, clock, { name, create: create && { ...create, aiLevel: 'medium' } });
     const entry = { c, bot: makeBot(c) };
     clients.push(entry);
     return c;
