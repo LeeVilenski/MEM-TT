@@ -80,6 +80,7 @@ describe('human player in a match (scripted input through the real pipeline)', (
   function humanMatch(seed: number) {
     const P = DEFAULT_PARAMS;
     const player = new Player('p1', P);
+    player.rng = mulberry32(seed + 1000);
     const m = new Match(P, { near: { kind: 'human', player }, far: { kind: 'ai', ai: new AiPlayer('far', AI_LEVELS.medium, P, mulberry32(seed)) } }, { bestOf: 1, pointsToWin: 11, firstServer: 'near' });
     const log: string[] = [];
     m.on((e) => {

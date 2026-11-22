@@ -6,6 +6,7 @@ import { OnlineClient } from '../src/net/client';
 import { WebSocketTransport, roomUrl } from '../src/net/transport';
 import { randomRoomCode } from '../src/net/protocol';
 import { makeBot } from './helpers/bot';
+import { mulberry32 } from './helpers/rng';
 
 /**
  * End-to-end over real WebSockets. By default starts the Node adapter (server/node.ts).
@@ -32,10 +33,13 @@ afterAll(() => {
 const clock = () => performance.now() / 1000;
 const base = EXTERNAL ?? `ws://localhost:${PORT}`;
 
+let seed = 1;
 function client(code: string, name: string, create?: boolean) {
   const t = new WebSocketTransport(roomUrl(base, code));
   const params = { ...P }; // the client applies the room's spin curve to its params
-  return new OnlineClient(t, new Player(name, params), params, clock, { name, create: create ? { mode: 'singles', bestOf: 1, aiLevel: 'medium' } : undefined });
+  const player = new Player(name, params);
+  player.rng = mulberry32(seed++);
+  return new OnlineClient(t, player, params, clock, { name, create: create ? { mode: 'singles', bestOf: 1, aiLevel: 'medium' } : undefined });
 }
 
 async function run(clients: OnlineClient[], until: () => boolean, timeoutMs: number) {
@@ -69,7 +73,7 @@ describe(`room server over real WebSockets (${EXTERNAL ?? 'Node adapter'})`, () 
   });
 
   it('two players play points through the server and see the same score', async () => {
-    const code = randomRoomCode();
+    const code = randomRoomCode(); // left random: a fixed code could clash with a live room on a shared ROOM_SERVER_URL
     const a = client(code, 'Ada', true);
     await run([a], () => a.phase === 'lobby', 3000);
     const b = client(code, 'Bob');

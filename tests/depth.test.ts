@@ -192,7 +192,9 @@ describe('room realism (online)', () => {
     const clock = () => t;
     const server = new LocalServer(clock, { rng: mulberry32(4) });
     const params = { a: { ...P }, b: { ...P } };
-    const a = new OnlineClient(server.connect('ARCAD', 0.04), new Player('Ada', params.a), params.a, clock, { name: 'Ada', create: { mode: 'singles', bestOf: 1, aiLevel: 'medium', realism: 1 } });
+    const ada = new Player('Ada', params.a);
+    ada.rng = mulberry32(1);
+    const a = new OnlineClient(server.connect('ARCAD', 0.04), ada, params.a, clock, { name: 'Ada', create: { mode: 'singles', bestOf: 1, aiLevel: 'medium', realism: 1 } });
     const clients = [a];
     const step = (frames: number) => {
       for (let i = 0; i < frames; i++) {
@@ -204,7 +206,9 @@ describe('room realism (online)', () => {
     const bots: [OnlineClient, () => ReturnType<ReturnType<typeof makeBot>>][] = [[a, makeBot(a)]];
     step(5);
     a.configure({ realism: 1 });
-    const b = new OnlineClient(server.connect('ARCAD', 0.04), new Player('Bob', params.b), params.b, clock, { name: 'Bob' });
+    const bob = new Player('Bob', params.b);
+    bob.rng = mulberry32(2);
+    const b = new OnlineClient(server.connect('ARCAD', 0.04), bob, params.b, clock, { name: 'Bob' });
     clients.push(b);
     bots.push([b, makeBot(b)]);
     step(10);
