@@ -43,4 +43,9 @@ export const shoulderOffset = (build: number) => torsoHalfWidth(build) + 0.025;
 export const HEAD_PIVOT = new THREE.Vector3(0, 1.55, 0);
 /** The middle of the head (the procedural head is built round this), on the standing body. */
 export const HEAD_Y = 1.615;
+/**
+ * The right eye's turning point (the middle of the eyeball), on the standing body; the left
+ * eye mirrors it. Eye joints sit here, so irises and pupils on them turn to look.
+ */
+export const EYE = new THREE.Vector3(0.034, HEAD_Y + 0.012, -0.08);
 

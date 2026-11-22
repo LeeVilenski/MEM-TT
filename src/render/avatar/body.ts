@@ -199,7 +199,7 @@ export function dressBody(rig: AvatarRig, look: Look, fabric: Fabric | undefined
     }
   }
   add(new THREE.CylinderGeometry(0.046, 0.052, 0.12, 12), look.skin, 0, 1.5, 0);
-  const headAbs = dressHead(rig.head, look, kit);
+  const headAbs = dressHead(rig.head, rig.eyes, look, kit);
 
   // ---- arms
   const racket = dressArm(rig.arm, look, mat, sleeveColor, sleeveMat);

@@ -100,6 +100,14 @@ export class PlayerView {
   }
 
   private firstPerson = false;
+  /** Where the character's eyes go (the ball), if anywhere. */
+  private gazeSource: (() => Vec3 | null) | null = null;
+  private gaze = new THREE.Vector3();
+
+  /** Have the character watch something (the ball): asked for its position each frame; null when there's nothing to see. */
+  watch(source: () => Vec3 | null) {
+    this.gazeSource = source;
+  }
 
   /** The local player's own view: draw only the racket arm, not the body in front of the camera. */
   setFirstPerson(on: boolean) {
@@ -262,7 +270,8 @@ export class PlayerView {
       this.paddle.updateMatrixWorld(true);
       const hand = new THREE.Vector3();
       this.handle.getWorldPosition(hand);
-      this.avatar.update(bodyPos, hand, bodyPos.z >= 0);
+      const g = this.gazeSource?.() ?? null;
+      this.avatar.update(bodyPos, hand, bodyPos.z >= 0, { gaze: g && this.gaze.set(g.x, g.y, g.z) });
     } else this.body.position.set(bodyPos.x, 0, bodyPos.z);
     this.shadow.position.set(bodyPos.x, 0.002, bodyPos.z);
   }

@@ -411,6 +411,8 @@ export class Sandbox implements MenuHost {
   private localServer: LocalServer | null = null;
   private lobby: Lobby;
   private remoteViews = new Map<Seat, PlayerView>();
+  /** Where the players look: the ball while it's shown. */
+  private ballGaze = () => (this.ball.isVisible ? this.ball.mesh.position : null);
   /** The character (and partner see-through-ness) each remote view was dressed as. */
   private remoteLooks = new Map<Seat, string>();
   onlineSettings = {
@@ -466,6 +468,9 @@ export class Sandbox implements MenuHost {
     this.playerView.visible = false;
     this.aiView = new PlayerView(this.scene, { bodyColor: 0xe8562a, bodyOpacity: 0.45 });
     this.aiView.visible = false;
+    // The characters watch the ball (in play and in replays).
+    this.playerView.watch(this.ballGaze);
+    this.aiView.watch(this.ballGaze);
     this.matchHud = new MatchHud(container);
     this.hud.showDetails = this.look.shotDetails;
     this.matchHud.showDetails = this.look.shotDetails;
@@ -2478,6 +2483,7 @@ export class Sandbox implements MenuHost {
       const look = `${style}|${partner}`;
       if (!view) {
         view = new PlayerView(this.scene, { bodyColor: partner ? 0x60a5fa : 0xe8562a, bodyOpacity: 1, style, avatarOpacity: partner ? 0.35 : 1 });
+        view.watch(this.ballGaze);
         this.remoteViews.set(seat, view);
         this.remoteLooks.set(seat, look);
       } else if (this.remoteLooks.get(seat) !== look) {

@@ -148,7 +148,8 @@ export class CharacterPreview {
     if (this.avatar) {
       this.turntable.updateMatrixWorld(true);
       // The avatar faces local −z (toward the camera) inside the turntable; it takes the hand in world space.
-      this.avatar.update({ x: 0, z: 0 }, this.turntable.localToWorld(hand.clone()), true);
+      // Looking at you (as far as the neck turns while the turntable goes round).
+      this.avatar.update({ x: 0, z: 0 }, this.turntable.localToWorld(hand.clone()), true, { gaze: this.camera.position });
     }
     this.renderer.render(this.scene, this.camera);
   }

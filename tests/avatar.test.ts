@@ -7,14 +7,15 @@ import { ARM_MAX, HEAD_PIVOT, SHOULDER_Y } from '../src/render/avatar/dimensions
 const DT = 1 / 60;
 
 /** Step a character through a pose with a fixed clock; the hand is relative to the body. */
-function pose(a: Avatar, hand: [number, number, number], opts: { seconds?: number; move?: number; t0?: number } = {}) {
+function pose(a: Avatar, hand: [number, number, number], opts: { seconds?: number; move?: number; t0?: number; gaze?: [number, number, number] } = {}) {
   const steps = Math.round((opts.seconds ?? 1) / DT);
   const body = { x: 0, z: 0.4 };
   const target = new THREE.Vector3();
   for (let i = 0; i <= steps; i++) {
     body.x = (opts.move ?? 0) * i * DT;
     target.set(body.x + hand[0], hand[1], body.z + hand[2]);
-    a.update(body, target, true, (opts.t0 ?? 5) + i * DT);
+    const g = opts.gaze;
+    a.update(body, target, true, { now: (opts.t0 ?? 5) + i * DT, gaze: g && new THREE.Vector3(body.x + g[0], g[1], body.z + g[2]) });
   }
   a.group.updateMatrixWorld(true);
   return target;
@@ -122,6 +123,42 @@ describe('avatar rig', () => {
       expect(bat.y).toBeCloseTo(free.y, 1);
       expect(bat.y).toBeLessThan((SHOULDER_Y - seatDrop - 0.5) * k);
     }
+  });
+
+  /** Where a joint looks: its local −z in the world. */
+  const facing = (o: THREE.Object3D) => new THREE.Vector3(0, 0, -1).transformDirection(o.matrixWorld);
+
+  it('looks at the ball: the eyes on it, the head nearly so', () => {
+    for (const s of ['allround', 'looper', 'wheelchair'] as const) {
+      for (const g of [
+        [0.6, 1.3, -1.2],
+        [-0.4, 0.9, -0.8],
+        [0.2, 1.1, -2.5],
+        [0.45, 0.6, -0.7],
+      ] as [number, number, number][]) {
+        const a = new Avatar(s, 1, 0);
+        pose(a, [0.38, 1.0, -0.38], { gaze: g });
+        const ball = new THREE.Vector3(g[0], g[1], 0.4 + g[2]);
+        for (const eye of a.rig.eyes) {
+          const toBall = ball.clone().sub(worldPos(eye)).normalize();
+          expect(facing(eye).dot(toBall), `${s} eye → ${g}`).toBeGreaterThan(0.995);
+        }
+        const toBall = ball.clone().sub(worldPos(a.rig.head)).normalize();
+        expect(facing(a.rig.head).dot(toBall), `${s} head → ${g}`).toBeGreaterThan(0.9);
+      }
+    }
+  });
+
+  it('looks ahead with nothing to watch, and turns no further than a neck can', () => {
+    const a = new Avatar('allround', 1, 0);
+    pose(a, [0.38, 1.0, -0.38]);
+    const ahead = facing(a.rig.head);
+    expect(ahead.z).toBeLessThan(-0.9);
+    // A ball right behind: the head turns as far as it goes, not all the way round.
+    pose(a, [0.38, 1.0, -0.38], { gaze: [0.3, 1.2, 2] });
+    const behind = facing(a.rig.head);
+    expect(behind.z).toBeGreaterThan(-0.6);
+    expect(behind.z).toBeLessThan(0);
   });
 
   it('turning the head joint turns the face with it', () => {

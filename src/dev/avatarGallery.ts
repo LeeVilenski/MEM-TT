@@ -42,6 +42,11 @@ interface Pose {
   paddle: [number, number, number];
   /** Sideways speed while posing (m/s): the shuffle. */
   move?: number;
+  /**
+   * Where the character looks, relative to the feet for a right-hander: a ball (drawn), or
+   * the camera (for portraits). None: straight ahead.
+   */
+  gaze?: [number, number, number] | 'camera';
   /** A reaction started this long before the picture (s). */
   react?: { kind: 'celebrate' | 'dismay'; at: number };
   view: View;
@@ -50,25 +55,26 @@ interface Pose {
 const FULL: Omit<View, 'az'> = { el: 0.08, dist: 4.4, y: 0.92 };
 /** Face close-ups aim at the head wherever the pose put it (y is filled in then). */
 const FACE: Omit<View, 'az'> = { el: 0.04, dist: 1.2, y: 0, fov: 24 };
-const READY: Pick<Pose, 'hand' | 'paddle'> = { hand: [0.38, 1.0, -0.38], paddle: [-0.3, 0.4, -0.25] };
+/** Ready, watching a ball coming over the net. */
+const READY: Pick<Pose, 'hand' | 'paddle' | 'gaze'> = { hand: [0.38, 1.0, -0.38], paddle: [-0.3, 0.4, -0.25], gaze: [0.15, 1.15, -2.2] };
 
 const POSES: Pose[] = [
   { name: 'Front', ...READY, view: { az: 0, ...FULL } },
   { name: 'Side', ...READY, view: { az: Math.PI / 2, ...FULL } },
   { name: 'Back', ...READY, view: { az: Math.PI, ...FULL } },
-  { name: 'Face', ...READY, aim: 'head', view: { az: 0, ...FACE } },
-  { name: 'Face ¾', ...READY, aim: 'head', view: { az: 0.7, ...FACE } },
-  { name: 'Forehand, wide', hand: [0.82, 1.0, -0.3], paddle: [-0.2, 0.6, -0.9], view: { az: 0.6, ...FULL } },
-  { name: 'Backhand', hand: [-0.24, 1.0, -0.42], paddle: [-0.2, -0.4, 0.6], view: { az: -0.5, ...FULL } },
-  { name: 'Low ball', hand: [0.45, 0.45, -0.5], paddle: [-0.5, 0.4, -1.3], view: { az: 0.9, ...FULL } },
-  { name: 'Smash', hand: [0.4, 1.8, -0.15], paddle: [-0.7, 0.3, -0.2], view: { az: 0.7, ...FULL } },
+  { name: 'Face', ...READY, gaze: 'camera', aim: 'head', view: { az: 0, ...FACE } },
+  { name: 'Face ¾', ...READY, gaze: 'camera', aim: 'head', view: { az: 0.7, ...FACE } },
+  { name: 'Forehand, wide', hand: [0.82, 1.0, -0.3], paddle: [-0.2, 0.6, -0.9], gaze: [0.85, 1.12, -0.6], view: { az: 0.6, ...FULL } },
+  { name: 'Backhand', hand: [-0.24, 1.0, -0.42], paddle: [-0.2, -0.4, 0.6], gaze: [-0.24, 1.1, -0.7], view: { az: -0.5, ...FULL } },
+  { name: 'Low ball', hand: [0.45, 0.45, -0.5], paddle: [-0.5, 0.4, -1.3], gaze: [0.45, 0.55, -0.8], view: { az: 0.9, ...FULL } },
+  { name: 'Smash', hand: [0.4, 1.8, -0.15], paddle: [-0.7, 0.3, -0.2], gaze: [0.4, 1.95, -0.45], view: { az: 0.7, ...FULL } },
   { name: 'Moving', ...READY, move: 1.6, view: { az: 0.4, ...FULL } },
-  { name: 'Celebrate', ...READY, react: { kind: 'celebrate', at: 0.3 }, view: { az: 0.4, ...FULL } },
-  { name: 'Slump', ...READY, react: { kind: 'dismay', at: 0.7 }, view: { az: 0.4, ...FULL } },
-  { name: 'Rest pose', ...READY, rest: true, view: { az: 0, ...FULL } },
-  { name: 'Rest pose, side', ...READY, rest: true, view: { az: Math.PI / 2, ...FULL } },
+  { name: 'Celebrate', ...READY, gaze: undefined, react: { kind: 'celebrate', at: 0.3 }, view: { az: 0.4, ...FULL } },
+  { name: 'Slump', ...READY, gaze: undefined, react: { kind: 'dismay', at: 0.7 }, view: { az: 0.4, ...FULL } },
+  { name: 'Rest pose', ...READY, gaze: undefined, rest: true, view: { az: 0, ...FULL } },
+  { name: 'Rest pose, side', ...READY, gaze: undefined, rest: true, view: { az: Math.PI / 2, ...FULL } },
   { name: 'Head, side', ...READY, aim: 'head', view: { az: Math.PI / 2, ...FACE } },
-  { name: 'Racket hand', ...READY, aim: 'hand', view: { az: 0.9, el: 0.1, dist: 1.2, y: 0, fov: 24 } },
+  { name: 'Racket hand', ...READY, gaze: [0.4, 1.08, -0.6], aim: 'hand', view: { az: 0.9, el: 0.1, dist: 1.2, y: 0, fov: 24 } },
 ];
 
 /** Warm-up before each picture (s): long enough for the springs to settle. */
@@ -149,6 +155,17 @@ function posed(style: StyleId, pose: Pose, scene: THREE.Scene) {
   const [px, py, pz] = pose.paddle;
   paddle.rotation.set(px, py * mirror, pz * mirror);
   scene.add(avatar.group, paddle);
+  let gaze: THREE.Vector3 | null = null;
+  if (pose.gaze === 'camera') {
+    const v = pose.view;
+    gaze = new THREE.Vector3(Math.sin(v.az) * v.dist, 1.62 + v.el * v.dist, -Math.cos(v.az) * v.dist);
+  } else if (pose.gaze) {
+    gaze = new THREE.Vector3(pose.gaze[0] * mirror, pose.gaze[1], pose.gaze[2]);
+    const ball = new THREE.Mesh(new THREE.SphereGeometry(0.02, 16, 12), new THREE.MeshStandardMaterial({ color: 0xfafafa, roughness: 0.4 }));
+    ball.position.copy(gaze);
+    ball.castShadow = true;
+    scene.add(ball);
+  }
   const steps = Math.round(WARM / DT);
   const reactAt = pose.react ? steps - Math.round(pose.react.at / DT) : -1;
   const body = { x: 0, z: 0 };
@@ -158,7 +175,8 @@ function posed(style: StyleId, pose: Pose, scene: THREE.Scene) {
     if (i === reactAt) avatar.react(pose.react!.kind);
     const hand = new THREE.Vector3(body.x + pose.hand[0] * mirror, pose.hand[1], body.z + pose.hand[2]);
     paddle.position.copy(hand);
-    avatar.update(body, hand, true, 10 + t); // a fixed clock: the same pose every time
+    const look = gaze && gaze.clone().add(new THREE.Vector3(body.x, 0, body.z));
+    avatar.update(body, hand, true, { now: 10 + t, gaze: look }); // a fixed clock: the same pose every time
   }
   if (pose.rest) {
     avatar.restPose();
@@ -210,7 +228,7 @@ function lineupCells(renderer: THREE.WebGLRenderer, env: THREE.Texture): Cell[] 
   const make = (az: number, label: string): Cell => {
     const scene = makeStage(renderer, env, new THREE.Vector3(), n * 0.6);
     AVATAR_STYLES.forEach((style, i) => {
-      const a = posed(style, POSES[0], scene);
+      const a = posed(style, { ...POSES[0], gaze: undefined }, scene); // no ball: the paddle is the last thing added
       const x = (i - (n - 1) / 2) * gap;
       // posed() leaves the character (and paddle) at the origin: slide the pair along.
       a.group.position.x += x;

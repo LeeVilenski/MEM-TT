@@ -3,7 +3,7 @@ import { STYLES, type StyleId } from '../../game/styles';
 import type { Fabric } from '../fabric';
 import { MaterialKit, dressBody } from './body';
 import { LOOKS, type Look } from './looks';
-import { AvatarRig, type Reaction } from './rig';
+import { AvatarRig, type PoseInput, type Reaction } from './rig';
 
 /**
  * A player character: a rig (rig.ts: the joints and the procedural animation that poses
@@ -15,7 +15,7 @@ import { AvatarRig, type Reaction } from './rig';
  */
 
 export { AVATAR_STYLES } from './looks';
-export type { Reaction } from './rig';
+export type { PoseInput, Reaction } from './rig';
 
 export class Avatar {
   readonly group: THREE.Group;
@@ -50,10 +50,10 @@ export class Avatar {
   /**
    * Place the character. body: floor position; hand: world position of the paddle
    * handle; facingNegZ: true for a player at the near end looking down the table;
-   * now: the time in seconds (defaults to the clock; pass one for a repeatable pose).
+   * input: the clock and what to look at (see PoseInput).
    */
-  update(body: { x: number; z: number }, hand: THREE.Vector3, facingNegZ: boolean, now?: number) {
-    this.rig.update(body, hand, facingNegZ, now);
+  update(body: { x: number; z: number }, hand: THREE.Vector3, facingNegZ: boolean, input?: PoseInput) {
+    this.rig.update(body, hand, facingNegZ, input);
     this.body.fit();
   }
 

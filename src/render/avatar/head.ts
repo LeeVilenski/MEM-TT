@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { paint } from '../fabric';
 import type { MaterialKit } from './body';
-import { HEAD_PIVOT, HEAD_Y } from './dimensions';
+import { EYE, HEAD_PIVOT, HEAD_Y } from './dimensions';
 import type { Look } from './looks';
 
 /**
@@ -21,7 +21,7 @@ const Y_AXIS = new THREE.Vector3(0, 1, 0);
  * Build the head on the `head` joint. Returns the inner group (positioned so its
  * children use heights on the standing body), for extra hair pieces.
  */
-export function dressHead(joint: THREE.Group, look: Look, kit: MaterialKit): THREE.Group {
+export function dressHead(joint: THREE.Group, eyes: THREE.Group[], look: Look, kit: MaterialKit): THREE.Group {
   // Built at heights on the standing body: an inner group cancels the joint's offset.
   const abs = new THREE.Group();
   abs.position.copy(HEAD_PIVOT).negate();
@@ -33,6 +33,13 @@ export function dressHead(joint: THREE.Group, look: Look, kit: MaterialKit): THR
     return m;
   };
   const decal = kit.decal;
+  /** On an eye joint (left s = −1, right s = 1), at a height on the standing body: turns with the eye. */
+  const addEye = (geo: THREE.BufferGeometry, color: number, s: number, x: number, y: number, z: number) => {
+    const m = new THREE.Mesh(geo, kit.mat(color));
+    m.position.set(x - s * EYE.x, y - EYE.y, z - EYE.z);
+    eyes[s < 0 ? 0 : 1].add(m);
+    return m;
+  };
   const HY = HEAD_Y;
   const f = look.face ?? {};
   const jawW = f.jaw ?? 1;
@@ -48,13 +55,14 @@ export function dressHead(joint: THREE.Group, look: Look, kit: MaterialKit): THR
   for (const s of [-1, 1]) {
     const ear = add(new THREE.SphereGeometry(0.024, 10, 8), look.skin, s * 0.094, HY - 0.005, 0.005);
     ear.scale.set(0.45, 1, 0.75);
-    // Eyes: a white, a coloured iris, a pupil and a catchlight, under a brow.
+    // Eyes: a white, a coloured iris and pupil (which turn to look), a catchlight (which
+    // stays put, like a reflection), under a brow.
     const ey = HY + 0.012;
     const white = add(new THREE.SphereGeometry(0.0135, 14, 10), 0xf5f5f4, s * 0.034, ey, -0.088);
     white.scale.set(1.25, 0.8, 0.5);
-    const iris = add(new THREE.SphereGeometry(0.0078, 12, 10), f.eyes ?? 0x5a4130, s * 0.034, ey, -0.0935);
+    const iris = addEye(new THREE.SphereGeometry(0.0078, 12, 10), f.eyes ?? 0x5a4130, s, s * 0.034, ey, -0.0935);
     iris.scale.z = 0.6;
-    add(new THREE.SphereGeometry(0.0042, 10, 8), 0x0b0b0c, s * 0.034, ey, -0.0972);
+    addEye(new THREE.SphereGeometry(0.0042, 10, 8), 0x0b0b0c, s, s * 0.034, ey, -0.0972);
     add(new THREE.SphereGeometry(0.0016, 6, 4), 0xffffff, s * 0.034 + 0.0028, ey + 0.0028, -0.0985);
     // Upper lid: a skin-toned crease across the top of the eye.
     const lid = add(new THREE.CapsuleGeometry(0.003, 0.024, 2, 6).rotateZ(Math.PI / 2), look.skin, s * 0.034, ey + 0.0105, -0.0915);

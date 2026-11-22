@@ -3,6 +3,7 @@ import {
   ARM_MAX,
   CASTER_R,
   COMFORT,
+  EYE,
   FORE,
   HEAD_PIVOT,
   HIP,
@@ -29,7 +30,8 @@ import {
  *   root                    floor point under the character; turns to face the table
  *   ├─ upper                hips pivot: the upper body twists, leans and bends here
  *   │  └─ upperAbs          (offset so its children use heights on the standing body)
- *   │     ├─ head           top of the neck (HEAD_PIVOT)
+ *   │     ├─ head           top of the neck (HEAD_PIVOT); turns to look at the gaze point
+ *   │     │  └─ eyes[0..1]  left then right eyeball middles (EYE): the irises look
  *   │     ├─ arm            racket arm: upper (shoulder) → fore (elbow) → hand (grip)
  *   │     └─ free           free arm, the same chain
  *   ├─ legs[0..1]           left then right: hip → knee → foot (ankle)
@@ -70,6 +72,14 @@ export interface LegJoints {
   foot: THREE.Group;
 }
 
+/** What to pose to, besides the body and hand positions. */
+export interface PoseInput {
+  /** The time in seconds (defaults to the clock; pass one for a repeatable pose). */
+  now?: number;
+  /** A world point to look at (the ball); none: look ahead, down the table. */
+  gaze?: THREE.Vector3 | null;
+}
+
 export interface RigOptions {
   /** Torso width scale (sets how far apart the shoulders and hips are). */
   build: number;
@@ -95,6 +105,8 @@ export class AvatarRig {
   readonly upperAbs = new THREE.Group();
   /** Top of the neck: the head and everything on it. */
   readonly head = new THREE.Group();
+  /** Eyeballs, left then right: they turn to look, a step ahead of the head. */
+  readonly eyes = [new THREE.Group(), new THREE.Group()];
   readonly legs: LegJoints[] = [];
   /** Racket arm (solved to the paddle handle) and the free arm (posed). */
   readonly arm = arm();
@@ -130,6 +142,10 @@ export class AvatarRig {
     this.upper.add(this.upperAbs);
     this.group.add(this.upper);
     this.head.position.copy(HEAD_PIVOT);
+    this.eyes.forEach((eye, i) => {
+      eye.position.set((i === 0 ? -1 : 1) * EYE.x, EYE.y, EYE.z).sub(HEAD_PIVOT);
+      this.head.add(eye);
+    });
     this.upperAbs.add(this.head, this.arm.upper, this.free.upper);
     // The free arm hangs down at its full length.
     this.free.fore.position.y = -UPPER;
@@ -164,6 +180,8 @@ export class AvatarRig {
     this.upper.name = 'spine';
     this.upperAbs.name = 'spine_offset';
     this.head.name = 'head';
+    this.eyes[0].name = 'eye_L';
+    this.eyes[1].name = 'eye_R';
     this.pelvis.name = 'pelvis';
     this.chair.name = 'chair';
     for (const [arm, side] of [[this.arm, bat], [this.free, freeSide]] as const) {
@@ -208,7 +226,8 @@ export class AvatarRig {
    * handle; facingNegZ: true for a player at the near end looking down the table;
    * now: the time in seconds (a fixed clock gives a repeatable pose).
    */
-  update(body: { x: number; z: number }, hand: THREE.Vector3, facingNegZ: boolean, now = performance.now() / 1000) {
+  update(body: { x: number; z: number }, hand: THREE.Vector3, facingNegZ: boolean, input: PoseInput = {}) {
+    const now = input.now ?? performance.now() / 1000;
     const dt = this.lastTime === null ? 0 : clamp(now - this.lastTime, 0, 0.1);
     this.lastTime = now;
     this.group.rotation.y = facingNegZ ? 0 : Math.PI;
@@ -221,6 +240,7 @@ export class AvatarRig {
     this.lastFreeSide = -side;
     this.animate(dt, now, body, local, side);
     this.group.updateMatrixWorld(true);
+    this.look(dt, input.gaze ?? null);
     this.solveArm(local, side);
     if (this.seated && this.push.w > 0.01) this.solvePushArm(-side);
   }
@@ -319,7 +339,7 @@ export class AvatarRig {
    * Critically damped spring toward `target` (natural frequency `w`, rad/s): eases in
    * and out instead of snapping off at full speed the moment the target moves.
    */
-  private spring(key: 'twist' | 'lean' | 'sideLean' | 'reachLean' | 'chairYaw', target: number, w: number, dt: number) {
+  private spring(key: 'twist' | 'lean' | 'sideLean' | 'reachLean' | 'chairYaw' | 'headYaw' | 'headPitch', target: number, w: number, dt: number) {
     const x = this[key];
     let v = this.springVel[key] ?? 0;
     if (dt <= 0) return x;
@@ -348,6 +368,7 @@ export class AvatarRig {
     this.upper.position.y = hipY;
     this.upper.rotation.set(0, 0, 0);
     this.head.rotation.set(0, 0, 0);
+    for (const eye of this.eyes) eye.rotation.set(0, 0, 0);
     this.pelvis.position.y = hipY - HIP;
     this.chair.rotation.y = 0;
     this.legs.forEach((leg, i) => {
@@ -377,6 +398,66 @@ export class AvatarRig {
     this.free.upper.rotation.set(0, 0, -s * out);
     this.free.fore.rotation.set(0, 0, 0);
     this.group.updateMatrixWorld(true);
+  }
+
+  private headYaw = 0;
+  private headPitch = 0;
+  /** Each eye's turn in the head (left, right): yaw and pitch. */
+  private eyeAim = [
+    { yaw: 0, pitch: 0 },
+    { yaw: 0, pitch: 0 },
+  ];
+
+  /**
+   * Look at the gaze point (the ball): the eyes get there first, the head follows with a
+   * spring, within what a neck can turn. Measured from the upper body, so the head keeps
+   * its eyes on the ball through the twist and lean of a stroke. With nothing to look at,
+   * look ahead and a little down, as at the table. Reactions take over: chin up to
+   * celebrate, head down in a slump.
+   */
+  private look(dt: number, gaze: THREE.Vector3 | null) {
+    let yaw = 0;
+    let pitch = -0.12;
+    if (gaze) {
+      const eyes = new THREE.Vector3(0, EYE.y, EYE.z);
+      const d = this.upperAbs.worldToLocal(gaze.clone()).sub(eyes);
+      // The character faces −z: turning left (+yaw) looks toward −x.
+      yaw = Math.atan2(-d.x, -d.z);
+      pitch = Math.atan2(d.y, Math.hypot(d.x, d.z));
+    }
+    const r = this.reaction;
+    if (r) {
+      const k = r.t / REACT_TIME;
+      const fade = k < 0.75 ? 1 : 1 - (k - 0.75) / 0.25;
+      const pose = r.kind === 'celebrate' ? { yaw: 0, pitch: 0.25 } : { yaw: 0, pitch: -0.45 };
+      yaw += (pose.yaw - yaw) * fade;
+      pitch += (pose.pitch - pitch) * fade;
+    }
+    const headYaw = clamp(yaw, -1.15, 1.15);
+    const headPitch = clamp(pitch, -0.75, 0.5);
+    this.headYaw = this.spring('headYaw', headYaw, 11, dt);
+    this.headPitch = this.spring('headPitch', headPitch, 11, dt);
+    this.head.rotation.set(this.headPitch, this.headYaw, 0, 'YXZ'); // +x tips the face up
+    // The eyes make up the rest, each aimed on its own (so they converge on a near ball),
+    // as far as they can turn in their sockets.
+    let local: THREE.Vector3 | null = null;
+    if (gaze && !r) {
+      this.head.updateMatrixWorld(true);
+      local = this.head.worldToLocal(gaze.clone());
+    }
+    this.eyes.forEach((eye, i) => {
+      let y = 0;
+      let p = 0;
+      if (local) {
+        const d = local.clone().sub(eye.position);
+        y = clamp(Math.atan2(-d.x, -d.z), -0.35, 0.35);
+        p = clamp(Math.atan2(d.y, Math.hypot(d.x, d.z)), -0.25, 0.25);
+      }
+      const aim = this.eyeAim[i];
+      aim.yaw = approach(aim.yaw, y, 30, dt);
+      aim.pitch = approach(aim.pitch, p, 30, dt);
+      eye.rotation.set(aim.pitch, aim.yaw, 0, 'YXZ');
+    });
   }
 
   /** Play a short reaction to a point: a jump and fist pump, or a slump. */
