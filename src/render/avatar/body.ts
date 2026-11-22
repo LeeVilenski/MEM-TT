@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { heightUVs, paint, type Fabric } from '../fabric';
 import { CASTER_R, FORE, HIP, SEAT_DROP, SHOULDER_Y, THIGH, SHIN, UPPER, WHEEL_R, torsoHalfDepth, torsoHalfWidth } from './dimensions';
+import { GRIP, HELD as HELD_IN_HAND, HOLD, RELAXED, batGrip, handGeometry } from './hand';
 import { dressHead } from './head';
 import type { Look, Mat, TorsoShape } from './looks';
 import type { ArmJoints, AvatarRig } from './rig';
@@ -206,16 +207,45 @@ export function dressBody(rig: AvatarRig, look: Look, fabric: Fabric | undefined
   const free = dressArm(rig.free, look, mat, sleeveColor, sleeveMat);
   // The free arm hangs down at fixed lengths: flip its segments to point along −y.
   free.upperMesh.scale.y = UPPER;
-  free.foreMesh.scale.y = FORE - 0.04;
+  free.foreMesh.scale.y = FORE;
   free.upperMesh.rotation.x = Math.PI;
   free.upperMesh.position.y = 0;
   free.foreMesh.rotation.x = Math.PI;
   if (free.sleeve) free.sleeve.position.y = -0.045;
-  if (look.watch !== undefined) add(new THREE.CylinderGeometry(0.033, 0.033, 0.03, 12), look.watch, 0, -(FORE - 0.07), 0, rig.free.fore);
+  if (look.watch !== undefined) add(new THREE.CylinderGeometry(0.031, 0.031, 0.026, 14), look.watch, 0, -(FORE - 0.03), 0, rig.free.fore);
+
+  // ---- hands
+  const s = rig.batHand;
+  // Racket hand: built round the handle in the bat's frame (the hand joint's frame),
+  // mirrored across the bat for a left hand.
+  const grip = batGrip();
+  const gripFrame = new THREE.Group();
+  gripFrame.name = 'grip';
+  gripFrame.position.set(-s * grip.wrist.x, -grip.wrist.y, -grip.wrist.z); // the middle of the handle
+  gripFrame.scale.x = s;
+  const batHand = new THREE.Mesh(handGeometry(GRIP), mat(look.skin));
+  batHand.position.copy(grip.wrist);
+  batHand.quaternion.copy(grip.rotation);
+  gripFrame.add(batHand);
+  rig.arm.hand.add(gripFrame);
+  // Free hand: hanging loose (or round a bottle), palm to the thigh, thumb forward. Built
+  // for a right hand on the right; mirrored for the left.
+  const fs = -s;
+  const freeFrame = new THREE.Group();
+  freeFrame.scale.x = fs;
+  const freeHand = new THREE.Mesh(handGeometry(look.bottle !== undefined ? HOLD : RELAXED), mat(look.skin));
+  // Hand frame → arm: fingers down (−y), palm inward (−x), thumb forward (−z).
+  freeHand.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(new THREE.Vector3(0, 0, -1), new THREE.Vector3(0, -1, 0), new THREE.Vector3(-1, 0, 0)));
+  freeFrame.add(freeHand);
+  rig.free.hand.add(freeFrame);
   if (look.bottle !== undefined) {
-    const bottle = add(new THREE.CylinderGeometry(0.03, 0.03, 0.17, 14), look.bottle, 0, -(FORE + 0.0), -0.03, rig.free.fore);
-    bottle.rotation.x = Math.PI / 2.2;
-    add(new THREE.CylinderGeometry(0.017, 0.02, 0.03, 10), 0xf3f4f6, 0, 0.1, 0, bottle);
+    // Held across the fingers, cap up by the thumb.
+    const bottle = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.17, 16).rotateZ(-Math.PI / 2), mat(look.bottle));
+    bottle.position.copy(HELD_IN_HAND);
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.017, 0.02, 0.03, 10).rotateZ(-Math.PI / 2), mat(0xf3f4f6));
+    cap.position.x = 0.1;
+    bottle.add(cap);
+    freeHand.add(bottle);
   }
 
   look.accessory?.(rig.upperAbs, mat, torso);
@@ -224,12 +254,12 @@ export function dressBody(rig: AvatarRig, look: Look, fabric: Fabric | undefined
   return {
     fit() {
       racket.upperMesh.scale.y = rig.arm.fore.position.y;
-      racket.foreMesh.scale.y = Math.max(0.01, rig.arm.hand.position.y - 0.03);
+      racket.foreMesh.scale.y = Math.max(0.01, rig.arm.hand.position.y);
     },
   };
 }
 
-/** Sleeve (if any), upper arm, elbow, forearm and hand on an arm's joints; segments along +y. */
+/** Sleeve (if any), upper arm, elbow and forearm on an arm's joints; segments along +y. The hands are added separately. */
 function dressArm(j: ArmJoints, look: Look, mat: Mat, sleeveColor: number | null, sleeveMat: THREE.Material | null): ArmMeshes {
   // Long sleeves cover the arm down to the wrist (a touch thicker than bare skin).
   const armColor = look.longSleeves && sleeveColor !== null ? sleeveColor : look.skin;
@@ -247,9 +277,6 @@ function dressArm(j: ArmJoints, look: Look, mat: Mat, sleeveColor: number | null
   j.fore.add(new THREE.Mesh(new THREE.SphereGeometry(0.036 * thick, 12, 8), armMat));
   const foreMesh = new THREE.Mesh(limb(0.035 * thick, 0.027 * thick), armMat);
   j.fore.add(foreMesh);
-  const hand = new THREE.Mesh(new THREE.SphereGeometry(0.036, 12, 10), mat(look.skin));
-  hand.scale.set(0.85, 1.15, 0.7);
-  j.hand.add(hand);
   return { upperMesh, foreMesh, sleeve };
 }
 

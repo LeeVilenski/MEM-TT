@@ -18,6 +18,7 @@ import {
   WHEEL_R,
   shoulderOffset,
 } from './dimensions';
+import { batGrip } from './hand';
 
 /**
  * The character's skeleton and everything that moves it: a hierarchy of joints (plain
@@ -40,9 +41,11 @@ import {
  * Seated characters put the legs and pelvis on a `chair` joint (which turns as they
  * wheel about), with spinning wheels, swivelling casters and a push arm on the rim.
  *
- * Arm conventions: the racket arm's segments point along +y, solved each frame to the
- * handle (the bones can stretch a little past straight: read the lengths from
- * fore.position.y and hand.position.y). The free arm hangs along −y at fixed lengths.
+ * Arm conventions: the racket arm's segments point along +y, solved each frame so the
+ * hand holds the paddle handle: the arm reaches for the wrist, and the hand joint takes
+ * the bat's orientation (x across the blade, y up the handle, z out of the forehand
+ * rubber). The bones can stretch past straight for a ball out of reach: read the lengths
+ * from fore.position.y and hand.position.y. The free arm hangs along −y at fixed lengths.
  */
 
 export type Reaction = 'celebrate' | 'dismay';
@@ -78,7 +81,18 @@ export interface PoseInput {
   now?: number;
   /** A world point to look at (the ball); none: look ahead, down the table. */
   gaze?: THREE.Vector3 | null;
+  /**
+   * How the bat is held, as its world orientation: x across the blade, y up the handle
+   * toward the blade, z out of the forehand rubber (see gripQuaternion in playerView.ts).
+   * None: blade up, forehand facing ahead.
+   */
+  grip?: THREE.Quaternion | null;
 }
+
+/** Where the wrist is in the bat's frame, for a right hand (hand.ts). */
+const WRIST_IN_BAT = batGrip().wrist;
+/** The default bat: blade up, the forehand rubber facing ahead (local −z). */
+const BAT_AHEAD = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
 
 export interface RigOptions {
   /** Torso width scale (sets how far apart the shoulders and hips are). */
@@ -149,7 +163,7 @@ export class AvatarRig {
     this.upperAbs.add(this.head, this.arm.upper, this.free.upper);
     // The free arm hangs down at its full length.
     this.free.fore.position.y = -UPPER;
-    this.free.hand.position.y = -(FORE - 0.02);
+    this.free.hand.position.y = -FORE;
     // Legs: hip → knee → ankle, each joint a group so the stance can bend.
     for (const x of [-HIP_X, HIP_X]) {
       const hip = new THREE.Group();
@@ -241,7 +255,15 @@ export class AvatarRig {
     this.animate(dt, now, body, local, side);
     this.group.updateMatrixWorld(true);
     this.look(dt, input.gaze ?? null);
-    this.solveArm(local, side);
+    // The bat in the character's frame, and the wrist that holds it there.
+    const groupQ = this.group.getWorldQuaternion(new THREE.Quaternion());
+    const bat = input.grip ? groupQ.clone().invert().multiply(input.grip) : BAT_AHEAD.clone();
+    const wrist = new THREE.Vector3(side * WRIST_IN_BAT.x, WRIST_IN_BAT.y, WRIST_IN_BAT.z).applyQuaternion(bat).add(local);
+    this.solveArm(wrist, side);
+    // The hand turns to the bat (its frame is the bat's; body.ts places the fingers round the handle).
+    this.arm.fore.updateWorldMatrix(true, false);
+    const foreQ = this.arm.fore.getWorldQuaternion(new THREE.Quaternion());
+    this.arm.hand.quaternion.copy(foreQ.invert().multiply(groupQ).multiply(bat));
     if (this.seated && this.push.w > 0.01) this.solvePushArm(-side);
   }
 
@@ -258,7 +280,7 @@ export class AvatarRig {
     const t = this.upperAbs.worldToLocal(camber.localToWorld(onRim));
     const shoulder = new THREE.Vector3(fs * this.shoulderX, SHOULDER_Y, 0);
     const l1 = UPPER;
-    const l2 = FORE - 0.02;
+    const l2 = FORE;
     const d = t.sub(shoulder);
     const dist = clamp(d.length(), 0.15, l1 + l2 - 1e-4);
     const dir = d.normalize();
@@ -393,6 +415,15 @@ export class AvatarRig {
     a.fore.position.set(0, UPPER, 0);
     a.fore.quaternion.identity();
     a.hand.position.set(0, FORE, 0);
+    // The racket hand hangs empty: fingers down the arm, palm to the thigh, thumb forward.
+    // Its joint takes a bat's frame, so turn an imaginary bat to put the hand there.
+    const hang = new THREE.Quaternion().setFromRotationMatrix(
+      new THREE.Matrix4().makeBasis(new THREE.Vector3(0, 0, -1), new THREE.Vector3(0, 1, 0), new THREE.Vector3(1, 0, 0)),
+    );
+    const held = hang.multiply(batGrip().rotation.invert());
+    // A left hand is the mirror image (mirroring across x keeps x and negates y and z).
+    if (s < 0) held.set(held.x, -held.y, -held.z, held.w);
+    a.hand.quaternion.copy(held);
     // Free arm (segments along −y): the same, on the other side.
     this.free.upper.position.set(-s * this.shoulderX, SHOULDER_Y, 0);
     this.free.upper.rotation.set(0, 0, -s * out);

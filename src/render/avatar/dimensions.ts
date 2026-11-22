@@ -11,11 +11,11 @@ export const HIP = 0.83;
 export const SHOULDER_Y = 1.375;
 /** Reactions to a point, played for this long (s). */
 export const REACT_TIME = 1.5;
-/** Racket arm: upper arm and forearm (to the grip) lengths, m. */
+/** Arm bones: upper arm (shoulder to elbow) and forearm (elbow to wrist), m. The hand is in hand.ts. */
 export const UPPER = 0.3;
-export const FORE = 0.31;
-/** Longest the racket arm may stretch (shoulder to handle, m): a little past straight. */
-export const ARM_MAX = 0.84;
+export const FORE = 0.255;
+/** Longest the racket arm may stretch (shoulder to wrist, m): past straight, for balls out of reach. */
+export const ARM_MAX = 0.765;
 /** Shoulder to hand within this, the body doesn't need to reach. */
 export const COMFORT = 0.6;
 /** Leg segments. */

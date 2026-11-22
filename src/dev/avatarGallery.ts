@@ -2,7 +2,10 @@ import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
 import { STYLES, type StyleId } from '../game/styles';
+import type { StrokeSide } from '../game/swing';
+import { PADDLE } from '../physics';
 import { AVATAR_STYLES, Avatar } from '../render/avatar';
+import { bladeQuaternion, gripQuaternion } from '../render/playerView';
 
 /**
  * Developer page (avatars.html, `npm run dev` then /avatars.html): every character in a
@@ -10,12 +13,14 @@ import { AVATAR_STYLES, Avatar } from '../render/avatar';
  * The poses are stepped with a fixed clock, so the same code always draws the same
  * picture: scripts/avatar-shots.mjs screenshots this page and compares against a baseline.
  *
- * URL: ?style=<StyleId>|lineup  &variant=<n> (which shirt, for wardrobes)  &shot=1 (no UI).
+ * URL: ?style=<StyleId>|lineup  &variant=<n> (which shirt, for wardrobes)  &shot=1 (no UI)
+ *      &pose=<name> (just that picture, large: e.g. pose=Racket hand)  &az=<rad> (turn the view round).
  * Drag a cell sideways to turn the view round the character.
  */
 
-const CELL = 400;
-const COLS = 4;
+const onePose = new URLSearchParams(location.search).get('pose');
+const CELL = onePose ? 800 : 400;
+const COLS = onePose ? 1 : 4;
 /** Fixed step for the pose warm-up (s). */
 const DT = 1 / 60;
 
@@ -38,8 +43,9 @@ interface Pose {
   rest?: boolean;
   /** Paddle handle, relative to the feet, for a right-hander facing −z (mirrored for left-handers). */
   hand: [number, number, number];
-  /** Paddle rotation (Euler XYZ) for a right-hander. */
-  paddle: [number, number, number];
+  /** The hitting face's direction (as the game's paddle normal) for a right-hander, and the wing. */
+  normal: [number, number, number];
+  wing: StrokeSide;
   /** Sideways speed while posing (m/s): the shuffle. */
   move?: number;
   /**
@@ -56,7 +62,7 @@ const FULL: Omit<View, 'az'> = { el: 0.08, dist: 4.4, y: 0.92 };
 /** Face close-ups aim at the head wherever the pose put it (y is filled in then). */
 const FACE: Omit<View, 'az'> = { el: 0.04, dist: 1.2, y: 0, fov: 24 };
 /** Ready, watching a ball coming over the net. */
-const READY: Pick<Pose, 'hand' | 'paddle' | 'gaze'> = { hand: [0.38, 1.0, -0.38], paddle: [-0.3, 0.4, -0.25], gaze: [0.15, 1.15, -2.2] };
+const READY: Pick<Pose, 'hand' | 'normal' | 'wing' | 'gaze'> = { hand: [0.38, 1.0, -0.38], normal: [-0.2, 0.1, -1], wing: 'forehand', gaze: [0.15, 1.15, -2.2] };
 
 const POSES: Pose[] = [
   { name: 'Front', ...READY, view: { az: 0, ...FULL } },
@@ -64,10 +70,10 @@ const POSES: Pose[] = [
   { name: 'Back', ...READY, view: { az: Math.PI, ...FULL } },
   { name: 'Face', ...READY, gaze: 'camera', aim: 'head', view: { az: 0, ...FACE } },
   { name: 'Face ¾', ...READY, gaze: 'camera', aim: 'head', view: { az: 0.7, ...FACE } },
-  { name: 'Forehand, wide', hand: [0.82, 1.0, -0.3], paddle: [-0.2, 0.6, -0.9], gaze: [0.85, 1.12, -0.6], view: { az: 0.6, ...FULL } },
-  { name: 'Backhand', hand: [-0.24, 1.0, -0.42], paddle: [-0.2, -0.4, 0.6], gaze: [-0.24, 1.1, -0.7], view: { az: -0.5, ...FULL } },
-  { name: 'Low ball', hand: [0.45, 0.45, -0.5], paddle: [-0.5, 0.4, -1.3], gaze: [0.45, 0.55, -0.8], view: { az: 0.9, ...FULL } },
-  { name: 'Smash', hand: [0.4, 1.8, -0.15], paddle: [-0.7, 0.3, -0.2], gaze: [0.4, 1.95, -0.45], view: { az: 0.7, ...FULL } },
+  { name: 'Forehand, wide', hand: [0.82, 1.0, -0.3], normal: [-0.4, 0.15, -1], wing: 'forehand', gaze: [0.85, 1.12, -0.6], view: { az: 0.6, ...FULL } },
+  { name: 'Backhand', hand: [-0.24, 1.0, -0.42], normal: [0.2, 0.1, -1], wing: 'backhand', gaze: [-0.24, 1.1, -0.7], view: { az: -0.5, ...FULL } },
+  { name: 'Low ball', hand: [0.45, 0.45, -0.5], normal: [-0.1, 0.7, -1], wing: 'forehand', gaze: [0.45, 0.55, -0.8], view: { az: 0.9, ...FULL } },
+  { name: 'Smash', hand: [0.4, 1.8, -0.15], normal: [-0.1, -0.35, -1], wing: 'forehand', gaze: [0.4, 1.95, -0.45], view: { az: 0.7, ...FULL } },
   { name: 'Moving', ...READY, move: 1.6, view: { az: 0.4, ...FULL } },
   { name: 'Celebrate', ...READY, gaze: undefined, react: { kind: 'celebrate', at: 0.3 }, view: { az: 0.4, ...FULL } },
   { name: 'Slump', ...READY, gaze: undefined, react: { kind: 'dismay', at: 0.7 }, view: { az: 0.4, ...FULL } },
@@ -86,15 +92,27 @@ const styleParam = params.get('style') ?? 'allround';
 const variant = Number(params.get('variant') ?? 0);
 if (shotMode) document.body.classList.add('shot');
 
-function makePaddle() {
+/**
+ * A bat as the game draws it (playerView.ts), with its origin at the middle of the
+ * handle: red rubber on the hitting face (+z) for a forehand, black for a backhand.
+ */
+function makePaddle(wing: StrokeSide) {
   const g = new THREE.Group();
-  const face = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.075, 0.075, 0.008, 32).rotateX(Math.PI / 2),
-    new THREE.MeshStandardMaterial({ color: 0xc8202a, roughness: 0.6 }),
-  );
-  face.position.y = 0.13;
+  const lift = (PADDLE.radius + 0.045) * 1.06; // handle middle to blade middle
+  const disc = new THREE.CylinderGeometry(PADDLE.radius, PADDLE.radius, 0.002, 40).rotateX(Math.PI / 2);
+  const rubber = (color: number, z: number) => {
+    const m = new THREE.Mesh(disc, new THREE.MeshStandardMaterial({ color, roughness: 0.6 }));
+    m.position.set(0, lift, z);
+    m.scale.y = 1.06;
+    return m;
+  };
+  const fh = wing === 'forehand';
+  const core = new THREE.Mesh(new THREE.CylinderGeometry(PADDLE.radius - 0.002, PADDLE.radius - 0.002, 0.007, 40).rotateX(Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0xd8b07a, roughness: 0.7 }));
+  core.position.y = lift;
+  core.scale.y = 1.06;
   const handle = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.1, 0.024), new THREE.MeshStandardMaterial({ color: 0x8a5a2b, roughness: 0.7 }));
-  g.add(face, handle);
+  handle.scale.y = 1.06;
+  g.add(rubber(fh ? 0xc8202a : 0x15161a, 0.0045), rubber(fh ? 0x15161a : 0xc8202a, -0.0045), core, handle);
   g.traverse((o) => (o.castShadow = true));
   return g;
 }
@@ -151,9 +169,9 @@ function placeCamera(c: Cell) {
 function posed(style: StyleId, pose: Pose, scene: THREE.Scene) {
   const avatar = new Avatar(style, 1, variant);
   const mirror = STYLES[style].leftHanded ? -1 : 1;
-  const paddle = makePaddle();
-  const [px, py, pz] = pose.paddle;
-  paddle.rotation.set(px, py * mirror, pz * mirror);
+  const paddle = makePaddle(pose.wing);
+  const n = new THREE.Vector3(pose.normal[0] * mirror, pose.normal[1], pose.normal[2]).normalize();
+  const grip = new THREE.Quaternion();
   scene.add(avatar.group, paddle);
   let gaze: THREE.Vector3 | null = null;
   if (pose.gaze === 'camera') {
@@ -175,8 +193,10 @@ function posed(style: StyleId, pose: Pose, scene: THREE.Scene) {
     if (i === reactAt) avatar.react(pose.react!.kind);
     const hand = new THREE.Vector3(body.x + pose.hand[0] * mirror, pose.hand[1], body.z + pose.hand[2]);
     paddle.position.copy(hand);
+    bladeQuaternion(n, -pose.hand[0] * mirror, paddle.quaternion);
+    gripQuaternion(paddle.quaternion, pose.wing, grip);
     const look = gaze && gaze.clone().add(new THREE.Vector3(body.x, 0, body.z));
-    avatar.update(body, hand, true, { now: 10 + t, gaze: look }); // a fixed clock: the same pose every time
+    avatar.update(body, hand, true, { now: 10 + t, gaze: look, grip }); // a fixed clock: the same pose every time
   }
   if (pose.rest) {
     avatar.restPose();
@@ -207,11 +227,12 @@ function headCentre(avatar: Avatar) {
 }
 
 function characterCells(style: StyleId, renderer: THREE.WebGLRenderer, env: THREE.Texture): Cell[] {
-  return POSES.map((pose) => {
+  return POSES.filter((p) => !onePose || p.name === onePose).map((pose) => {
     const scene = makeStage(renderer, env);
     const avatar = posed(style, pose, scene);
     const camera = new THREE.PerspectiveCamera(pose.view.fov ?? 30, 1, 0.05, 50);
     const view = { ...pose.view };
+    view.az += Number(params.get('az') ?? 0); // ?az=: turn the camera further round (single pictures)
     const target = new THREE.Vector3();
     if (pose.aim) {
       const h = pose.aim === 'head' ? headCentre(avatar) : avatar.rig.arm.hand.getWorldPosition(new THREE.Vector3());

@@ -3,11 +3,16 @@ import { describe, expect, it } from 'vitest';
 import { STYLES } from '../src/game/styles';
 import { AVATAR_STYLES, Avatar } from '../src/render/avatar';
 import { ARM_MAX, HEAD_PIVOT, SHOULDER_Y } from '../src/render/avatar/dimensions';
+import { bladeQuaternion, gripQuaternion } from '../src/render/playerView';
 
 const DT = 1 / 60;
 
 /** Step a character through a pose with a fixed clock; the hand is relative to the body. */
-function pose(a: Avatar, hand: [number, number, number], opts: { seconds?: number; move?: number; t0?: number; gaze?: [number, number, number] } = {}) {
+function pose(
+  a: Avatar,
+  hand: [number, number, number],
+  opts: { seconds?: number; move?: number; t0?: number; gaze?: [number, number, number]; grip?: THREE.Quaternion } = {},
+) {
   const steps = Math.round((opts.seconds ?? 1) / DT);
   const body = { x: 0, z: 0.4 };
   const target = new THREE.Vector3();
@@ -15,7 +20,7 @@ function pose(a: Avatar, hand: [number, number, number], opts: { seconds?: numbe
     body.x = (opts.move ?? 0) * i * DT;
     target.set(body.x + hand[0], hand[1], body.z + hand[2]);
     const g = opts.gaze;
-    a.update(body, target, true, { now: (opts.t0 ?? 5) + i * DT, gaze: g && new THREE.Vector3(body.x + g[0], g[1], body.z + g[2]) });
+    a.update(body, target, true, { now: (opts.t0 ?? 5) + i * DT, gaze: g && new THREE.Vector3(body.x + g[0], g[1], body.z + g[2]), grip: opts.grip });
   }
   a.group.updateMatrixWorld(true);
   return target;
@@ -52,27 +57,38 @@ describe('avatar rig', () => {
     }
   });
 
-  it('puts the racket hand on the paddle handle, and stretches no further than full reach', () => {
+  /** A bat held with the forehand rubber facing `n` (blade up), as the game does it. */
+  const bat = (n: [number, number, number], wing: 'forehand' | 'backhand', towardBody = 0) =>
+    gripQuaternion(bladeQuaternion({ x: n[0], y: n[1], z: n[2] }, towardBody), wing);
+
+  it('holds the paddle handle in the hand, turned with the bat, and reaches no further than a straight arm', () => {
     for (const s of AVATAR_STYLES) {
       const a = new Avatar(s, 1, 0);
       const side = STYLES[s].leftHanded ? -1 : 1;
-      for (const h of [
-        [0.38, 1.0, -0.38],
-        [0.7, 0.9, -0.3],
-        [-0.2, 1.0, -0.45],
-        [0.4, 1.6, -0.2],
-      ] as [number, number, number][]) {
-        const target = pose(a, [h[0] * side, h[1], h[2]]);
-        const hand = worldPos(a.rig.arm.hand);
+      const grip = a.group.getObjectByName('grip')!;
+      for (const [h, q] of [
+        [[0.38, 1.0, -0.38], bat([-0.2, 0.1, -1], 'forehand')],
+        [[0.7, 0.9, -0.3], bat([-0.4, 0.2, -1], 'forehand', -0.3)],
+        [[-0.2, 1.0, -0.45], bat([0.2, 0.1, -1], 'backhand', 0.2)],
+        [[0.4, 1.6, -0.2], bat([0, -0.3, -1], 'forehand')],
+        [[0.45, 0.45, -0.5], undefined],
+      ] as [[number, number, number], THREE.Quaternion | undefined][]) {
+        const target = pose(a, [h[0] * side, h[1], h[2]], { grip: q });
+        // The wrist is where the arm reaches; the grip (the middle of the handle in the hand) is on the handle.
+        const wrist = worldPos(a.rig.arm.hand);
         const shoulder = worldPos(a.rig.arm.upper);
         const reach = ARM_MAX * a.group.scale.y;
-        if (shoulder.distanceTo(target) <= reach) expect(hand.distanceTo(target), `${s} ${h}`).toBeLessThan(1e-3);
-        else {
-          // Out of reach: straight at the target, as far as the arm goes.
-          expect(hand.distanceTo(shoulder)).toBeCloseTo(reach, 3);
-          const toTarget = target.clone().sub(shoulder).normalize();
-          expect(hand.clone().sub(shoulder).normalize().dot(toTarget)).toBeGreaterThan(0.999);
-        }
+        const wristToHandle = target.distanceTo(wrist);
+        expect(wristToHandle, s).toBeGreaterThan(0.05);
+        expect(wristToHandle, s).toBeLessThan(0.14);
+        if (shoulder.distanceTo(wrist) < reach - 1e-4) {
+          expect(worldPos(grip).distanceTo(target), `${s} ${h}`).toBeLessThan(1e-3);
+          // The hand turns with the bat: the handle runs the same way in the hand as in the bat.
+          if (q) {
+            const handle = new THREE.Vector3(0, 1, 0).transformDirection(grip.matrixWorld);
+            expect(handle.dot(new THREE.Vector3(0, 1, 0).applyQuaternion(q)), `${s} ${h}`).toBeGreaterThan(0.999);
+          }
+        } else expect(shoulder.distanceTo(wrist), `${s} ${h}`).toBeCloseTo(reach, 3);
       }
     }
   });
@@ -80,9 +96,12 @@ describe('avatar rig', () => {
   it('a ball out of reach is followed, not reached', () => {
     const a = new Avatar('allround', 1, 0);
     const target = pose(a, [1.6, 1.0, -0.3]);
-    const hand = worldPos(a.rig.arm.hand);
-    expect(hand.distanceTo(target)).toBeGreaterThan(0.1);
-    expect(hand.distanceTo(worldPos(a.rig.arm.upper))).toBeCloseTo(ARM_MAX * a.group.scale.y, 3);
+    const wrist = worldPos(a.rig.arm.hand);
+    expect(wrist.distanceTo(target)).toBeGreaterThan(0.2);
+    expect(wrist.distanceTo(worldPos(a.rig.arm.upper))).toBeCloseTo(ARM_MAX * a.group.scale.y, 3);
+    // Straight toward it.
+    const toBall = target.clone().sub(worldPos(a.rig.arm.upper)).normalize();
+    expect(wrist.clone().sub(worldPos(a.rig.arm.upper)).normalize().dot(toBall)).toBeGreaterThan(0.99);
   });
 
   it('hangs everything on the head from the head joint, so a head can be turned or swapped whole', () => {

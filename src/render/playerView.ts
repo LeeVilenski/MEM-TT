@@ -24,6 +24,36 @@ const FOLLOW_OUT = 0.12;
 const FOLLOW_TIME = 0.42;
 
 /**
+ * The blade's orientation for a stroke: the hitting face (local +z) along the normal,
+ * the tip up, and the handle tipped back toward the player's hand. towardBody: the body's
+ * x minus the blade's x (m).
+ */
+export function bladeQuaternion(normal: Vec3, towardBody: number, out = new THREE.Quaternion()) {
+  const n = normalize(normal);
+  let up = sub(UP, scale(n, dot(UP, n)));
+  up = normalize(up);
+  const right = normalize(cross(up, n));
+  const tilt = Math.max(-0.9, Math.min(0.9, towardBody * 1.6));
+  const tipUp = normalize({ x: up.x - right.x * tilt, y: up.y - right.y * tilt, z: up.z - right.z * tilt });
+  const x = normalize(cross(tipUp, n));
+  const m = new THREE.Matrix4().makeBasis(new THREE.Vector3(x.x, x.y, x.z), new THREE.Vector3(tipUp.x, tipUp.y, tipUp.z), new THREE.Vector3(n.x, n.y, n.z));
+  return out.setFromRotationMatrix(m);
+}
+
+const HALF_TURN = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
+
+/**
+ * The bat as held, for the character's hand: the blade is drawn with the hitting face at
+ * +z (its rubber coloured for the wing), but on a backhand the rubber hitting the ball is
+ * the backhand one, so the real bat is the drawn one turned half round its handle. The
+ * result has the forehand rubber at +z, as the avatar expects.
+ */
+export function gripQuaternion(blade: THREE.Quaternion, wing: StrokeSide, out = new THREE.Quaternion()) {
+  out.copy(blade);
+  return wing === 'backhand' ? out.multiply(HALF_TURN) : out;
+}
+
+/**
  * Paddle + simple body avatar, plus the intercept marker that shows where the
  * incoming ball will reach the hitting plane.
  */
@@ -103,6 +133,7 @@ export class PlayerView {
   /** Where the character's eyes go (the ball), if anywhere. */
   private gazeSource: (() => Vec3 | null) | null = null;
   private gaze = new THREE.Vector3();
+  private grip = new THREE.Quaternion();
 
   /** Have the character watch something (the ball): asked for its position each frame; null when there's nothing to see. */
   watch(source: () => Vec3 | null) {
@@ -245,17 +276,9 @@ export class PlayerView {
   updatePose(pose: PaddlePose, bodyPos: { x: number; z: number }, wing: StrokeSide, forward = 0) {
     this.last = { pose, body: bodyPos, wing, forward };
     const n = pose.normal;
-    // Blade frame: local +z = face normal, local +y = "up" along the blade toward its tip.
-    let up = sub(UP, scale(n, dot(UP, n)));
-    up = normalize(up);
-    // Tilt the blade so the handle points back toward the player's hand.
-    const towardBody = bodyPos.x - pose.pos.x;
-    const right = normalize(cross(up, n));
-    const tilt = Math.max(-0.9, Math.min(0.9, towardBody * 1.6));
-    const tipUp = normalize({ x: up.x - right.x * tilt, y: up.y - right.y * tilt, z: up.z - right.z * tilt });
-    const x = normalize(cross(tipUp, n));
-    const m = new THREE.Matrix4().makeBasis(new THREE.Vector3(x.x, x.y, x.z), new THREE.Vector3(tipUp.x, tipUp.y, tipUp.z), new THREE.Vector3(n.x, n.y, n.z));
-    this.paddle.quaternion.setFromRotationMatrix(m);
+    // Blade frame: local +z = face normal, local +y = "up" along the blade toward its tip,
+    // tilted so the handle points back toward the player's hand.
+    bladeQuaternion(n, bodyPos.x - pose.pos.x, this.paddle.quaternion);
     // Draw the stroke's forward lunge along the face normal (contact itself happens at the rest plane).
     this.paddle.position.set(pose.pos.x + n.x * forward, pose.pos.y, pose.pos.z + n.z * forward);
 
@@ -271,7 +294,7 @@ export class PlayerView {
       const hand = new THREE.Vector3();
       this.handle.getWorldPosition(hand);
       const g = this.gazeSource?.() ?? null;
-      this.avatar.update(bodyPos, hand, bodyPos.z >= 0, { gaze: g && this.gaze.set(g.x, g.y, g.z) });
+      this.avatar.update(bodyPos, hand, bodyPos.z >= 0, { gaze: g && this.gaze.set(g.x, g.y, g.z), grip: gripQuaternion(this.paddle.quaternion, wing, this.grip) });
     } else this.body.position.set(bodyPos.x, 0, bodyPos.z);
     this.shadow.position.set(bodyPos.x, 0.002, bodyPos.z);
   }
