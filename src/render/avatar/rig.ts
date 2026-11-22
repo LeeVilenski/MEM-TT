@@ -58,22 +58,33 @@ const NEG_Y = new THREE.Vector3(0, -1, 0);
 /** Shortest signed difference between two angles. */
 const angleDiff = (a: number, b: number) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 /** Push stroke on the hand rim: from behind the top (θ < 0) round to the front (θ > 0), rad. */
-/** Push stroke on the hand rim: from behind the top (θ < 0) round to the front (θ > 0), rad. */
 const PUSH_FROM = -0.6;
 const PUSH_TO = 0.5;
 
-/** One arm: shoulder, elbow and hand joints, each a child of the one before. */
+/**
+ * One arm: shoulder, elbow and hand joints, each a child of the one before, plus helper
+ * bones that only shape the skin: `upperStretch` and `foreStretch` (children of the
+ * shoulder and elbow) stretch along their bones when the arm reaches past straight, and
+ * `twist` (three, children of the elbow) share the forearm's turn out along it, a third
+ * each, so the wrist doesn't pinch.
+ */
 export interface ArmJoints {
-  upper: THREE.Group;
-  fore: THREE.Group;
-  hand: THREE.Group;
+  upper: THREE.Bone;
+  fore: THREE.Bone;
+  hand: THREE.Bone;
+  upperStretch: THREE.Bone;
+  foreStretch: THREE.Bone;
+  twist: [THREE.Bone, THREE.Bone, THREE.Bone];
 }
 
 export interface LegJoints {
-  hip: THREE.Group;
-  knee: THREE.Group;
-  foot: THREE.Group;
+  hip: THREE.Bone;
+  knee: THREE.Bone;
+  foot: THREE.Bone;
 }
+
+/** How many twist helpers share the forearm's turn, and the most they turn in all (rad). */
+const TWIST_MAX = 2.6;
 
 /** What to pose to, besides the body and hand positions. */
 export interface PoseInput {
@@ -103,30 +114,33 @@ export interface RigOptions {
 }
 
 const arm = (): ArmJoints => {
-  const upper = new THREE.Group();
-  const fore = new THREE.Group();
-  const hand = new THREE.Group();
-  upper.add(fore);
-  fore.add(hand);
-  return { upper, fore, hand };
+  const upper = new THREE.Bone();
+  const fore = new THREE.Bone();
+  const hand = new THREE.Bone();
+  const upperStretch = new THREE.Bone();
+  const foreStretch = new THREE.Bone();
+  const twist: [THREE.Bone, THREE.Bone, THREE.Bone] = [new THREE.Bone(), new THREE.Bone(), new THREE.Bone()];
+  upper.add(fore, upperStretch);
+  fore.add(hand, foreStretch, ...twist);
+  return { upper, fore, hand, upperStretch, foreStretch, twist };
 };
 
 export class AvatarRig {
   readonly group = new THREE.Group();
   /** Upper body, pivoting at the hips (twist into strokes, lean, reactions). */
-  readonly upper = new THREE.Group();
+  readonly upper = new THREE.Bone();
   /** Inside `upper`, offset so its children use absolute heights. */
-  readonly upperAbs = new THREE.Group();
+  readonly upperAbs = new THREE.Bone();
   /** Top of the neck: the head and everything on it. */
-  readonly head = new THREE.Group();
+  readonly head = new THREE.Bone();
   /** Eyeballs, left then right: they turn to look, a step ahead of the head. */
-  readonly eyes = [new THREE.Group(), new THREE.Group()];
+  readonly eyes = [new THREE.Bone(), new THREE.Bone()];
   readonly legs: LegJoints[] = [];
   /** Racket arm (solved to the paddle handle) and the free arm (posed). */
   readonly arm = arm();
   readonly free = arm();
   /** Hips and waistband: follows the legs' bend and hop. */
-  readonly pelvis = new THREE.Group();
+  readonly pelvis = new THREE.Bone();
   /** Chair, legs and hips: turns (yaws) as she wheels about, under the upper body. */
   readonly chair = new THREE.Group();
   /** Rear wheels, left then right: spin group (rolls) and camber group (the push rim's frame). */
@@ -166,11 +180,11 @@ export class AvatarRig {
     this.free.hand.position.y = -FORE;
     // Legs: hip → knee → ankle, each joint a group so the stance can bend.
     for (const x of [-HIP_X, HIP_X]) {
-      const hip = new THREE.Group();
+      const hip = new THREE.Bone();
       hip.position.set(x * o.build, HIP, 0);
-      const knee = new THREE.Group();
+      const knee = new THREE.Bone();
       knee.position.y = -THIGH;
-      const foot = new THREE.Group();
+      const foot = new THREE.Bone();
       foot.position.y = -SHIN;
       hip.add(knee);
       knee.add(foot);
@@ -202,6 +216,9 @@ export class AvatarRig {
       arm.upper.name = `shoulder_${side}`;
       arm.fore.name = `elbow_${side}`;
       arm.hand.name = `hand_${side}`;
+      arm.upperStretch.name = `upperarm_stretch_${side}`;
+      arm.foreStretch.name = `forearm_stretch_${side}`;
+      arm.twist.forEach((b, i) => (b.name = `forearm_twist${i + 1}_${side}`));
     }
     this.legs.forEach((leg, i) => {
       const side = i === 0 ? 'L' : 'R';
@@ -264,7 +281,55 @@ export class AvatarRig {
     this.arm.fore.updateWorldMatrix(true, false);
     const foreQ = this.arm.fore.getWorldQuaternion(new THREE.Quaternion());
     this.arm.hand.quaternion.copy(foreQ.invert().multiply(groupQ).multiply(bat));
+    this.shapeArm();
     if (this.seated && this.push.w > 0.01) this.solvePushArm(-side);
+  }
+
+  /** The hand's turn in the forearm when the forearm isn't twisted (palm in, thumb forward): see rest(). */
+  private neutralHand?: THREE.Quaternion;
+  /** The forearm's twist last frame (rad), to follow it smoothly past a half turn. */
+  private forearmTwist = 0;
+
+  /**
+   * The racket arm's helper bones: stretch the skin along the bones the solver lengthened,
+   * and share the hand's turn about the forearm out along it (the twist bones), so the
+   * skin twists like a forearm rather than pinching at the wrist.
+   */
+  private shapeArm() {
+    const a = this.arm;
+    a.upperStretch.scale.y = a.fore.position.y / UPPER;
+    const fore = a.hand.position.y / FORE;
+    a.foreStretch.scale.y = fore;
+    // The twist: the hand's turn about the forearm (local y), measured from neutral.
+    this.neutralHand ??= this.restHand();
+    const r = a.hand.quaternion.clone().multiply(this.neutralHand.clone().invert());
+    let tw = 2 * Math.atan2(r.y, r.w);
+    tw = this.forearmTwist + angleDiff(tw, this.forearmTwist);
+    tw = clamp(tw, -TWIST_MAX, TWIST_MAX);
+    this.forearmTwist = tw;
+    a.twist.forEach((b, i) => {
+      b.rotation.set(0, (tw * (i + 1)) / a.twist.length, 0);
+      b.scale.y = fore;
+    });
+  }
+
+  /** The racket hand's resting turn in the forearm (see rest()). */
+  private restHand() {
+    // Fingers down the arm, palm to the thigh, thumb forward; its joint takes a bat's frame.
+    const hang = new THREE.Quaternion().setFromRotationMatrix(
+      new THREE.Matrix4().makeBasis(new THREE.Vector3(0, 0, -1), new THREE.Vector3(0, 1, 0), new THREE.Vector3(1, 0, 0)),
+    );
+    const held = hang.multiply(batGrip().rotation.invert());
+    // A left hand is the mirror image (mirroring across x keeps x and negates y and z).
+    if (this.batHand < 0) held.set(held.x, -held.y, -held.z, held.w);
+    return held;
+  }
+
+  /** Every bone, for binding a skinned mesh. */
+  bones(): THREE.Bone[] {
+    const out: THREE.Bone[] = [];
+    this.group.traverse((o) => (o as THREE.Bone).isBone && out.push(o as THREE.Bone));
+    return out;
   }
 
   /**
@@ -379,12 +444,14 @@ export class AvatarRig {
 
   /**
    * The rest pose: standing straight (or sitting square in the chair), head level, arms
-   * hanging a little out from the sides, at the origin facing −z. It's the pose the body
-   * is built round, and the reference exported for modelling (see docs/avatar-heads.md).
-   * Animation picks up from here on the next update.
+   * hanging a little out from the sides, at the origin facing −z. It's the reference
+   * exported for modelling (see docs/avatar-heads.md). With `standing`, seated characters
+   * stand too, legs straight: the bind pose the skin is built in. Animation picks up from
+   * here on the next update.
    */
-  rest() {
-    const hipY = this.seated ? HIP - SEAT_DROP : HIP;
+  rest(opts: { standing?: boolean } = {}) {
+    const seated = this.seated && !opts.standing;
+    const hipY = seated ? HIP - SEAT_DROP : HIP;
     this.group.position.set(0, 0, 0);
     this.group.rotation.set(0, 0, 0);
     this.upper.position.y = hipY;
@@ -395,7 +462,7 @@ export class AvatarRig {
     this.chair.rotation.y = 0;
     this.legs.forEach((leg, i) => {
       leg.hip.position.y = hipY;
-      if (this.seated) {
+      if (seated) {
         // As in animate(): thighs along the cushion, shins down to the footplate.
         leg.hip.rotation.set(Math.PI / 2 - 0.04, 0, (i === 0 ? -1 : 1) * 0.05);
         leg.knee.rotation.set(-Math.PI / 2 + 0.12, 0, 0);
@@ -416,18 +483,19 @@ export class AvatarRig {
     a.fore.quaternion.identity();
     a.hand.position.set(0, FORE, 0);
     // The racket hand hangs empty: fingers down the arm, palm to the thigh, thumb forward.
-    // Its joint takes a bat's frame, so turn an imaginary bat to put the hand there.
-    const hang = new THREE.Quaternion().setFromRotationMatrix(
-      new THREE.Matrix4().makeBasis(new THREE.Vector3(0, 0, -1), new THREE.Vector3(0, 1, 0), new THREE.Vector3(1, 0, 0)),
-    );
-    const held = hang.multiply(batGrip().rotation.invert());
-    // A left hand is the mirror image (mirroring across x keeps x and negates y and z).
-    if (s < 0) held.set(held.x, -held.y, -held.z, held.w);
-    a.hand.quaternion.copy(held);
+    a.hand.quaternion.copy(this.restHand());
     // Free arm (segments along −y): the same, on the other side.
     this.free.upper.position.set(-s * this.shoulderX, SHOULDER_Y, 0);
     this.free.upper.rotation.set(0, 0, -s * out);
     this.free.fore.rotation.set(0, 0, 0);
+    // Helpers at rest: no stretch, no twist.
+    for (const arm of [this.arm, this.free]) {
+      for (const b of [arm.upperStretch, arm.foreStretch, ...arm.twist]) {
+        b.rotation.set(0, 0, 0);
+        b.scale.set(1, 1, 1);
+      }
+    }
+    this.forearmTwist = 0;
     this.group.updateMatrixWorld(true);
   }
 

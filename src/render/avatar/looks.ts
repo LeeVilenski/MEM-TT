@@ -78,12 +78,12 @@ export interface Look {
    *  A list is a wardrobe: one is picked each time the character is made. */
   fabric?: Fabric | Fabric[];
   /** Extra pieces on the clothes (collars, lanyards), placed at heights on the standing body. */
-  accessory?: (g: THREE.Group, mat: Mat, torso: TorsoShape) => void;
+  accessory?: (g: THREE.Object3D, mat: Mat, torso: TorsoShape) => void;
   /**
    * Extra hair (tufts, a ponytail), placed at heights on the standing body like the rest
    * of the head, but carried by the head joint so it moves with the head.
    */
-  hairPieces?: (g: THREE.Group, mat: Mat) => void;
+  hairPieces?: (g: THREE.Object3D, mat: Mat) => void;
 }
 
 export const LOOKS: Record<StyleId, Look> = {

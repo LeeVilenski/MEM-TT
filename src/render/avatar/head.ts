@@ -59,7 +59,7 @@ function skull(head: THREE.Vector3, jawAt: THREE.Vector3, jaw: THREE.Vector3) {
  * Build the head on the `head` joint. Returns the inner group (positioned so its
  * children use heights on the standing body), for extra hair pieces.
  */
-export function dressHead(joint: THREE.Group, eyes: THREE.Group[], look: Look, kit: MaterialKit): THREE.Group {
+export function dressHead(joint: THREE.Object3D, eyes: THREE.Object3D[], look: Look, kit: MaterialKit): THREE.Group {
   // Built at heights on the standing body: an inner group cancels the joint's offset.
   const abs = new THREE.Group();
   abs.position.copy(HEAD_PIVOT).negate();
