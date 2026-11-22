@@ -393,7 +393,10 @@ npm test         # physics unit tests
 npm run build    # static build in dist/
 npm run server   # local room server on :8787 (online play in dev)
 npm run build:server   # bundle the Node room server → dist-server/node.mjs
+npm run avatar:shots   # screenshot every character and compare with a saved baseline
 ```
+
+**Avatar gallery:** with `npm run dev` running, open `/avatars.html` to see every character in a fixed set of poses and views (drag a picture to turn round them), or download one as a `.glb` to model over in Blender. `npm run avatar:shots -- --baseline` saves the pictures; after a change, `npm run avatar:shots` takes them again and writes diff images to `avatar-shots/diff/` (`--check` fails if anything changed). It needs a Playwright browser once: `npx playwright install chromium`. The plan for the characters is in [AVATAR_PLAN.md](AVATAR_PLAN.md), and how a Blender-made head plugs in is in [docs/avatar-heads.md](docs/avatar-heads.md).
 
 Hosting the room server (Cloudflare or Node) is covered in [HOSTING.md](HOSTING.md).
 
@@ -440,7 +443,7 @@ server/        Room server adapters
   cloudflare/  Cloudflare Worker + Durable Object (wrangler.toml)
 src/render/    Three.js scene, ball, paddle and player views
   venues.ts    Procedural IT venues
-  avatar.ts    Low-poly characters per player style
+  avatar/     Characters: looks, rig (joints + animation), body and head meshes
   quality.ts   Quality levels + automatic quality controller
 src/audio/     Procedural Web Audio sound effects and ambience
 src/input/     Touch controls (swipe swings, buttons) and phone tilt

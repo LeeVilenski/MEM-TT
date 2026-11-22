@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
 import { STYLES, type StyleId } from '../game/styles';
 import { AVATAR_STYLES, Avatar } from '../render/avatar';
 
@@ -31,8 +32,10 @@ interface View {
 
 interface Pose {
   name: string;
-  /** Aim at the head rather than the whole body. */
-  face?: boolean;
+  /** Aim at the head or the racket hand rather than the whole body. */
+  aim?: 'head' | 'hand';
+  /** Stand still in the rest pose (no paddle). */
+  rest?: boolean;
   /** Paddle handle, relative to the feet, for a right-hander facing −z (mirrored for left-handers). */
   hand: [number, number, number];
   /** Paddle rotation (Euler XYZ) for a right-hander. */
@@ -53,8 +56,8 @@ const POSES: Pose[] = [
   { name: 'Front', ...READY, view: { az: 0, ...FULL } },
   { name: 'Side', ...READY, view: { az: Math.PI / 2, ...FULL } },
   { name: 'Back', ...READY, view: { az: Math.PI, ...FULL } },
-  { name: 'Face', ...READY, face: true, view: { az: 0, ...FACE } },
-  { name: 'Face ¾', ...READY, face: true, view: { az: 0.7, ...FACE } },
+  { name: 'Face', ...READY, aim: 'head', view: { az: 0, ...FACE } },
+  { name: 'Face ¾', ...READY, aim: 'head', view: { az: 0.7, ...FACE } },
   { name: 'Forehand, wide', hand: [0.82, 1.0, -0.3], paddle: [-0.2, 0.6, -0.9], view: { az: 0.6, ...FULL } },
   { name: 'Backhand', hand: [-0.24, 1.0, -0.42], paddle: [-0.2, -0.4, 0.6], view: { az: -0.5, ...FULL } },
   { name: 'Low ball', hand: [0.45, 0.45, -0.5], paddle: [-0.5, 0.4, -1.3], view: { az: 0.9, ...FULL } },
@@ -62,6 +65,10 @@ const POSES: Pose[] = [
   { name: 'Moving', ...READY, move: 1.6, view: { az: 0.4, ...FULL } },
   { name: 'Celebrate', ...READY, react: { kind: 'celebrate', at: 0.3 }, view: { az: 0.4, ...FULL } },
   { name: 'Slump', ...READY, react: { kind: 'dismay', at: 0.7 }, view: { az: 0.4, ...FULL } },
+  { name: 'Rest pose', ...READY, rest: true, view: { az: 0, ...FULL } },
+  { name: 'Rest pose, side', ...READY, rest: true, view: { az: Math.PI / 2, ...FULL } },
+  { name: 'Head, side', ...READY, aim: 'head', view: { az: Math.PI / 2, ...FACE } },
+  { name: 'Racket hand', ...READY, aim: 'hand', view: { az: 0.9, el: 0.1, dist: 1.2, y: 0, fov: 24 } },
 ];
 
 /** Warm-up before each picture (s): long enough for the springs to settle. */
@@ -72,20 +79,6 @@ const shotMode = params.get('shot') === '1';
 const styleParam = params.get('style') ?? 'allround';
 const variant = Number(params.get('variant') ?? 0);
 if (shotMode) document.body.classList.add('shot');
-
-/**
- * The avatar reads the time from performance.now(); stand in a fixed clock while
- * stepping, so a pose comes out the same every time.
- */
-function atTime<T>(t: number, fn: () => T): T {
-  const real = performance.now;
-  performance.now = () => t * 1000;
-  try {
-    return fn();
-  } finally {
-    performance.now = real;
-  }
-}
 
 function makePaddle() {
   const g = new THREE.Group();
@@ -165,7 +158,11 @@ function posed(style: StyleId, pose: Pose, scene: THREE.Scene) {
     if (i === reactAt) avatar.react(pose.react!.kind);
     const hand = new THREE.Vector3(body.x + pose.hand[0] * mirror, pose.hand[1], body.z + pose.hand[2]);
     paddle.position.copy(hand);
-    atTime(10 + t, () => avatar.update(body, hand, true));
+    avatar.update(body, hand, true, 10 + t); // a fixed clock: the same pose every time
+  }
+  if (pose.rest) {
+    avatar.restPose();
+    paddle.visible = false;
   }
   return avatar;
 }
@@ -198,8 +195,8 @@ function characterCells(style: StyleId, renderer: THREE.WebGLRenderer, env: THRE
     const camera = new THREE.PerspectiveCamera(pose.view.fov ?? 30, 1, 0.05, 50);
     const view = { ...pose.view };
     const target = new THREE.Vector3();
-    if (pose.face) {
-      const h = headCentre(avatar);
+    if (pose.aim) {
+      const h = pose.aim === 'head' ? headCentre(avatar) : avatar.rig.arm.hand.getWorldPosition(new THREE.Vector3());
       target.set(h.x, 0, h.z);
       view.y = h.y;
     }
@@ -226,6 +223,24 @@ function lineupCells(renderer: THREE.WebGLRenderer, env: THREE.Texture): Cell[] 
   return [make(0, 'Line-up, front'), make(0.55, 'Line-up, ¾')];
 }
 
+/**
+ * The character standing in the rest pose, at height scale 1, as a binary glTF: a
+ * reference to import into Blender and model over (see docs/avatar-heads.md).
+ */
+async function downloadGlb(style: StyleId) {
+  const a = new Avatar(style, 1, variant);
+  a.restPose();
+  a.group.scale.setScalar(1);
+  a.group.updateMatrixWorld(true);
+  const glb = (await new GLTFExporter().parseAsync(a.group, { binary: true })) as ArrayBuffer;
+  a.dispose();
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(new Blob([glb], { type: 'model/gltf-binary' }));
+  link.download = `${STYLES[style].character.toLowerCase()}-rest.glb`;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+}
+
 function build() {
   const bar = document.getElementById('bar')!;
   const sheet = document.getElementById('sheet')!;
@@ -238,13 +253,15 @@ function build() {
       .join('');
     bar.innerHTML = `<h1>Avatar gallery</h1><select id="pick">${opts}</select>
       <label>Shirt <select id="variant">${[0, 1, 2, 3, 4, 5].map((v) => `<option ${v === variant ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
-      <button id="reset">Reset views</button><span class="hint">Drag a picture sideways to turn round the character.</span>`;
+      <button id="reset">Reset views</button>
+      ${isLineup ? '' : '<button id="glb" title="The character in the rest pose at height scale 1, for modelling over in Blender (docs/avatar-heads.md)">Download .glb</button>'}<span class="hint">Drag a picture sideways to turn round the character.</span>`;
     const go = () => {
       const p = new URLSearchParams({ style: (document.getElementById('pick') as HTMLSelectElement).value, variant: (document.getElementById('variant') as HTMLSelectElement).value });
       location.search = p.toString();
     };
     document.getElementById('pick')!.addEventListener('change', go);
     document.getElementById('variant')!.addEventListener('change', go);
+    document.getElementById('glb')?.addEventListener('click', () => void downloadGlb(style));
   }
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });

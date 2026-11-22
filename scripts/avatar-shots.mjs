@@ -41,7 +41,7 @@ const browser = await chromium.launch({
   executablePath: process.env.CHROMIUM_PATH || undefined,
   args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
 });
-const page = await browser.newPage({ viewport: { width: 1600, height: 1200 } });
+const page = await browser.newPage({ viewport: { width: 1600, height: 1700 } });
 page.on('pageerror', (e) => console.error('page error:', e.message));
 await mkdir(outDir, { recursive: true });
 
