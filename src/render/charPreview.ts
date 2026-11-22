@@ -2,6 +2,10 @@ import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import type { StyleId } from '../game/styles';
 import { Avatar, type Reaction } from './avatar';
+import { bladeQuaternion } from './playerView';
+
+/** The ready position's bat face: ahead, a little across and up. */
+const READY_FACE = { x: -0.2, y: 0.1, z: -1 };
 
 /**
  * A small, separate 3D view of one character on a turntable, for the character
@@ -61,11 +65,12 @@ export class CharacterPreview {
     ring.position.y = 0.001;
     this.scene.add(plinth, ring, this.turntable);
 
-    // A paddle in the character's hand, so the racket arm has something to hold.
+    // A paddle in the character's hand, so the racket arm has something to hold. Its
+    // origin is the middle of the handle (where the hand holds it).
     const disc = new THREE.CylinderGeometry(0.075, 0.075, 0.008, 32).rotateX(Math.PI / 2);
     const face = new THREE.Mesh(disc, new THREE.MeshStandardMaterial({ color: 0xc8202a, roughness: 0.6 }));
+    face.position.y = 0.12;
     const handle = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.1, 0.024), new THREE.MeshStandardMaterial({ color: 0x8a5a2b, roughness: 0.7 }));
-    handle.position.y = -0.12;
     this.paddle.add(face, handle);
     this.paddle.traverse((o) => (o.castShadow = true));
     this.turntable.add(this.paddle);
@@ -142,13 +147,18 @@ export class CharacterPreview {
 
     // Ready position: paddle out in front on the forehand side, swaying a little.
     const t = now / 1000;
-    const hand = new THREE.Vector3(0.38 + Math.sin(t * 1.3) * 0.04, 1.0 + Math.sin(t * 2.1) * 0.02, -0.38);
-    this.paddle.position.set(hand.x, hand.y + 0.12, hand.z);
-    this.paddle.rotation.set(-0.3, 0.4, -0.25);
+    // On the bat-hand side (left-handers hold it on the left).
+    const side = this.avatar?.rig.batHand ?? 1;
+    const hand = new THREE.Vector3(side * (0.38 + Math.sin(t * 1.3) * 0.04), 1.0 + Math.sin(t * 2.1) * 0.02, -0.38);
+    this.paddle.position.copy(hand);
+    // Forehand rubber facing ahead and a little across, as in the ready position.
+    bladeQuaternion({ ...READY_FACE, x: side * READY_FACE.x }, -hand.x, this.paddle.quaternion);
     if (this.avatar) {
       this.turntable.updateMatrixWorld(true);
-      // The avatar faces local −z (toward the camera) inside the turntable; it takes the hand in world space.
-      this.avatar.update({ x: 0, z: 0 }, this.turntable.localToWorld(hand.clone()), true);
+      // The avatar faces local −z (toward the camera) inside the turntable; it takes the hand
+      // and the bat in world space, and looks at you (as far as the neck turns).
+      const grip = this.turntable.quaternion.clone().multiply(this.paddle.quaternion);
+      this.avatar.update({ x: 0, z: 0 }, this.turntable.localToWorld(hand.clone()), true, { gaze: this.camera.position, grip });
     }
     this.renderer.render(this.scene, this.camera);
   }

@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "server": "tsx server/node.ts",
     "build:server": "esbuild server/node.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist-server/node.mjs --banner:js=\"import { createRequire } from 'module'; const require = createRequire(import.meta.url);\"",
-    "start:server": "node dist-server/node.mjs"
+    "start:server": "node dist-server/node.mjs",
+    "avatar:shots": "node scripts/avatar-shots.mjs"
   },
   "dependencies": {
     "lil-gui": "^0.21.0",
@@ -23,6 +24,7 @@
     "@types/three": "^0.187.0",
     "@types/ws": "^8.18.2",
     "esbuild": "^0.28.2",
+    "playwright": "1.63.0",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vite": "^8.3.8",

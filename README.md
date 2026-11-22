@@ -33,6 +33,8 @@ The game opens on a **title screen** over a slowly orbiting view of the venue: *
 
 **Changing ends:** as in a real match, the players change ends after every game, and again in the deciding game when someone reaches 5. You always play from the near end, so instead the whole venue turns half round the table behind a quick fade, with a "CHANGE ENDS" card: you see the other end of the room for that game. It waits for the point's banner and any replay, so it lands in the pause before the next serve. Works in matches, World Tour, online and doubles; practice and drills stay put. With Reduce motion on there's no fade.
 
+**Characters watch the ball:** the head follows it and the eyes lead. They hold the bat in a shakehand grip (fingers round the handle, the index finger along the blade), turning the hand with the bat.
+
 **Characters move:** side-step shuffles when moving, a bouncy ready stance, the upper body turning into strokes and leaning for low balls, and after each point a hop and fist pump or a slump.
 
 **Spin colours:** the ball's trail (now a thick line), comet tail, sparks and bounce marks are coloured by the ball's predominant spin: **red topspin, green backspin, yellow sidespin** (side or corkscrew outweighing top/back), white for no spin. Light spin is a little paler.
@@ -393,7 +395,10 @@ npm test         # physics unit tests
 npm run build    # static build in dist/
 npm run server   # local room server on :8787 (online play in dev)
 npm run build:server   # bundle the Node room server → dist-server/node.mjs
+npm run avatar:shots   # screenshot every character and compare with a saved baseline
 ```
+
+**Avatar gallery:** with `npm run dev` running, open `/avatars.html` to see every character in a fixed set of poses and views (drag a picture to turn round them), or download one as a `.glb` to model over in Blender. `npm run avatar:shots -- --baseline` saves the pictures; after a change, `npm run avatar:shots` takes them again and writes diff images to `avatar-shots/diff/` (`--check` fails if anything changed). It needs a Playwright browser once: `npx playwright install chromium`. The plan for the characters is in [AVATAR_PLAN.md](AVATAR_PLAN.md), and how a Blender-made head plugs in is in [docs/avatar-heads.md](docs/avatar-heads.md).
 
 Hosting the room server (Cloudflare or Node) is covered in [HOSTING.md](HOSTING.md).
 
@@ -440,7 +445,7 @@ server/        Room server adapters
   cloudflare/  Cloudflare Worker + Durable Object (wrangler.toml)
 src/render/    Three.js scene, ball, paddle and player views
   venues.ts    Procedural IT venues
-  avatar.ts    Low-poly characters per player style
+  avatar/     Characters: looks, rig (joints + animation), body and head meshes
   quality.ts   Quality levels + automatic quality controller
 src/audio/     Procedural Web Audio sound effects and ambience
 src/input/     Touch controls (swipe swings, buttons) and phone tilt
