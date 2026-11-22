@@ -62,7 +62,9 @@ export function tube(rings: Ring[], o: TubeOptions = {}): THREE.BufferGeometry {
   rs.forEach((r, i) => {
     if (i > 0) along += Math.hypot(r.y - rs[i - 1].y, (r.rx - rs[i - 1].rx) * 0.5);
     for (let j = 0; j <= n; j++) {
-      const a = (j / n) * Math.PI * 2;
+      // The last point is the first again, exactly (so the seam is watertight: no
+      // pinprick gaps where the two sides meet).
+      const a = j === n ? 0 : (j / n) * Math.PI * 2;
       // a = 0 at the front (−z), going round through +x.
       pos.push((r.cx ?? 0) + Math.sin(a) * r.rx, r.y, (r.cz ?? 0) - Math.cos(a) * (r.rz ?? r.rx));
       uv.push(j / n, along);

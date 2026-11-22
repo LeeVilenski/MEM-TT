@@ -30,16 +30,22 @@ const TORSO: [number, number][] = [
   [0.2, 1.48],
   [0, 1.48],
 ];
-/** Hips / waistband (in the shorts or trousers colour). */
-const PELVIS: [number, number][] = [
-  [0, 0.72],
-  [0.3, 0.712],
-  [0.55, 0.69],
-  [0.72, 0.7],
-  [0.8, 0.73],
+/**
+ * The seat of the shorts or trousers (in their colour), on the hips: tucked inside the
+ * shirt at the top, widening just below the shirt's hem (so the hem hangs over it in a
+ * straight line), rounding under above the crotch, where the two legs (which reach across
+ * at the top) take over.
+ */
+const HIPS: [number, number][] = [
+  [0, 0.885],
+  [0.76, 0.885],
+  [0.82, 0.83],
   [0.84, 0.8],
-  [0.82, 0.87],
-  [0, 0.87],
+  [0.92, 0.775],
+  [0.93, 0.755],
+  [0.8, 0.732],
+  [0.48, 0.712],
+  [0, 0.705],
 ];
 
 const torsoRadius = (y: number) => {
@@ -58,6 +64,11 @@ function lathe(profile: [number, number][], halfW: number, halfD: number, segmen
     segments,
   );
   geo.scale(halfW, 1, halfD);
+  // Close the seam exactly: the last turn's points are the first's again (computed from
+  // 2π they differ in the last digits, which leaves pinprick gaps).
+  const pos = geo.getAttribute('position');
+  const n = profile.length;
+  for (let j = 0; j < n; j++) pos.setXYZ(segments * n + j, pos.getX(j), pos.getY(j), pos.getZ(j));
   return geo;
 }
 
@@ -70,8 +81,8 @@ const grow = (rings: Ring[], k: number, add = 0): Ring[] => rings.map((r) => ({ 
  * back, a slim ankle. One tube, so the knee bends smoothly. The character faces −z.
  */
 const LEG_RINGS: Ring[] = [
-  { y: 0.03, rx: 0.074, rz: 0.077 },
-  { y: -0.08, rx: 0.071, rz: 0.075, cz: 0.003 },
+  // Starting under the shorts (bare legs only show below them).
+  { y: -0.12, rx: 0.068, rz: 0.072, cz: 0.003 },
   { y: -0.2, rx: 0.063, rz: 0.066, cz: 0.002 },
   { y: -0.32, rx: 0.054, rz: 0.054, cz: -0.001 },
   { y: -0.385, rx: 0.048, rz: 0.048, cz: -0.004 },
@@ -89,17 +100,25 @@ const SOCK_RINGS: Ring[] = [
   { y: -0.31, rx: 0.0338, rz: 0.0338 },
   { y: -SHIN - 0.005, rx: 0.0328, rz: 0.0348, cz: 0.002 },
 ];
-/** Shorts: from the waist to mid-thigh, loose and flared, with a hem. */
+/**
+ * Shorts: from just under the shirt's hem to mid-thigh, loose and flared, with a hem. At
+ * the top each leg reaches in past the middle (`cx` is toward the middle here, flipped per
+ * leg), so the two make one garment across the front and back, parting at the crotch.
+ */
 const SHORTS_RINGS: Ring[] = [
-  { y: 0.07, rx: 0.09, rz: 0.093 },
-  { y: -0.05, rx: 0.091, rz: 0.093, cz: 0.003 },
-  { y: -0.17, rx: 0.09, rz: 0.09, cz: 0.004 },
+  { y: -0.045, rx: 0.1, rz: 0.088, cx: 0.032 },
+  { y: -0.09, rx: 0.096, rz: 0.09, cz: 0.003, cx: 0.017 },
+  { y: -0.15, rx: 0.091, rz: 0.09, cz: 0.004, cx: 0.004 },
   { y: -0.27, rx: 0.089, rz: 0.088, cz: 0.004 },
 ];
+/** Rings for one leg: their `cx` (toward the middle) turned the right way for the side. */
+const inward = (rings: Ring[], side: number): Ring[] => rings.map((r) => ({ ...r, cx: -side * (r.cx ?? 0) }));
 /** Trousers: roomier than the leg, straight down from the knee to a hem over the shoe. */
 const TROUSER_RINGS: Ring[] = [
-  { y: 0.05, rx: 0.087, rz: 0.09 },
-  { y: -0.1, rx: 0.084, rz: 0.086, cz: 0.004 },
+  // Like the shorts at the top: one garment across, parting at the crotch.
+  { y: -0.045, rx: 0.098, rz: 0.088, cx: 0.03 },
+  { y: -0.09, rx: 0.092, rz: 0.089, cz: 0.003, cx: 0.015 },
+  { y: -0.14, rx: 0.083, rz: 0.085, cz: 0.004, cx: 0.003 },
   { y: -0.25, rx: 0.072, rz: 0.074, cz: 0.003 },
   { y: -0.38, rx: 0.062, rz: 0.062 },
   { y: -THIGH, rx: 0.059, rz: 0.061, cz: -0.003 },
@@ -390,11 +409,12 @@ export function dressBody(rig: AvatarRig, look: Look, fabric: Fabric | undefined
   // ---- legs
   const shoe = trainer();
   for (const { hip, knee, foot } of rig.legs) {
+    const side = Math.sign(hip.position.x) || 1; // −1 the left leg, +1 the right
     if (look.legs.kind === 'shorts') {
       // Flared shorts to mid-thigh, then bare legs, white socks.
       // Shorts hang from the waist (the hips) and follow the thigh below.
-      blend(add(tube(SHORTS_RINGS, { hemEnd: 0.02 }), look.legs.color, 0, 0, 0, hip), (q) => {
-        const w = smoothstep(-0.03, 0.06, q.y);
+      blend(add(tube(inward(SHORTS_RINGS, side), { hemEnd: 0.02 }), look.legs.color, 0, 0, 0, hip), (q) => {
+        const w = smoothstep(-0.1, -0.045, q.y);
         return [
           [rig.pelvis, w],
           [hip, 1 - w],
@@ -403,7 +423,12 @@ export function dressBody(rig: AvatarRig, look: Look, fabric: Fabric | undefined
       blend(add(tube(LEG_RINGS), look.skin, 0, 0, 0, hip), kneeBend(hip, knee));
       add(tube(SOCK_RINGS, { hemEnd: 0.008 }), 0xf1f2f4, 0, 0, 0, knee);
     } else {
-      blend(add(tube(TROUSER_RINGS, { hemEnd: 0.015 }), look.legs.color, 0, 0, 0, hip), kneeBend(hip, knee));
+      // Trousers hang from the waist like the shorts, and bend at the knee.
+      const bend = kneeBend(hip, knee);
+      blend(add(tube(inward(TROUSER_RINGS, side), { hemEnd: 0.015 }), look.legs.color, 0, 0, 0, hip), (q) => {
+        const w = smoothstep(-0.1, -0.045, q.y);
+        return [[rig.pelvis, w] as [THREE.Bone, number], ...bend(q).map(([b, v]) => [b, v * (1 - w)] as [THREE.Bone, number])];
+      });
     }
     // Trainer: an upper with a heel collar and tongue, on a pale sole.
     add(shoe.upper.clone(), look.shoes ?? 0x27272a, 0, 0, 0, foot);
@@ -412,7 +437,7 @@ export function dressBody(rig: AvatarRig, look: Look, fabric: Fabric | undefined
   shoe.upper.dispose();
   shoe.sole.dispose();
   // Hips and waistband move with the legs, not the twisting upper body.
-  rig.pelvis.add(new THREE.Mesh(lathe(PELVIS, halfW * 0.98, halfD * 0.98), mat(look.legs.color)));
+  rig.pelvis.add(new THREE.Mesh(lathe(HIPS, halfW, halfD * 0.98), mat(look.legs.color)));
   if (look.wheelchair) dressWheelchair(rig, look.wheelchair, kit);
 
   // ---- torso, shoulders, neck, head
