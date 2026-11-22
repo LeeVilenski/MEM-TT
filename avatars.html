@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Avatar Gallery</title>
+    <style>
+      :root { color-scheme: dark; }
+      body { margin: 0; background: #11151d; color: #e5e7eb; font: 14px/1.4 system-ui, sans-serif; }
+      #bar { display: flex; gap: 12px; align-items: center; padding: 10px 16px; flex-wrap: wrap; }
+      #bar h1 { font-size: 16px; margin: 0 8px 0 0; }
+      #bar select, #bar button { font: inherit; background: #1f2633; color: inherit; border: 1px solid #364152; border-radius: 6px; padding: 4px 8px; }
+      #bar .hint { color: #8b95a7; }
+      #sheet { position: relative; margin: 0 16px 16px; width: max-content; }
+      #sheet canvas { display: block; }
+      .cell-label { position: absolute; font-size: 13px; font-weight: 600; color: #cbd5e1; background: rgba(17, 21, 29, 0.7); padding: 2px 8px; border-radius: 4px; pointer-events: none; }
+      .shot #bar { display: none; }
+      .shot #sheet { margin: 0; }
+    </style>
+  </head>
+  <body>
+    <div id="bar"></div>
+    <div id="sheet"></div>
+    <script type="module" src="/src/dev/avatarGallery.ts"></script>
+  </body>
+</html>
