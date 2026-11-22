@@ -57,7 +57,9 @@ export function skinize(rig: AvatarRig, castShadow: boolean) {
   for (const { mesh, bone } of found) {
     const material = mesh.material as THREE.Material;
     let geo = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry.clone();
-    for (const name of Object.keys(geo.attributes)) if (!['position', 'normal', 'uv'].includes(name)) geo.deleteAttribute(name);
+    // Keep what the materials use (vertex colours only where a material wants them).
+    const keepColor = (material as THREE.MeshStandardMaterial).vertexColors;
+    for (const name of Object.keys(geo.attributes)) if (!['position', 'normal', 'uv', ...(keepColor ? ['color'] : [])].includes(name)) geo.deleteAttribute(name);
     if (!geo.getAttribute('normal')) geo.computeVertexNormals();
     const pos = geo.getAttribute('position');
     if (!geo.getAttribute('uv')) geo.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(pos.count * 2), 2));

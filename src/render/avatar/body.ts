@@ -244,6 +244,19 @@ export class MaterialKit {
     });
   }
 
+  /**
+   * Hair that fades out at its edges (a beard): the strands, with each point's alpha from
+   * the geometry's vertex colours. Drawn before the hair and clothes that may overlap it.
+   */
+  hairFade = (c: number) => {
+    const m = this.hairOf(c);
+    m.vertexColors = true;
+    m.transparent = true;
+    m.depthWrite = this.solid;
+    this.list.push(m);
+    return m;
+  };
+
   private cloth_(c: number) {
     return new THREE.MeshPhysicalMaterial({
       color: c,
@@ -254,6 +267,15 @@ export class MaterialKit {
       ...this.fade,
     });
   }
+
+  /** Skin with a painted face on it (the face's colour comes from the texture). */
+  skinTex = (tex: THREE.Texture) => {
+    const m = this.skin(0xffffff);
+    m.map = tex;
+    m.sheenColor = new THREE.Color(this.palette.skin).lerp(new THREE.Color(0xff5a3c), 0.45);
+    this.list.push(m);
+    return m;
+  };
 
   /** A painted fabric (null where nothing can be painted: plain colours are used instead). */
   tex = (tex: THREE.Texture | null) => {
