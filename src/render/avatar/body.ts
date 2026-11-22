@@ -3,6 +3,7 @@ import { heightUVs, paint, type Fabric } from '../fabric';
 import { CASTER_R, FORE, HIP, SEAT_DROP, SHOULDER_Y, THIGH, SHIN, UPPER, WHEEL_R, torsoHalfDepth, torsoHalfWidth } from './dimensions';
 import { GRIP, HELD as HELD_IN_HAND, HOLD, RELAXED, batGrip, handGeometry } from './hand';
 import { dressHead } from './head';
+import { trainer, tube, type Ring } from './shapes';
 import type { Look, Mat, TorsoShape } from './looks';
 import type { ArmJoints, AvatarRig } from './rig';
 
@@ -56,8 +57,85 @@ function lathe(profile: [number, number][], halfW: number, halfD: number, segmen
   return geo;
 }
 
-/** A tapered limb segment of unit length along +y (scaled to length per frame). */
-const limb = (r0: number, r1: number) => new THREE.CylinderGeometry(r1, r0, 1, 12, 1).translate(0, 0.5, 0);
+/** Rings scaled out by `k` (a garment over a limb) or grown by `add` metres. */
+const grow = (rings: Ring[], k: number, add = 0): Ring[] => rings.map((r) => ({ ...r, rx: r.rx * k + add, rz: (r.rz ?? r.rx) * k + add }));
+
+/**
+ * Leg shapes, in the hip joint's frame (thigh) and the knee's (shin), running down: a
+ * thigh fuller at the top and over the front, a kneecap forward, a calf bulging high at
+ * the back, a slim ankle. The character faces −z.
+ */
+const THIGH_RINGS: Ring[] = [
+  { y: 0.03, rx: 0.074, rz: 0.077 },
+  { y: -0.08, rx: 0.071, rz: 0.075, cz: 0.003 },
+  { y: -0.2, rx: 0.063, rz: 0.066, cz: 0.002 },
+  { y: -0.32, rx: 0.054, rz: 0.054, cz: -0.001 },
+  { y: -0.39, rx: 0.047, rz: 0.047, cz: -0.004 },
+  { y: -THIGH - 0.005, rx: 0.043, rz: 0.043, cz: -0.006 },
+];
+const SHIN_RINGS: Ring[] = [
+  { y: 0.025, rx: 0.042, rz: 0.042, cz: -0.004 },
+  { y: -0.02, rx: 0.046, rz: 0.047, cz: 0.002 },
+  { y: -0.09, rx: 0.05, rz: 0.056, cz: 0.012 },
+  { y: -0.15, rx: 0.048, rz: 0.053, cz: 0.011 },
+  { y: -0.23, rx: 0.038, rz: 0.039, cz: 0.004 },
+  { y: -0.31, rx: 0.031, rz: 0.031 },
+  { y: -SHIN - 0.005, rx: 0.03, rz: 0.032, cz: 0.002 },
+];
+/** Shorts: from the waist to mid-thigh, loose and flared, with a hem. */
+const SHORTS_RINGS: Ring[] = [
+  { y: 0.07, rx: 0.09, rz: 0.093 },
+  { y: -0.05, rx: 0.091, rz: 0.093, cz: 0.003 },
+  { y: -0.17, rx: 0.09, rz: 0.09, cz: 0.004 },
+  { y: -0.27, rx: 0.089, rz: 0.088, cz: 0.004 },
+];
+/** Trousers: roomier than the leg, straight down from the knee to a hem over the shoe. */
+const TROUSER_THIGH: Ring[] = [
+  { y: 0.05, rx: 0.087, rz: 0.09 },
+  { y: -0.1, rx: 0.084, rz: 0.086, cz: 0.004 },
+  { y: -0.25, rx: 0.072, rz: 0.074, cz: 0.003 },
+  { y: -0.38, rx: 0.062, rz: 0.062 },
+  { y: -THIGH - 0.005, rx: 0.056, rz: 0.056 },
+];
+const TROUSER_SHIN: Ring[] = [
+  { y: 0.025, rx: 0.055, rz: 0.055 },
+  { y: -0.04, rx: 0.06, rz: 0.062, cz: 0.005 },
+  { y: -0.14, rx: 0.061, rz: 0.064, cz: 0.008 },
+  { y: -0.28, rx: 0.056, rz: 0.057, cz: 0.004 },
+  { y: -SHIN + 0.01, rx: 0.057, rz: 0.058 },
+  { y: -SHIN - 0.012, rx: 0.059, rz: 0.06 },
+];
+/**
+ * Arm shapes, unit length from the joint along +y (each scaled to its bone's length): an
+ * upper arm with a shoulder and a biceps, a forearm thick below the elbow and slim at the wrist.
+ */
+const UPPER_ARM: Ring[] = [
+  { y: 0, rx: 0.045 },
+  { y: 0.14, rx: 0.046 },
+  { y: 0.45, rx: 0.041, rz: 0.043 },
+  { y: 0.8, rx: 0.036 },
+  { y: 1, rx: 0.034 },
+];
+const FOREARM: Ring[] = [
+  { y: 0, rx: 0.034 },
+  { y: 0.2, rx: 0.039, rz: 0.037 },
+  { y: 0.45, rx: 0.035, rz: 0.033 },
+  { y: 0.8, rx: 0.029, rz: 0.025 },
+  { y: 1, rx: 0.027, rz: 0.022 },
+];
+/** A short sleeve round the top of the arm (in the shoulder joint's frame, down the arm along +y), with a hem. */
+const SLEEVE: Ring[] = [
+  { y: -0.03, rx: 0.056 },
+  { y: 0.05, rx: 0.055 },
+  { y: 0.12, rx: 0.054 },
+];
+/** The neck, on the standing body: set back a little, flaring into the shoulders. */
+const NECK: Ring[] = [
+  { y: 1.42, rx: 0.062, rz: 0.058, cz: 0.012 },
+  { y: 1.47, rx: 0.05, rz: 0.05, cz: 0.012 },
+  { y: 1.53, rx: 0.046, rz: 0.048, cz: 0.01 },
+  { y: 1.58, rx: 0.045, rz: 0.047, cz: 0.006 },
+];
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
@@ -143,25 +221,24 @@ export function dressBody(rig: AvatarRig, look: Look, fabric: Fabric | undefined
   const sleeveColor = look.sleeves === 'none' ? null : (look.sleeves ?? look.shirt);
 
   // ---- legs
+  const shoe = trainer();
   for (const { hip, knee, foot } of rig.legs) {
     if (look.legs.kind === 'shorts') {
-      // Shorts over the upper thigh, then bare legs, white socks.
-      add(new THREE.CylinderGeometry(0.082, 0.078, 0.3, 14), look.legs.color, 0, -0.14, 0, hip);
-      add(new THREE.CylinderGeometry(0.062, 0.05, THIGH - 0.2, 12), look.skin, 0, -0.2 - (THIGH - 0.2) / 2 + 0.02, 0, hip);
-      add(new THREE.SphereGeometry(0.05, 12, 10), look.skin, 0, 0, 0, knee);
-      add(new THREE.CylinderGeometry(0.048, 0.034, SHIN, 12), look.skin, 0, -SHIN / 2, 0, knee);
-      add(new THREE.CylinderGeometry(0.037, 0.037, 0.07, 12), 0xf1f2f4, 0, -SHIN + 0.03, 0, knee);
+      // Flared shorts to mid-thigh, then bare legs, white socks.
+      add(tube(SHORTS_RINGS, { hemEnd: 0.02 }), look.legs.color, 0, 0, 0, hip);
+      add(tube(THIGH_RINGS, { capEnd: 0.03 }), look.skin, 0, 0, 0, hip);
+      add(tube(SHIN_RINGS, { capStart: 0.022 }), look.skin, 0, 0, 0, knee);
+      add(tube(grow(SHIN_RINGS.slice(-3), 1, 0.0028).map((r, i) => (i === 0 ? { ...r, y: -0.27 } : r)), { hemEnd: 0.008 }), 0xf1f2f4, 0, 0, 0, knee);
     } else {
-      add(new THREE.CylinderGeometry(0.078, 0.066, THIGH + 0.02, 14), look.legs.color, 0, -THIGH / 2, 0, hip);
-      add(new THREE.SphereGeometry(0.066, 12, 10), look.legs.color, 0, 0, 0, knee);
-      add(new THREE.CylinderGeometry(0.064, 0.056, SHIN, 14), look.legs.color, 0, -SHIN / 2, 0, knee);
+      add(tube(TROUSER_THIGH, { capEnd: 0.035 }), look.legs.color, 0, 0, 0, hip);
+      add(tube(TROUSER_SHIN, { capStart: 0.025, hemEnd: 0.015 }), look.legs.color, 0, 0, 0, knee);
     }
-    // Trainer: a rounded shoe with a pale sole.
-    const shoe = add(new THREE.CapsuleGeometry(0.045, 0.15, 4, 12).rotateX(Math.PI / 2), look.shoes ?? 0x27272a, 0, -0.005, -0.045, foot);
-    shoe.scale.set(1.15, 0.72, 1);
-    const sole = add(new THREE.CapsuleGeometry(0.047, 0.15, 4, 12).rotateX(Math.PI / 2), 0xe5e7eb, 0, -0.026, -0.045, foot);
-    sole.scale.set(1.18, 0.3, 1.02);
+    // Trainer: an upper with a heel collar and tongue, on a pale sole.
+    add(shoe.upper.clone(), look.shoes ?? 0x27272a, 0, 0, 0, foot);
+    add(shoe.sole.clone(), 0xe5e7eb, 0, 0, 0, foot);
   }
+  shoe.upper.dispose();
+  shoe.sole.dispose();
   // Hips and waistband move with the legs, not the twisting upper body.
   rig.pelvis.add(new THREE.Mesh(lathe(PELVIS, halfW * 0.98, halfD * 0.98), mat(look.legs.color)));
   if (look.wheelchair) dressWheelchair(rig, look.wheelchair, kit);
@@ -189,7 +266,8 @@ export function dressBody(rig: AvatarRig, look: Look, fabric: Fabric | undefined
   if (shirtMat) torsoMesh.material = shirtMat;
   // Shoulder caps: sleeves (or bare skin for a vest) round off where the arms join.
   for (const side of [-1, 1]) {
-    const cap = add(new THREE.SphereGeometry(0.062, 14, 10), sleeveColor ?? look.skin, side * rig.shoulderX, SHOULDER_Y, 0);
+    const cap = add(new THREE.SphereGeometry(0.057, 16, 12), sleeveColor ?? look.skin, side * rig.shoulderX, SHOULDER_Y, 0);
+    cap.scale.set(1, 0.9, 1);
     if (sleeveColor !== null && sleeveMat) cap.material = sleeveMat;
   }
   if (sleeveColor === null) {
@@ -199,7 +277,7 @@ export function dressBody(rig: AvatarRig, look: Look, fabric: Fabric | undefined
       strap.rotation.z = side * -0.35;
     }
   }
-  add(new THREE.CylinderGeometry(0.046, 0.052, 0.12, 12), look.skin, 0, 1.5, 0);
+  add(tube(NECK), look.skin, 0, 0, 0);
   const headAbs = dressHead(rig.head, rig.eyes, look, kit);
 
   // ---- arms
@@ -211,7 +289,7 @@ export function dressBody(rig: AvatarRig, look: Look, fabric: Fabric | undefined
   free.upperMesh.rotation.x = Math.PI;
   free.upperMesh.position.y = 0;
   free.foreMesh.rotation.x = Math.PI;
-  if (free.sleeve) free.sleeve.position.y = -0.045;
+  if (free.sleeve) free.sleeve.rotation.x = Math.PI;
   if (look.watch !== undefined) add(new THREE.CylinderGeometry(0.031, 0.031, 0.026, 14), look.watch, 0, -(FORE - 0.03), 0, rig.free.fore);
 
   // ---- hands
@@ -265,17 +343,16 @@ function dressArm(j: ArmJoints, look: Look, mat: Mat, sleeveColor: number | null
   const armColor = look.longSleeves && sleeveColor !== null ? sleeveColor : look.skin;
   const thick = armColor === look.skin ? 1 : 1.15;
   const armMat = armColor !== look.skin && sleeveMat ? sleeveMat : mat(armColor);
-  const upperMesh = new THREE.Mesh(limb(0.043 * thick, 0.035 * thick), armMat);
+  const upperMesh = new THREE.Mesh(tube(grow(UPPER_ARM, thick)), armMat);
   j.upper.add(upperMesh);
   let sleeve: THREE.Mesh | null = null;
   if (sleeveColor !== null) {
     // A short sleeve over the top of the upper arm (not stretched with it).
-    sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.056, 0.06, 0.15, 14), sleeveMat ?? mat(sleeveColor));
-    sleeve.position.y = 0.045;
+    sleeve = new THREE.Mesh(tube(SLEEVE, { hemEnd: 0.012 }), sleeveMat ?? mat(sleeveColor));
     j.upper.add(sleeve);
   }
-  j.fore.add(new THREE.Mesh(new THREE.SphereGeometry(0.036 * thick, 12, 8), armMat));
-  const foreMesh = new THREE.Mesh(limb(0.035 * thick, 0.027 * thick), armMat);
+  j.fore.add(new THREE.Mesh(new THREE.SphereGeometry(0.035 * thick, 14, 10), armMat));
+  const foreMesh = new THREE.Mesh(tube(grow(FOREARM, thick)), armMat);
   j.fore.add(foreMesh);
   return { upperMesh, foreMesh, sleeve };
 }

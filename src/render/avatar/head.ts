@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { paint } from '../fabric';
 import type { MaterialKit } from './body';
 import { EYE, HEAD_PIVOT, HEAD_Y } from './dimensions';
@@ -16,6 +17,43 @@ import type { Look } from './looks';
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
+
+/**
+ * The skull and jaw as one mesh: the smooth union of two ellipsoids, the skull (radii
+ * `head`, round the origin) and a jaw low and forward (radii `jaw`, round `jawAt`), so the
+ * face isn't a ball and there's no crease where they meet. Each point of a fine sphere is
+ * pushed out along its direction to whichever surface is further, blended near the join.
+ */
+function skull(head: THREE.Vector3, jawAt: THREE.Vector3, jaw: THREE.Vector3) {
+  const sphere = new THREE.SphereGeometry(1, 40, 30);
+  sphere.deleteAttribute('uv');
+  sphere.deleteAttribute('normal');
+  const geo = mergeVertices(sphere); // one vertex at the seam and poles: smooth normals all round
+  sphere.dispose();
+  const p = geo.getAttribute('position');
+  const d = new THREE.Vector3();
+  /** Smooth maximum: like max(a, b), rounded over a blend of k (m). */
+  const smax = (a: number, b: number, k: number) => {
+    const h = Math.max(k - Math.abs(a - b), 0) / k;
+    return Math.max(a, b) + (h * h * k) / 4;
+  };
+  for (let i = 0; i < p.count; i++) {
+    d.fromBufferAttribute(p, i).normalize();
+    // Distance out along d to the skull…
+    const t1 = 1 / Math.hypot(d.x / head.x, d.y / head.y, d.z / head.z);
+    // …and to the far side of the jaw (the origin is inside it).
+    const a = (d.x / jaw.x) ** 2 + (d.y / jaw.y) ** 2 + (d.z / jaw.z) ** 2;
+    const b = -2 * ((d.x * jawAt.x) / jaw.x ** 2 + (d.y * jawAt.y) / jaw.y ** 2 + (d.z * jawAt.z) / jaw.z ** 2);
+    const c = (jawAt.x / jaw.x) ** 2 + (jawAt.y / jaw.y) ** 2 + (jawAt.z / jaw.z) ** 2 - 1;
+    const disc = b * b - 4 * a * c;
+    const t2 = disc > 0 ? (-b + Math.sqrt(disc)) / (2 * a) : 0;
+    p.setXYZ(i, d.x, d.y, d.z);
+    const t = smax(t1, t2, 0.012);
+    p.setXYZ(i, d.x * t, d.y * t, d.z * t);
+  }
+  geo.computeVertexNormals();
+  return geo;
+}
 
 /**
  * Build the head on the `head` joint. Returns the inner group (positioned so its
@@ -46,11 +84,8 @@ export function dressHead(joint: THREE.Group, eyes: THREE.Group[], look: Look, k
   const long = f.long ?? 1;
   /** How far the lower face (jaw, mouth, stubble) drops for a longer face. */
   const drop = (long - 1) * 0.06;
-  const head = add(new THREE.SphereGeometry(0.1, 24, 18), look.skin, 0, HY, 0);
-  head.scale.set(0.94, 1.1 * long, 1);
-  // Jaw: a slightly narrower sphere low and forward, so the face isn't a ball.
-  const jaw = add(new THREE.SphereGeometry(0.08, 18, 12), look.skin, 0, HY - 0.045 - drop, -0.018);
-  jaw.scale.set(0.95 * jawW, 0.85, 1);
+  // Skull and jaw as one smooth surface (no crease where they meet).
+  add(skull(new THREE.Vector3(0.094, 0.11 * long, 0.1), new THREE.Vector3(0, -0.045 - drop, -0.018), new THREE.Vector3(0.076 * jawW, 0.068, 0.08)), look.skin, 0, HY, 0);
   const browColor = f.brows ?? look.hair;
   for (const s of [-1, 1]) {
     const ear = add(new THREE.SphereGeometry(0.024, 10, 8), look.skin, s * 0.094, HY - 0.005, 0.005);

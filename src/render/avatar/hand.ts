@@ -88,7 +88,7 @@ export const HELD = new THREE.Vector3(0.0, 0.1, 0.028);
 
 /** A rounded segment of length `len` along +y from the origin. */
 const bone = (r: number, len: number, tipR = r * 0.92) => {
-  const g = new THREE.CylinderGeometry(tipR, r, len, 10, 1, true).translate(0, len / 2, 0);
+  const g = new THREE.CylinderGeometry(tipR, r, len, 8, 1, true).translate(0, len / 2, 0);
   return g;
 };
 
@@ -104,7 +104,7 @@ export function handGeometry(pose: HandPose, size = 1): THREE.BufferGeometry {
   };
 
   // Palm: a rounded slab, narrower at the wrist; and the heel of the thumb.
-  const palm = new RoundedBoxGeometry(0.078, 0.092, 0.028, 3, 0.011);
+  const palm = new RoundedBoxGeometry(0.078, 0.092, 0.028, 2, 0.011);
   const pos = palm.getAttribute('position');
   for (let i = 0; i < pos.count; i++) {
     const y = pos.getY(i); // −0.046 … 0.046
@@ -115,10 +115,10 @@ export function handGeometry(pose: HandPose, size = 1): THREE.BufferGeometry {
   }
   palm.computeVertexNormals();
   put(palm, new THREE.Matrix4().makeTranslation(0, 0.05, 0));
-  const thenar = new THREE.SphereGeometry(0.022, 12, 10);
+  const thenar = new THREE.SphereGeometry(0.022, 10, 7);
   put(thenar, new THREE.Matrix4().compose(new THREE.Vector3(0.019, 0.035, 0.008), new THREE.Quaternion(), new THREE.Vector3(0.85, 1.25, 0.75)));
   // Wrist: a short rounded piece that meets the forearm.
-  put(new THREE.SphereGeometry(0.028, 12, 10), new THREE.Matrix4().compose(new THREE.Vector3(0, 0.006, 0), new THREE.Quaternion(), new THREE.Vector3(1.05, 0.7, 0.72)));
+  put(new THREE.SphereGeometry(0.028, 10, 7), new THREE.Matrix4().compose(new THREE.Vector3(0, 0.006, 0), new THREE.Quaternion(), new THREE.Vector3(1.05, 0.7, 0.72)));
 
   // Fingers: a chain of joints from each knuckle, curling about x (toward the palm, +z).
   FINGERS.forEach((f, i) => {
@@ -132,9 +132,9 @@ export function handGeometry(pose: HandPose, size = 1): THREE.BufferGeometry {
       const tip = r * 0.9;
       put(bone(r, len, tip), m.clone());
       // A knuckle (or the fingertip) rounding off the joint.
-      put(new THREE.SphereGeometry(j === 2 ? tip : r * 1.02, 10, 8), m.clone());
+      put(new THREE.SphereGeometry(j === 2 ? tip : r * 1.02, 8, 5), m.clone());
       m.multiply(new THREE.Matrix4().makeTranslation(0, len, 0));
-      if (j === 2) put(new THREE.SphereGeometry(tip, 10, 8), m.clone());
+      if (j === 2) put(new THREE.SphereGeometry(tip, 8, 5), m.clone());
       r = tip;
     }
   });
@@ -149,9 +149,9 @@ export function handGeometry(pose: HandPose, size = 1): THREE.BufferGeometry {
       const tip = r * 0.9;
       const m = new THREE.Matrix4().compose(at, q, new THREE.Vector3(1, 1, 1));
       put(bone(r, THUMB.len[j], tip), m);
-      put(new THREE.SphereGeometry(r, 10, 8), new THREE.Matrix4().makeTranslation(at.x, at.y, at.z));
+      put(new THREE.SphereGeometry(r, 8, 5), new THREE.Matrix4().makeTranslation(at.x, at.y, at.z));
       at.addScaledVector(dir, THUMB.len[j]);
-      if (j === 1) put(new THREE.SphereGeometry(tip, 10, 8), new THREE.Matrix4().makeTranslation(at.x, at.y, at.z));
+      if (j === 1) put(new THREE.SphereGeometry(tip, 8, 5), new THREE.Matrix4().makeTranslation(at.x, at.y, at.z));
       r = tip;
     });
   }
