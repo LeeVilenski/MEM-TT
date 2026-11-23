@@ -71,6 +71,26 @@ export interface PhysicsParams {
   netTangentialKeep: number;
   floorRestitution: number;
   floorFriction: number;
+  /**
+   * Weather (outdoor venues; see game/weather.ts). Wind velocity across the table (x)
+   * and along it (z), m/s: drag and Magnus act on the ball's speed through the air,
+   * so a crosswind drifts it and a headwind holds it up. 0 = still air.
+   */
+  windX: number;
+  windZ: number;
+  /**
+   * How wet the table and bats are (0 dry … 1 soaked). A wet table skids: less friction
+   * and spin bite, a lower bounce. A wet rubber grips less, so less spin goes on.
+   */
+  wetness: number;
+  /** Standing water on the table: discs (x, z, radius in metres) where the ball skids and dies. */
+  puddles: readonly Puddle[];
+}
+
+export interface Puddle {
+  x: number;
+  z: number;
+  r: number;
 }
 
 export const DEFAULT_PARAMS: PhysicsParams = {
@@ -88,6 +108,10 @@ export const DEFAULT_PARAMS: PhysicsParams = {
   netTangentialKeep: 0.6,
   floorRestitution: 0.75,
   floorFriction: 0.35,
+  windX: 0,
+  windZ: 0,
+  wetness: 0,
+  puddles: [],
 };
 
 /** Physics tick rate for the authoritative simulation. */

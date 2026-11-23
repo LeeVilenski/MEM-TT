@@ -7,6 +7,7 @@ import {
   length,
   normalize,
   paddleImpulse,
+  wetRubber,
   predict,
   scale,
   add,
@@ -55,7 +56,7 @@ export function landingOutcome(
   dt = 1 / 240,
 ): { outcome: LandingOutcome; pos?: Vec3; first?: Vec3; net?: boolean } {
   const s = cloneState(ball);
-  if (paddleImpulse(s, { ...pose, normal }, rubber) <= 0) return { outcome: 'short' };
+  if (paddleImpulse(s, { ...pose, normal }, wetRubber(rubber, params)) <= 0) return { outcome: 'short' };
   let tables = 0;
   let wasAbove = false;
   const { events, path } = predict(s, params, {

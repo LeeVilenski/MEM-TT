@@ -669,3 +669,53 @@ export class MatchHud {
     this.overKey = '';
   }
 }
+
+// ---------------------------------------------------------------- weather
+
+/**
+ * The wind readout for the outdoor tables: an arrow showing where the wind blows the
+ * ball (up = towards your opponent), its speed, and a rain drop when it's wet. Pulses
+ * when a gust gets up.
+ */
+export class WeatherHud {
+  private root: HTMLDivElement;
+  private arrow: HTMLDivElement;
+  private text: HTMLDivElement;
+  private key = '';
+
+  constructor(container: HTMLElement) {
+    this.root = el('div', 'whud');
+    this.root.setAttribute('role', 'status');
+    this.arrow = el('div', 'whud-arrow');
+    this.arrow.textContent = '↑';
+    this.arrow.setAttribute('aria-hidden', 'true');
+    this.text = el('div', 'whud-text');
+    this.root.append(this.arrow, this.text);
+    this.root.style.display = 'none';
+    container.append(this.root);
+  }
+
+  update(r: { name: string; kmh: number; towardsDeg: number; gusting: boolean; rain: number } | null) {
+    if (!r) {
+      this.root.style.display = 'none';
+      return;
+    }
+    this.root.style.display = 'flex';
+    const calm = r.kmh < 2;
+    this.arrow.style.visibility = calm ? 'hidden' : 'visible';
+    this.arrow.style.transform = `rotate(${r.towardsDeg.toFixed(0)}deg)`;
+    const where = calm ? 'still' : Math.abs(r.towardsDeg) < 35 ? 'at your back' : Math.abs(r.towardsDeg) > 145 ? 'in your face' : r.towardsDeg > 0 ? 'blowing right' : 'blowing left';
+    const key = `${r.name}|${r.kmh}|${where}|${r.rain > 0}`;
+    if (key === this.key) return;
+    this.key = key;
+    this.text.innerHTML = `<b>${r.rain > 0 ? '🌧 ' : ''}${r.name}</b><small>${calm ? 'No wind' : `${r.kmh} km/h · ${where}`}</small>`;
+    this.root.setAttribute('aria-label', `Weather: ${r.name}, wind ${calm ? 'still' : `${r.kmh} km/h, ${where}`}`);
+  }
+
+  /** A gust has got up. */
+  gust() {
+    this.root.classList.remove('gust');
+    void this.root.offsetWidth;
+    this.root.classList.add('gust');
+  }
+}
