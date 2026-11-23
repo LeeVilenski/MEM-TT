@@ -4365,3 +4365,78 @@ body {
 .ends-fade.on {
   opacity: 1;
 }
+
+/* ---------------------------------------------------------------- weather (outdoor tables) */
+
+.whud {
+  position: absolute;
+  top: calc(12px + env(safe-area-inset-top));
+  right: calc(12px + env(safe-area-inset-right));
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px 5px 6px;
+  background: rgba(14, 16, 22, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.15;
+  pointer-events: none;
+  backdrop-filter: blur(8px);
+}
+.whud-arrow {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  font-size: 17px;
+  font-weight: 700;
+  transition: transform 0.4s ease-out;
+}
+.whud-text b {
+  display: block;
+  font-size: 13px;
+}
+.whud-text small {
+  display: block;
+  opacity: 0.75;
+  font-size: 11px;
+}
+.whud.gust {
+  animation: whud-gust 1.2s ease-out;
+}
+.whud.gust::after {
+  content: 'GUST';
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 4px);
+  transform: translateX(-50%);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: #ffd166;
+  animation: whud-gust-label 1.6s ease-out forwards;
+}
+@keyframes whud-gust {
+  0% { box-shadow: 0 0 0 0 rgba(255, 209, 102, 0.7); }
+  100% { box-shadow: 0 0 0 14px rgba(255, 209, 102, 0); }
+}
+@keyframes whud-gust-label {
+  0%, 60% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .whud.gust, .whud.gust::after, .whud-arrow { animation: none; transition: none; }
+}
+/* Touch: under the ☰ and replay buttons. */
+body.touch .whud {
+  top: calc(64px + env(safe-area-inset-top));
+}
+@media (max-height: 480px) {
+  body:not(.touch) .whud { top: 6px; }
+  .whud { padding: 3px 10px 3px 4px; }
+  .whud-arrow { width: 20px; height: 20px; font-size: 14px; }
+}

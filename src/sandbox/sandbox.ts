@@ -70,6 +70,9 @@ import { LocalServer, WebSocketTransport, roomUrl, type Transport } from '../net
 import { fromV, isRoomCode, randomRoomCode, seatSide, type GameMode, type Seat } from '../net/protocol';
 import { mapVec, mapState, type SideId } from '../game/frame';
 import { endsSwapped } from '../game/rules';
+import { WEATHER_IDS, WeatherState, isOutdoor, type WeatherId } from '../game/weather';
+import { WeatherView } from '../render/weatherView';
+import { WeatherHud } from './hud';
 import { PRESETS, type Preset } from './presets';
 
 type CameraView = 'Player' | 'Side' | 'Top' | 'Broadcast' | 'Machine';
@@ -328,6 +331,8 @@ export class Sandbox implements MenuHost {
     muted: loadPref('mem.muted', '0') === '1',
     ambience: loadPref('mem.ambience', '1') === '1',
     music: loadPref('mem.music', '1') === '1',
+    /** Weather at the outdoor tables (wind, rain, puddles). Calm by default. */
+    weather: (WEATHER_IDS.includes(loadPref('mem.weather', 'calm') as WeatherId) ? loadPref('mem.weather', 'calm') : 'calm') as WeatherId,
     autoReplay: loadPref('mem.autoReplay', '1') === '1',
     replaySpeed: Number(loadPref('mem.replaySpeed', '0.4')) || 0.4,
     arcadeFx: loadPref('mem.arcadeFx', '1') === '1',
@@ -456,6 +461,9 @@ export class Sandbox implements MenuHost {
     this.ball = new BallView(this.scene);
     this.ball.visible = false;
     this.juice = new Juice(this.scene);
+    this.weatherView = new WeatherView(this.scene);
+    this.weatherHud = new WeatherHud(container);
+    this.weather.setPreset(this.look.weather);
     this.juice.reduceMotion = this.look.reduceMotion;
     setSpinPalette(this.look.spinPalette);
     this.juice.enabled = this.look.arcadeFx;
@@ -987,6 +995,7 @@ export class Sandbox implements MenuHost {
     const realDt = Math.min(0.1, (now - this.lastFrame) / 1000);
     this.lastFrame = now;
 
+    this.updateWeather(realDt, now / 1000);
     this.doublesFrame();
     this.localServer?.pump();
     // Hit-stop pauses the game clock briefly; online the clock is the server's, so never.
@@ -1077,6 +1086,7 @@ export class Sandbox implements MenuHost {
   // ---------------------------------------------------------------- match vs AI
 
   startMatch() {
+    this.rollWeather();
     this.resetMatchStats();
     this.leaveOnline();
     this.endMatch(false);
@@ -1819,6 +1829,7 @@ export class Sandbox implements MenuHost {
       key.shadow.map = null;
     }
     this.applyBloom();
+    this.weatherView.setQuality(idx);
     // Characters built to match: lighter meshes and plainer materials at lower quality.
     for (const v of [this.playerView, this.aiView, ...this.remoteViews.values()]) v.setDetail(idx as Detail);
     this.resize();
@@ -1902,9 +1913,52 @@ export class Sandbox implements MenuHost {
     return performance.now() / 1000;
   }
 
+  // ---------------------------------------------------------------- weather
+
+  /** The weather at the outdoor tables (see game/weather.ts). */
+  readonly weather = new WeatherState();
+  private weatherView: WeatherView;
+  private weatherHud: WeatherHud;
+  private wasGusting = false;
+
+  /**
+   * Weather plays only outdoors, and only offline outside the drills and tutorial (their
+   * scores and steps assume still air). Online rooms keep still air so every player's
+   * physics agrees with the server's.
+   */
+  private weatherActive() {
+    return this.weather.id !== 'calm' && isOutdoor(this.look.venue) && !this.online && !this.drill && !this.tutorial;
+  }
+
+  setWeather(id: WeatherId) {
+    this.look.weather = id;
+    savePref('mem.weather', id);
+    this.weather.setPreset(id);
+    this.gui?.controllersRecursive().forEach((c) => c.updateDisplay());
+  }
+
+  /** A fresh roll for a new match: a new wind quarter and puddles (and a new pick for Random). */
+  private rollWeather() {
+    this.weather.setPreset(this.look.weather);
+  }
+
+  private updateWeather(realDt: number, t: number) {
+    const active = this.weatherActive();
+    this.weather.update(t);
+    this.weather.apply(this.params, active, this.endsSwapped);
+    this.weatherView.update(realDt, this.params, this.weather.preset.rain, active);
+    this.sfx.setWeather(active ? this.weather.preset.rain : 0, active ? this.weather.gustLevel : 0);
+    const r = this.weather.readout(this.endsSwapped);
+    const show = active && this.playing && !this.replay;
+    this.weatherHud.update(show ? r : null);
+    if (show && r.gusting && !this.wasGusting && r.kmh >= 10) this.weatherHud.gust();
+    this.wasGusting = r.gusting;
+  }
+
   setVenue(id: VenueId) {
     this.look.venue = id;
     this.venue = setVenue(this.scene, id, this.venue);
+    this.weatherView.captureVenue();
     this.applyEnds();
     this.sfx.setAmbience(this.look.ambience ? VENUES[id].ambience : 'none');
     this.sfx.setMusic(VENUES[id].song);
@@ -2070,7 +2124,10 @@ export class Sandbox implements MenuHost {
       this.sfx.whoosh(length(this.ball.last.state.vel) * rate, x, e.direction === side);
     }
     if (e.type === 'table') {
-      this.sfx.table(e.impactSpeed, x);
+      if (e.splash) {
+        this.weatherView.splashAt(mapVec(side, e.pos), e.impactSpeed);
+        this.sfx.splash(e.impactSpeed, x);
+      } else this.sfx.table(e.impactSpeed, x);
       this.juice.bounce(mapVec(side, e.pos), e.impactSpeed);
       this.recorder.sound(this.clock(), 'table', e.impactSpeed, x);
     } else if (e.type === 'net') {

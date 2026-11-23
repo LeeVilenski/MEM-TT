@@ -19,7 +19,7 @@ import {
   type Vec3,
 } from '../physics';
 import { landingOutcome, type ShotMode } from './assist';
-import { mapPose, mapState, mapVec, type SideId } from './frame';
+import { mapParams, mapPose, mapState, mapVec, type SideId } from './frame';
 import { IncomingPrediction } from './intercept';
 import { faceNormal } from './swing';
 import { STYLES, type PlayStyle } from './styles';
@@ -232,10 +232,15 @@ export class AiPlayer {
   private pose: PaddlePose = { pos: v3(0.3, TABLE.height + 0.25, READY.z - ARM), normal: v3(0, 0, -1), vel: v3() };
   private prevPose: PaddlePose = this.pose;
 
+  /** The physics in this player's own frame (the weather turns round for the far end). */
+  private get params(): PhysicsParams {
+    return mapParams(this.side, this.worldParams);
+  }
+
   constructor(
     readonly side: SideId,
     public profile: AiProfile,
-    private params: PhysicsParams,
+    private worldParams: PhysicsParams,
     private rng: () => number = Math.random,
   ) {
     this.id = `ai-${side}`;

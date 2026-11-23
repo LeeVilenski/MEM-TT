@@ -13,7 +13,8 @@ export interface BallState {
 export type Side = 'near' | 'far';
 
 export type BallEvent =
-  | { type: 'table'; time: number; pos: Vec3; side: Side; impactSpeed: number; velIn: Vec3; velOut: Vec3; spinIn: Vec3; spinOut: Vec3 }
+  /** splash: it landed in a puddle (wet weather). */
+  | { type: 'table'; time: number; pos: Vec3; side: Side; impactSpeed: number; velIn: Vec3; velOut: Vec3; spinIn: Vec3; spinOut: Vec3; splash?: boolean }
   | { type: 'net'; time: number; pos: Vec3; part: 'tape' | 'mesh' }
   /** Ball centre passed the plane of the net. clearance = gap between ball bottom and net top (negative = would have hit). */
   | { type: 'netCross'; time: number; pos: Vec3; clearance: number; direction: Side }
@@ -68,15 +69,27 @@ const TABLE_TOP = TABLE.height;
 
 export const cloneState = (s: BallState): BallState => ({ pos: clone(s.pos), vel: clone(s.vel), spin: clone(s.spin) });
 
+/** Horizontal ball speeds (m/s) over which the wind takes hold, from none to full (see acceleration). */
+const WIND_SHELTER = [1, 3] as const;
+
 /** Aerodynamic + gravitational acceleration on the ball. */
 export function acceleration(s: BallState, p: PhysicsParams): Vec3 {
-  const speed = length(s.vel);
+  // Aerodynamics act on the ball's velocity through the air, not over the ground. A ball
+  // with little speed across the ground (a service toss, a ball bouncing about at your
+  // feet) is in the lee of the players and the table: the wind takes hold as it gets going.
+  let air = s.vel;
+  if (p.windX || p.windZ) {
+    const h = Math.hypot(s.vel.x, s.vel.z);
+    const k = h <= WIND_SHELTER[0] ? 0 : h >= WIND_SHELTER[1] ? 1 : ((h - WIND_SHELTER[0]) / (WIND_SHELTER[1] - WIND_SHELTER[0])) ** 2;
+    if (k > 0) air = v3(s.vel.x - p.windX * k, s.vel.y, s.vel.z - p.windZ * k);
+  }
+  const speed = length(air);
   let a = v3(0, -GRAVITY, 0);
   if (speed < 1e-6) return a;
 
   const q = 0.5 * AIR_DENSITY * AREA * speed * speed; // dynamic pressure × area
   // Drag, opposing motion.
-  a = addScaled(a, s.vel, (-q * p.dragCoefficient) / (BALL.mass * speed));
+  a = addScaled(a, air, (-q * p.dragCoefficient) / (BALL.mass * speed));
 
   // Magnus lift, perpendicular to both spin axis and velocity.
   const omega = length(s.spin);
@@ -84,7 +97,7 @@ export function acceleration(s: BallState, p: PhysicsParams): Vec3 {
     const spinRatio = (BALL.radius * omega) / speed;
     const cl = (p.liftCoefficientMax * spinRatio) / (spinRatio + p.liftHalfSpinRatio);
     // (ω × v) / (|ω||v|) carries the sin(angle) factor: spin parallel to velocity gives no lift.
-    const dir = scale(cross(s.spin, s.vel), 1 / (omega * speed));
+    const dir = scale(cross(s.spin, air), 1 / (omega * speed));
     a = addScaled(a, dir, (q * cl) / BALL.mass);
   }
   return a;
@@ -116,6 +129,22 @@ export function surfaceBounce(s: BallState, n: Vec3, restitution: number, fricti
   }
   s.vel = addScaled(s.vel, impulse, 1 / m);
   s.spin = addScaled(s.spin, cross(rc, impulse), 1 / INERTIA);
+}
+
+/**
+ * How wet the table is at (x, z): the weather's wetness (0–1), or above 1 inside a
+ * puddle (standing water).
+ */
+export function tableWetness(x: number, z: number, p: PhysicsParams): number {
+  for (const d of p.puddles) if ((x - d.x) ** 2 + (z - d.z) ** 2 <= d.r * d.r) return 2;
+  return p.wetness;
+}
+
+/** A rubber as it plays in the wet: the topsheet grips less, so less spin goes on (and comes off). */
+export function wetRubber(r: Rubber, p: PhysicsParams): Rubber {
+  if (!p.wetness) return r;
+  const k = 1 - 0.35 * p.wetness;
+  return { ...r, friction: r.friction * k, tangentialRestitution: r.tangentialRestitution * k };
 }
 
 export function tableRestitution(impactSpeed: number, p: PhysicsParams): number {
@@ -167,7 +196,7 @@ export class BallSim {
       const n = paddleContact(s.pos, pose, p.extraRadius ?? 0);
       if (!n) continue;
       const face = n === pose.normal ? 'front' : 'back';
-      const rubber = face === 'front' ? p.front : p.back;
+      const rubber = wetRubber(face === 'front' ? p.front : p.back, this.params);
       const velIn = clone(s.vel);
       const spinIn = clone(s.spin);
       const adj = p.adjustNormal ? p.adjustNormal(cloneState(s), pose, n, rubber) : n;
@@ -247,7 +276,13 @@ export class BallSim {
       const velIn = clone(s.vel);
       const spinIn = clone(s.spin);
       s.pos.y = TABLE_TOP + r;
-      surfaceBounce(s, v3(0, 1, 0), tableRestitution(impactSpeed, p), p.tableFriction, p.tableSpinBite, p.tableFrictionMax);
+      const wet = tableWetness(s.pos.x, s.pos.z, p);
+      const puddle = wet > 1;
+      const w = Math.min(1, wet);
+      // Water on the table: the ball skids (less grip, so spin barely bites) and the bounce dies.
+      const e = tableRestitution(impactSpeed, p) - 0.07 * w - (puddle ? 0.22 : 0);
+      const grip = puddle ? 0.15 : 1 - 0.55 * w;
+      surfaceBounce(s, v3(0, 1, 0), e, p.tableFriction * grip, p.tableSpinBite * grip, p.tableFrictionMax * grip);
       // Backspin checks the ball up, but (outside pure simulation) never sends it back.
       if (p.tableBounceKeep > 0) {
         const hIn = Math.hypot(velIn.x, velIn.z);
@@ -278,6 +313,7 @@ export class BallSim {
         velOut: clone(s.vel),
         spinIn,
         spinOut: clone(s.spin),
+        ...(puddle ? { splash: true } : {}),
       });
     }
 

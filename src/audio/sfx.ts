@@ -416,6 +416,46 @@ export class Sfx {
     this.burst({ gain: impactGain(speed, 8), pan: panFor(x), freq: 2200, q: 5, decay: 0.045, tone: 1150, toneDecay: 0.06 });
   }
 
+  /** The ball lands in a puddle: a dull slap and a spray. */
+  splash(speed: number, x: number) {
+    this.burst({ gain: impactGain(speed, 8) * 0.8, pan: panFor(x), freq: 700, q: 1.2, decay: 0.07, tone: 380, toneDecay: 0.04 });
+    this.burst({ gain: impactGain(speed, 8) * 0.5, pan: panFor(x), freq: 4500, q: 0.6, decay: 0.16, type: 'highpass' });
+  }
+
+  private rainBed: { gain: GainNode; wind: GainNode } | null = null;
+
+  /**
+   * Weather sounds over the venue's bed: rain hiss (0–1) and wind that swells in a gust
+   * (0–1). Both 0 fades them out.
+   */
+  setWeather(rain: number, gust: number) {
+    const ctx = this.ctx;
+    if (!ctx || !this.noise || !this.master) return;
+    const on = this.ambienceOn && (rain > 0 || gust > 0);
+    if (!this.rainBed) {
+      if (!on) return;
+      const mk = (type: BiquadFilterType, freq: number, q: number) => {
+        const src = ctx.createBufferSource();
+        src.buffer = this.noise;
+        src.loop = true;
+        src.playbackRate.value = 0.9 + Math.random() * 0.2;
+        const f = ctx.createBiquadFilter();
+        f.type = type;
+        f.frequency.value = freq;
+        f.Q.value = q;
+        const g = ctx.createGain();
+        g.gain.value = 0;
+        src.connect(f).connect(g).connect(this.master!);
+        src.start();
+        return g;
+      };
+      this.rainBed = { gain: mk('highpass', 2500, 0.5), wind: mk('bandpass', 320, 0.7) };
+    }
+    const t = ctx.currentTime;
+    this.rainBed.gain.gain.setTargetAtTime(on ? 0.05 * rain : 0, t, 0.4);
+    this.rainBed.wind.gain.setTargetAtTime(on ? 0.06 * gust : 0, t, 0.25);
+  }
+
   net(x: number) {
     this.burst({ gain: 0.45, pan: panFor(x), freq: 500, q: 1, decay: 0.12, type: 'lowpass', tone: 220, toneDecay: 0.08 });
   }

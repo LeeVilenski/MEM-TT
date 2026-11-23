@@ -1,4 +1,4 @@
-import type { BallState, PaddlePose, Vec3 } from '../physics';
+import type { BallState, PaddlePose, PhysicsParams, Puddle, Vec3 } from '../physics';
 
 /** The two ends of the table. 'near' is +z (the local player's end in the default view). */
 export type SideId = 'near' | 'far';
@@ -26,3 +26,18 @@ export function mapPose(side: SideId, p: PaddlePose): PaddlePose {
 
 /** Which end a world z coordinate is on. */
 export const sideOfZ = (z: number): SideId => (z >= 0 ? 'near' : 'far');
+
+const mirrored = new WeakMap<readonly Puddle[], Puddle[]>();
+
+/**
+ * The physics as seen from `side`'s local frame. Most of it has no direction, but the
+ * weather does: the far end feels the wind, and sees the puddles, rotated half round.
+ * Returns `params` itself in still, dry air (and for the near end). The result is a
+ * snapshot: call again for the current wind.
+ */
+export function mapParams(side: SideId, params: PhysicsParams): PhysicsParams {
+  if (side === 'near' || (!params.windX && !params.windZ && !params.puddles.length)) return params;
+  let puddles = mirrored.get(params.puddles);
+  if (!puddles) mirrored.set(params.puddles, (puddles = params.puddles.map((p) => ({ x: -p.x, z: -p.z, r: p.r }))));
+  return { ...params, windX: -params.windX, windZ: -params.windZ, puddles };
+}
