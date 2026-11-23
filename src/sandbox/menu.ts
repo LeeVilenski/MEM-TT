@@ -322,6 +322,7 @@ export class Menu {
       ${m.doubles ? this.doublesLineupHtml() : this.group('Opponent', `<div class="menu-choices wrap">${styles}</div>`)}
       ${this.group('Format', `<div class="menu-choices">${formats}</div>`)}
       ${this.group('Venue', `<div class="menu-choices wrap">${(Object.keys(VENUES) as VenueId[]).map((id) => this.choice('venue', id, VENUES[id].name, this.host.look.venue === id, undefined, this.host.lockReason('venue', id))).join('')}</div>`)}
+      ${this.weatherGroup()}
       <div class="menu-actions"><button data-a="start" class="primary big">Start match</button></div>`;
   }
 
@@ -376,7 +377,6 @@ export class Menu {
       .map(([name, v]) => this.choice('realism', String(Math.round(v * 100)), name, h.realism.percent === Math.round(v * 100), ['Real physics, no help', 'Some help', 'Forgiving (default)', 'Slow and very forgiving'][Object.keys(REALISM_PRESETS).indexOf(name)]))
       .join('');
     const venues = (Object.keys(VENUES) as VenueId[]).map((id) => this.choice('venue', id, VENUES[id].name, h.look.venue === id, undefined, h.lockReason('venue', id))).join('');
-    const weather = WEATHER_IDS.map((id) => this.choice('weather', id, weatherName(id), h.look.weather === id, id === 'random' ? 'A different sky each match' : WEATHER[id].note)).join('');
     const quality = QUALITY.map(([name, q]) => this.choice('quality', String(q), name, h.quality.setting === q)).join('');
     const toggle = (k: string, label: string, on: boolean, note?: string) =>
       `<label class="menu-toggle"><input type="checkbox" data-k="${k}" ${on ? 'checked' : ''}><span>${label}${note ? `<small>${note}</small>` : ''}</span></label>`;
@@ -387,14 +387,7 @@ export class Menu {
         ${this.group('Difficulty (realism)', `<div class="menu-choices">${realism}</div>${custom ? `<p class="menu-note">Custom setting (${h.realism.percent}%): pick a preset to change it.</p>` : ''}`)}
         ${this.group('Your character', `<button data-a="go-characters" class="menu-player compact"><span class="mp-avatar" aria-hidden="true">${esc(STYLES[h.realism.style].character[0])}</span><span class="mp-text"><b>${esc(STYLES[h.realism.style].character)}</b><small>${esc(styleNote(h.realism.style))}</small></span><span class="mp-change">Change ›</span></button>`)}
         ${this.group('Venue', `<div class="menu-choices wrap">${venues}</div>`)}
-        ${this.group(
-          'Weather (outdoor tables)',
-          `<div class="menu-choices wrap">${weather}</div><p class="menu-note">${
-            isOutdoor(h.look.venue)
-              ? 'Wind bends and holds up the ball; rain makes the table skid and takes spin off your rubber; a ball in a puddle splashes through low. Matches and practice only (drills, the tutorial and online stay dry).'
-              : `${esc(VENUES[h.look.venue].name)} is indoors: pick Rooftop, City Park, Offsite beach or Wonford House to play in the weather.`
-          }</p>`,
-        )}
+        ${this.weatherGroup()}
         ${this.group(
           'Sound',
           `<label class="menu-slider"><span>Volume</span><input type="range" data-k="volume" min="0" max="1" step="0.05" value="${h.look.volume}" aria-label="Volume"><output>${Math.round(h.look.volume * 100)}%</output></label>
@@ -499,6 +492,16 @@ export class Menu {
       </div>
       <p class="cs-bat-note">${esc(blade.description)} <small>(Stats for the forehand side.)</small></p>
     </div>`;
+  }
+
+  /** Weather for the outdoor tables (in Settings and on the match screen, next to the venue). */
+  private weatherGroup() {
+    const h = this.host;
+    const choices = WEATHER_IDS.map((id) => this.choice('weather', id, weatherName(id), h.look.weather === id, id === 'random' ? 'A different sky each match' : WEATHER[id].note)).join('');
+    const note = isOutdoor(h.look.venue)
+      ? 'Wind bends and holds up the ball; rain makes the table skid and takes spin off your rubber; a ball in a puddle splashes through low. Matches and practice only (drills, the tutorial, doubles and online stay dry).'
+      : `${esc(VENUES[h.look.venue].name)} is indoors: pick Rooftop, City Park, Offsite beach or Wonford House to play in the weather.`;
+    return this.group('Weather (outdoor tables)', `<div class="menu-choices wrap">${choices}</div><p class="menu-note">${note}</p>`);
   }
 
   private header(title: string) {
