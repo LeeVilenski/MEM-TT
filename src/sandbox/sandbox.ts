@@ -70,7 +70,7 @@ import { LocalServer, WebSocketTransport, roomUrl, type Transport } from '../net
 import { fromV, isRoomCode, randomRoomCode, seatSide, type GameMode, type Seat } from '../net/protocol';
 import { mapVec, mapState, type SideId } from '../game/frame';
 import { endsSwapped } from '../game/rules';
-import { WEATHER_IDS, WeatherState, isOutdoor, type WeatherId } from '../game/weather';
+import { WEATHER_IDS, WeatherState, isOutdoor, sanitizeCustom, type CustomWeather, type WeatherId } from '../game/weather';
 import { WeatherView } from '../render/weatherView';
 import { WeatherHud } from './hud';
 import { PRESETS, type Preset } from './presets';
@@ -332,6 +332,8 @@ export class Sandbox implements MenuHost {
     ambience: loadPref('mem.ambience', '1') === '1',
     music: loadPref('mem.music', '1') === '1',
     /** Weather at the outdoor tables (wind, rain, puddles). Calm by default. */
+    /** The Custom weather's sliders: rain, wind speed and direction, water on the table. */
+    customWeather: loadCustomWeather(),
     weather: (WEATHER_IDS.includes(loadPref('mem.weather', 'calm') as WeatherId) ? loadPref('mem.weather', 'calm') : 'calm') as WeatherId,
     autoReplay: loadPref('mem.autoReplay', '1') === '1',
     replaySpeed: Number(loadPref('mem.replaySpeed', '0.4')) || 0.4,
@@ -463,7 +465,7 @@ export class Sandbox implements MenuHost {
     this.juice = new Juice(this.scene);
     this.weatherView = new WeatherView(this.scene);
     this.weatherHud = new WeatherHud(container);
-    this.weather.setPreset(this.look.weather);
+    this.rollWeather();
     this.juice.reduceMotion = this.look.reduceMotion;
     setSpinPalette(this.look.spinPalette);
     this.juice.enabled = this.look.arcadeFx;
@@ -1933,13 +1935,22 @@ export class Sandbox implements MenuHost {
   setWeather(id: WeatherId) {
     this.look.weather = id;
     savePref('mem.weather', id);
-    this.weather.setPreset(id);
+    this.rollWeather();
     this.gui?.controllersRecursive().forEach((c) => c.updateDisplay());
   }
 
   /** A fresh roll for a new match: a new wind quarter and puddles (and a new pick for Random). */
   private rollWeather() {
-    this.weather.setPreset(this.look.weather);
+    this.weatherSeed = Math.floor(Math.random() * 1e9) + 1;
+    this.weather.setPreset(this.look.weather, this.weatherSeed, this.look.customWeather);
+  }
+  private weatherSeed = 1;
+
+  /** Change the Custom weather (a slider moved). Takes effect at once; the puddles stay put. */
+  setCustomWeather(c: Partial<CustomWeather>) {
+    this.look.customWeather = sanitizeCustom({ ...this.look.customWeather, ...c });
+    savePref('mem.weatherCustom', JSON.stringify(this.look.customWeather));
+    if (this.look.weather === 'custom') this.weather.setCustom(this.look.customWeather, this.weatherSeed);
   }
 
   private updateWeather(realDt: number, t: number) {
@@ -3152,6 +3163,14 @@ const DEFAULT_SERVER: string =
 function pickPref(key: string): StyleId | 'random' {
   const v = loadPref(key, 'random');
   return (FREE_PLAY_OPPONENT_IDS as string[]).includes(v) ? (v as StyleId) : 'random';
+}
+
+function loadCustomWeather(): CustomWeather {
+  try {
+    return sanitizeCustom(JSON.parse(loadPref('mem.weatherCustom', '{}')));
+  } catch {
+    return sanitizeCustom(null);
+  }
 }
 
 function loadPref(key: string, fallback: string): string {

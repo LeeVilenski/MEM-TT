@@ -4440,3 +4440,30 @@ body.touch .whud {
   .whud { padding: 3px 10px 3px 4px; }
   .whud-arrow { width: 20px; height: 20px; font-size: 14px; }
 }
+
+/* Custom weather sliders: wider labels and readouts than the volume slider. */
+.weather-custom {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+.menu-slider.wide {
+  grid-template-columns: 112px 1fr 190px;
+}
+.menu-slider.wide output {
+  font-family: inherit;
+  font-weight: 500;
+  font-size: 13px;
+  text-align: left;
+  white-space: nowrap;
+}
+@media (max-width: 560px) {
+  .menu-slider.wide {
+    grid-template-columns: 1fr auto;
+    gap: 2px 12px;
+  }
+  .menu-slider.wide input {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}

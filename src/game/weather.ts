@@ -18,7 +18,7 @@ import type { VenueId } from '../render/venues';
  * trajectory preview see the same wind as the ball does.
  */
 
-export type WeatherId = 'calm' | 'breezy' | 'gusty' | 'drizzle' | 'downpour' | 'storm' | 'random';
+export type WeatherId = 'calm' | 'breezy' | 'gusty' | 'drizzle' | 'downpour' | 'storm' | 'random' | 'custom';
 
 export interface WeatherPreset {
   name: string;
@@ -36,7 +36,7 @@ export interface WeatherPreset {
   puddles: number;
 }
 
-export const WEATHER: Record<Exclude<WeatherId, 'random'>, WeatherPreset> = {
+export const WEATHER: Record<Exclude<WeatherId, 'random' | 'custom'>, WeatherPreset> = {
   calm: { name: 'Calm', note: 'Still air, dry table', wind: 0, gust: 0, rain: 0, wetness: 0, puddles: 0 },
   breezy: { name: 'Breezy', note: 'A light breeze nudges the ball', wind: 1.2, gust: 1.3, rain: 0, wetness: 0, puddles: 0 },
   gusty: { name: 'Gusty', note: 'Strong gusts bend and hold up the ball', wind: 2.2, gust: 3, rain: 0, wetness: 0, puddles: 0 },
@@ -45,14 +45,63 @@ export const WEATHER: Record<Exclude<WeatherId, 'random'>, WeatherPreset> = {
   storm: { name: 'Storm', note: 'Driving rain and big gusts. Good luck', wind: 3, gust: 3.5, rain: 1, wetness: 1, puddles: 5 },
 };
 
-export const WEATHER_IDS: WeatherId[] = ['calm', 'breezy', 'gusty', 'drizzle', 'downpour', 'storm', 'random'];
+export const WEATHER_IDS: WeatherId[] = ['calm', 'breezy', 'gusty', 'drizzle', 'downpour', 'storm', 'random', 'custom'];
+
+/** Your own weather, from the sliders. */
+export interface CustomWeather {
+  /** How hard it rains (0–1): what you see and hear. */
+  rain: number;
+  /** Steady wind speed, km/h (gusts add up to half again). */
+  windKmh: number;
+  /** Where the wind blows the ball, degrees: 0 = towards your opponent, 90 = to your right, 180 = back at you. */
+  windDir: number;
+  /** Water on the table (0–1): how wet it plays, and puddles from about a third. */
+  water: number;
+}
+
+export const DEFAULT_CUSTOM: CustomWeather = { rain: 0.5, windKmh: 10, windDir: 90, water: 0.5 };
+export const MAX_WIND_KMH = 30;
+/** Most puddles a soaked table (water = 1) gets. */
+const MAX_PUDDLES = 6;
+
+/** Clean up a saved custom weather (anything missing or out of range falls back to the default). */
+export function sanitizeCustom(c: Partial<CustomWeather> | null | undefined): CustomWeather {
+  const num = (v: unknown, lo: number, hi: number, d: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : d);
+  return {
+    rain: num(c?.rain, 0, 1, DEFAULT_CUSTOM.rain),
+    windKmh: num(c?.windKmh, 0, MAX_WIND_KMH, DEFAULT_CUSTOM.windKmh),
+    windDir: ((num(c?.windDir, -360, 720, DEFAULT_CUSTOM.windDir) % 360) + 360) % 360,
+    water: num(c?.water, 0, 1, DEFAULT_CUSTOM.water),
+  };
+}
+
+export function customPreset(c: CustomWeather): WeatherPreset {
+  const wind = c.windKmh / 3.6;
+  return {
+    name: 'Custom',
+    note: 'Your own mix',
+    wind,
+    gust: wind * 0.5,
+    rain: c.rain,
+    wetness: c.water,
+    // None on a merely damp table; then up to MAX_PUDDLES as it gets soaked.
+    puddles: Math.max(0, Math.round(((c.water - 0.25) / 0.75) * MAX_PUDDLES)),
+  };
+}
+
+/** Wind direction in words, from your end: "towards your opponent", "to your right"… */
+export function windDirLabel(deg: number): string {
+  const d = ((Math.round(deg) % 360) + 360) % 360;
+  const names = ['towards your opponent', 'away and to your right', 'to your right', 'back and to your right', 'back at you', 'back and to your left', 'to your left', 'away and to your left'];
+  return names[Math.round(d / 45) % 8];
+}
 
 /** The tables that are outside, where weather applies. */
 export const OUTDOOR_VENUES: readonly VenueId[] = ['rooftop', 'park', 'beach', 'wonford'];
 export const isOutdoor = (v: VenueId) => OUTDOOR_VENUES.includes(v);
 
 export function weatherName(id: WeatherId): string {
-  return id === 'random' ? 'Random' : WEATHER[id].name;
+  return id === 'random' ? 'Random' : id === 'custom' ? 'Custom' : WEATHER[id].name;
 }
 
 function seeded(seed: number) {
@@ -94,6 +143,8 @@ export interface WeatherReadout {
 export class WeatherState {
   preset: WeatherPreset = WEATHER.calm;
   id: Exclude<WeatherId, 'random'> = 'calm';
+  /** The custom wind's swing round its direction is smaller: you chose where it blows from. */
+  private swing = 1;
   /** Direction the wind blows towards, radians in the venue frame (0 = −z, towards the far end). */
   private baseDir = 0;
   private phase = [0, 0, 0, 0];
@@ -105,12 +156,30 @@ export class WeatherState {
   /** How much of the gust is blowing (0–1). */
   gustLevel = 0;
 
-  setPreset(id: WeatherId, seed = Date.now()) {
+  setPreset(id: WeatherId, seed = Date.now(), custom: CustomWeather = DEFAULT_CUSTOM) {
     const rand = seeded(seed);
+    if (id === 'custom') return this.setCustom(custom, seed);
     const pick = id === 'random' ? (['breezy', 'gusty', 'drizzle', 'downpour', 'storm'] as const)[Math.floor(rand() * 5)] : id;
     this.id = pick;
     this.preset = WEATHER[pick];
+    this.swing = 1;
     this.baseDir = rand() * Math.PI * 2;
+    this.phase = this.phase.map(() => rand() * 100);
+    this.puddles = makePuddles(this.preset.puddles, rand);
+    this.update(0);
+  }
+
+  /**
+   * Your own weather. The wind blows the way you set it, from the end you start at (it still
+   * turns round with the venue when you change ends). The same seed keeps the puddles where
+   * they are as you drag the water slider: more water adds puddles, it doesn't move them.
+   */
+  setCustom(c: CustomWeather, seed = 1) {
+    const rand = seeded(seed);
+    this.id = 'custom';
+    this.preset = customPreset(c);
+    this.swing = 0.4;
+    this.baseDir = (c.windDir * Math.PI) / 180;
     this.phase = this.phase.map(() => rand() * 100);
     this.puddles = makePuddles(this.preset.puddles, rand);
     this.update(0);
@@ -129,7 +198,7 @@ export class WeatherState {
     this.gustLevel = Math.max(0, (g - 0.2) / 0.8) ** 1.5;
     const speed = p.wind * (0.85 + 0.15 * Math.sin(0.17 * t + d)) + p.gust * this.gustLevel;
     // Direction swings up to ±25°, more in a gust.
-    const dir = this.baseDir + (Math.sin(0.11 * t + b) * 0.3 + Math.sin(0.37 * t + c) * 0.12) * (1 + this.gustLevel * 0.5);
+    const dir = this.baseDir + (Math.sin(0.11 * t + b) * 0.3 + Math.sin(0.37 * t + c) * 0.12) * (1 + this.gustLevel * 0.5) * this.swing;
     this.windX = Math.sin(dir) * speed;
     this.windZ = -Math.cos(dir) * speed;
   }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BallSim, DEFAULT_PARAMS, RUBBERS, TABLE, paddleImpulse, predict, v3, wetRubber, type BallEvent, type BallState, type PhysicsParams } from '../src/physics';
-import { WEATHER, WeatherState, makePuddles } from '../src/game/weather';
+import { WEATHER, WeatherState, customPreset, makePuddles, sanitizeCustom, windDirLabel } from '../src/game/weather';
 import { mapParams } from '../src/game/frame';
 import { AI_LEVELS, AiPlayer } from '../src/game/ai';
 import { Match } from '../src/game/match';
@@ -189,4 +189,39 @@ describe('playing in the weather', () => {
     // Still air gives ~4.5 shots a point; with the wind read in the wrong frame it was under 1.
     expect(hits / points).toBeGreaterThan(3);
   }, 60000);
+});
+
+describe('custom weather', () => {
+  it('blows the way you set it, at the speed you set', () => {
+    const w = new WeatherState();
+    for (const [dir, label] of [[0, 'towards your opponent'], [90, 'to your right'], [180, 'back at you'], [270, 'to your left']] as const) {
+      w.setCustom({ rain: 0, windKmh: 18, windDir: dir, water: 0 });
+      w.update(0);
+      const r = w.readout();
+      expect(Math.abs(((r.towardsDeg - dir + 540) % 360) - 180)).toBeLessThan(25);
+      expect(windDirLabel(dir)).toBe(label);
+      // Gusts only add: never below ~85% of the steady wind.
+      expect(Math.hypot(w.windX, w.windZ) * 3.6).toBeGreaterThan(18 * 0.84);
+    }
+  });
+
+  it('water on the table sets the wetness, and puddles grow in number without moving', () => {
+    expect(customPreset({ rain: 0, windKmh: 0, windDir: 0, water: 0.2 }).puddles).toBe(0);
+    expect(customPreset({ rain: 0, windKmh: 0, windDir: 0, water: 1 }).puddles).toBe(6);
+    const w = new WeatherState();
+    w.setCustom({ rain: 1, windKmh: 0, windDir: 0, water: 0.5 }, 9);
+    const some = w.puddles;
+    w.setCustom({ rain: 1, windKmh: 0, windDir: 0, water: 1 }, 9);
+    expect(w.puddles.length).toBeGreaterThan(some.length);
+    expect(w.puddles.slice(0, some.length)).toEqual(some);
+    const params = { ...P };
+    w.apply(params, true);
+    expect(params.wetness).toBe(1);
+    expect([params.windX, params.windZ]).toEqual([0, 0]);
+  });
+
+  it('cleans up saved settings', () => {
+    expect(sanitizeCustom({ rain: 3, windKmh: -5, windDir: 450, water: Number.NaN })).toEqual({ rain: 1, windKmh: 0, windDir: 90, water: 0.5 });
+    expect(sanitizeCustom(null).windDir).toBe(90);
+  });
 });
