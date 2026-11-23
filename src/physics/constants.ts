@@ -83,6 +83,13 @@ export interface PhysicsParams {
    * and spin bite, a lower bounce. A wet rubber grips less, so less spin goes on.
    */
   wetness: number;
+  /** How wet the bats are (0–1): a wet topsheet grips less, so less spin goes on. */
+  batWet: number;
+  /**
+   * How wet the ball is (0–1). A wet ball slips on the rubber (less spin) and carries a
+   * film of water: a little heavier, so the air (drag, spin, wind) moves it less.
+   */
+  ballWet: number;
   /** Standing water on the table: discs (x, z, radius in metres) where the ball skids and dies. */
   puddles: readonly Puddle[];
 }
@@ -111,6 +118,8 @@ export const DEFAULT_PARAMS: PhysicsParams = {
   windX: 0,
   windZ: 0,
   wetness: 0,
+  batWet: 0,
+  ballWet: 0,
   puddles: [],
 };
 

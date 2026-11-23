@@ -759,6 +759,7 @@ export class Sandbox implements MenuHost {
     const shot = { speed: m.speed, elevation: aim.elevation, azimuth: aim.azimuth, spin: this.spin() };
     const start = launchState(origin, shot);
 
+    this.weather.newPoint(); // a fresh, towelled ball from the machine
     this.sim = new BallSim(start, this.params);
     this.prevPos = { ...start.pos };
     this.accumulator = 0;
@@ -1152,6 +1153,7 @@ export class Sandbox implements MenuHost {
           this.recorder.end(this.clock());
           break;
         case 'point': {
+          this.weather.newPoint();
           this.lastPointAt = this.clock();
           this.fadeMarkers();
           this.recorder.end(this.clock());
@@ -1950,12 +1952,14 @@ export class Sandbox implements MenuHost {
   setCustomWeather(c: Partial<CustomWeather>) {
     this.look.customWeather = sanitizeCustom({ ...this.look.customWeather, ...c });
     savePref('mem.weatherCustom', JSON.stringify(this.look.customWeather));
-    if (this.look.weather === 'custom') this.weather.setCustom(this.look.customWeather, this.weatherSeed);
+    if (this.look.weather === 'custom') this.weather.setCustom(this.look.customWeather, this.weatherSeed, false);
   }
 
   private updateWeather(realDt: number, t: number) {
     const active = this.weatherActive();
     this.weather.update(t);
+    // Rain soaks the table (and the bats and ball) only while you're playing.
+    if (active && this.playing && !this.replay && !this.menu.visible) this.weather.advance(realDt);
     this.weather.apply(this.params, active, this.endsSwapped);
     this.weatherView.update(realDt, this.params, this.weather.preset.rain, active);
     this.sfx.setWeather(active ? this.weather.preset.rain : 0, active ? this.weather.gustLevel : 0);
@@ -2135,6 +2139,7 @@ export class Sandbox implements MenuHost {
       this.sfx.whoosh(length(this.ball.last.state.vel) * rate, x, e.direction === side);
     }
     if (e.type === 'table') {
+      if (this.weatherActive()) this.weather.onBounce(!!e.splash);
       if (e.splash) {
         this.weatherView.splashAt(mapVec(side, e.pos), e.impactSpeed);
         this.sfx.splash(e.impactSpeed, x);

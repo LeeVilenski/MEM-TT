@@ -87,9 +87,11 @@ export function acceleration(s: BallState, p: PhysicsParams): Vec3 {
   let a = v3(0, -GRAVITY, 0);
   if (speed < 1e-6) return a;
 
+  // A soaked ball carries a film of water, ~10% of its 2.7 g: the air moves it less.
+  const mass = BALL.mass * (1 + 0.1 * p.ballWet);
   const q = 0.5 * AIR_DENSITY * AREA * speed * speed; // dynamic pressure × area
   // Drag, opposing motion.
-  a = addScaled(a, air, (-q * p.dragCoefficient) / (BALL.mass * speed));
+  a = addScaled(a, air, (-q * p.dragCoefficient) / (mass * speed));
 
   // Magnus lift, perpendicular to both spin axis and velocity.
   const omega = length(s.spin);
@@ -98,7 +100,7 @@ export function acceleration(s: BallState, p: PhysicsParams): Vec3 {
     const cl = (p.liftCoefficientMax * spinRatio) / (spinRatio + p.liftHalfSpinRatio);
     // (ω × v) / (|ω||v|) carries the sin(angle) factor: spin parallel to velocity gives no lift.
     const dir = scale(cross(s.spin, air), 1 / (omega * speed));
-    a = addScaled(a, dir, (q * cl) / BALL.mass);
+    a = addScaled(a, dir, (q * cl) / mass);
   }
   return a;
 }
@@ -140,10 +142,13 @@ export function tableWetness(x: number, z: number, p: PhysicsParams): number {
   return p.wetness;
 }
 
-/** A rubber as it plays in the wet: the topsheet grips less, so less spin goes on (and comes off). */
+/**
+ * A rubber as it plays in the wet: water between the topsheet and the ball (from a wet
+ * bat, a wet ball or both) cuts the grip, so less spin goes on (and comes off).
+ */
 export function wetRubber(r: Rubber, p: PhysicsParams): Rubber {
-  if (!p.wetness) return r;
-  const k = 1 - 0.35 * p.wetness;
+  if (!p.batWet && !p.ballWet) return r;
+  const k = (1 - 0.35 * p.batWet) * (1 - 0.3 * p.ballWet);
   return { ...r, friction: r.friction * k, tangentialRestitution: r.tangentialRestitution * k };
 }
 

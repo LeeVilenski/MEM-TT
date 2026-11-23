@@ -9,10 +9,14 @@ import type { VenueId } from '../render/venues';
  *    swings a little, and it is fixed to the venue, so when you change ends it is
  *    in your face instead of at your back. The ball weighs 2.7 g: a 3 m/s crosswind
  *    bends a drive 20–30 cm.
- *  - Rain wets the table (it skids: less grip, so backspin checks up less and
- *    topspin kicks less, and the bounce is lower) and your rubber (less spin goes on).
- *  - Puddles: standing water on the table. A ball that lands in one splashes and
- *    skids through low: it is still in, but hard to get under.
+ *  - Rain soaks the table as you play (and it dries when the rain stops, faster in a
+ *    wind). A wet table skids: less grip, so backspin checks up less and topspin
+ *    kicks less, and the bounce is lower.
+ *  - Puddles: standing water on the table, more of them as the water builds. A ball
+ *    that lands in one splashes and skids through low: still in, but hard to get under.
+ *  - Rain wets the bats and the ball too, and a puddle soaks the ball. A wet bat or
+ *    ball puts less spin on; a soaked ball is a little heavier, so the air moves it
+ *    less. The players wipe the bat and the ball between points.
  *
  * Everything here is deterministic for a given seed and clock, so the AI and the
  * trajectory preview see the same wind as the ball does.
@@ -30,19 +34,17 @@ export interface WeatherPreset {
   gust: number;
   /** Rain intensity (0–1): how heavy it looks and sounds. */
   rain: number;
-  /** Table and bat wetness (0–1). */
+  /** How wet the table is at the start (0–1); rain soaks it further as you play. */
   wetness: number;
-  /** How many puddles stand on the table. */
-  puddles: number;
 }
 
 export const WEATHER: Record<Exclude<WeatherId, 'random' | 'custom'>, WeatherPreset> = {
-  calm: { name: 'Calm', note: 'Still air, dry table', wind: 0, gust: 0, rain: 0, wetness: 0, puddles: 0 },
-  breezy: { name: 'Breezy', note: 'A light breeze nudges the ball', wind: 1.2, gust: 1.3, rain: 0, wetness: 0, puddles: 0 },
-  gusty: { name: 'Gusty', note: 'Strong gusts bend and hold up the ball', wind: 2.2, gust: 3, rain: 0, wetness: 0, puddles: 0 },
-  drizzle: { name: 'Drizzle', note: 'Damp table: less spin, lower bounce', wind: 0.8, gust: 0.8, rain: 0.35, wetness: 0.45, puddles: 2 },
-  downpour: { name: 'Downpour', note: 'Soaked: skidding bounces and puddles', wind: 1.2, gust: 1.5, rain: 1, wetness: 0.85, puddles: 4 },
-  storm: { name: 'Storm', note: 'Driving rain and big gusts. Good luck', wind: 3, gust: 3.5, rain: 1, wetness: 1, puddles: 5 },
+  calm: { name: 'Calm', note: 'Still air, dry table', wind: 0, gust: 0, rain: 0, wetness: 0 },
+  breezy: { name: 'Breezy', note: 'A light breeze nudges the ball', wind: 1.2, gust: 1.3, rain: 0, wetness: 0 },
+  gusty: { name: 'Gusty', note: 'Strong gusts bend and hold up the ball', wind: 2.2, gust: 3, rain: 0, wetness: 0 },
+  drizzle: { name: 'Drizzle', note: 'A damp table that slowly gets wetter', wind: 0.8, gust: 0.8, rain: 0.35, wetness: 0.2 },
+  downpour: { name: 'Downpour', note: 'Soaks the table as you play: skids and puddles', wind: 1.2, gust: 1.5, rain: 1, wetness: 0.4 },
+  storm: { name: 'Storm', note: 'Driving rain and big gusts. Good luck', wind: 3, gust: 3.5, rain: 1, wetness: 0.55 },
 };
 
 export const WEATHER_IDS: WeatherId[] = ['calm', 'breezy', 'gusty', 'drizzle', 'downpour', 'storm', 'random', 'custom'];
@@ -55,7 +57,7 @@ export interface CustomWeather {
   windKmh: number;
   /** Where the wind blows the ball, degrees: 0 = towards your opponent, 90 = to your right, 180 = back at you. */
   windDir: number;
-  /** Water on the table (0–1): how wet it plays, and puddles from about a third. */
+  /** Water on the table at the start (0–1): how wet it plays, and puddles from about a third. Rain adds to it. */
   water: number;
 }
 
@@ -63,6 +65,14 @@ export const DEFAULT_CUSTOM: CustomWeather = { rain: 0.5, windKmh: 10, windDir: 
 export const MAX_WIND_KMH = 30;
 /** Most puddles a soaked table (water = 1) gets. */
 const MAX_PUDDLES = 6;
+
+/** How many puddles stand on a table this wet: none when merely damp, then up to MAX_PUDDLES. */
+export const puddleCount = (water: number) => Math.max(0, Math.min(MAX_PUDDLES, Math.round(((water - 0.25) / 0.75) * MAX_PUDDLES)));
+
+/** Seconds of heavy rain to take a dry table to soaked (lighter rain takes longer). */
+export const SOAK_TIME = 240;
+/** Seconds for a soaked table to dry in still air once the rain stops (wind speeds it up). */
+export const DRY_TIME = 600;
 
 /** Clean up a saved custom weather (anything missing or out of range falls back to the default). */
 export function sanitizeCustom(c: Partial<CustomWeather> | null | undefined): CustomWeather {
@@ -84,8 +94,6 @@ export function customPreset(c: CustomWeather): WeatherPreset {
     gust: wind * 0.5,
     rain: c.rain,
     wetness: c.water,
-    // None on a merely damp table; then up to MAX_PUDDLES as it gets soaked.
-    puddles: Math.max(0, Math.round(((c.water - 0.25) / 0.75) * MAX_PUDDLES)),
   };
 }
 
@@ -134,6 +142,8 @@ export interface WeatherReadout {
   towardsDeg: number;
   gusting: boolean;
   rain: number;
+  /** Water on the table (0–1). */
+  water: number;
 }
 
 /**
@@ -148,8 +158,34 @@ export class WeatherState {
   /** Direction the wind blows towards, radians in the venue frame (0 = −z, towards the far end). */
   private baseDir = 0;
   private phase = [0, 0, 0, 0];
-  /** Puddles in the venue's frame (mirrored when the players change ends). */
-  puddles: Puddle[] = [];
+  /** Every puddle this table can get, in the order they appear as the water builds (venue frame). */
+  private allPuddles: Puddle[] = [];
+  private puddleSets = new Map<number, Puddle[]>();
+  /** Water on the table (0–1). Rain adds to it; it dries when the rain stops. */
+  tableWater = 0;
+  /** How wet the bats are (0–1). */
+  batWet = 0;
+  /** How wet the ball is (0–1). */
+  ballWet = 0;
+
+  /** The puddles standing now, in the venue's frame (mirrored when the players change ends). */
+  get puddles(): Puddle[] {
+    const n = puddleCount(this.tableWater);
+    let set = this.puddleSets.get(n);
+    if (!set) this.puddleSets.set(n, (set = this.allPuddles.slice(0, n)));
+    return set;
+  }
+
+  private setPuddles(rand: () => number) {
+    this.allPuddles = makePuddles(MAX_PUDDLES, rand);
+    this.puddleSets.clear();
+  }
+
+  /** Dry the bat and the ball for a fresh start (a new match or weather). */
+  private startWet() {
+    this.tableWater = this.preset.wetness;
+    this.batWet = this.ballWet = 0.5 * this.preset.rain;
+  }
   /** Current wind in the venue frame, m/s. */
   windX = 0;
   windZ = 0;
@@ -165,7 +201,8 @@ export class WeatherState {
     this.swing = 1;
     this.baseDir = rand() * Math.PI * 2;
     this.phase = this.phase.map(() => rand() * 100);
-    this.puddles = makePuddles(this.preset.puddles, rand);
+    this.setPuddles(rand);
+    this.startWet();
     this.update(0);
   }
 
@@ -173,16 +210,46 @@ export class WeatherState {
    * Your own weather. The wind blows the way you set it, from the end you start at (it still
    * turns round with the venue when you change ends). The same seed keeps the puddles where
    * they are as you drag the water slider: more water adds puddles, it doesn't move them.
+   * Moving a slider sets the table back to the slider's water; the bat and ball keep theirs.
    */
-  setCustom(c: CustomWeather, seed = 1) {
+  setCustom(c: CustomWeather, seed = 1, fresh = true) {
     const rand = seeded(seed);
     this.id = 'custom';
     this.preset = customPreset(c);
     this.swing = 0.4;
     this.baseDir = (c.windDir * Math.PI) / 180;
     this.phase = this.phase.map(() => rand() * 100);
-    this.puddles = makePuddles(this.preset.puddles, rand);
+    this.setPuddles(rand);
+    if (fresh) this.startWet();
+    else this.tableWater = c.water;
     this.update(0);
+  }
+
+  /**
+   * Let the weather work for dt seconds of play: rain soaks the table, or it dries (faster in
+   * a wind); the bats and the ball get as wet as the rain (and a wet ball wets the bat), and
+   * a ball soaked in a puddle dries off slowly.
+   */
+  advance(dt: number) {
+    const rain = this.preset.rain;
+    const wind = Math.hypot(this.windX, this.windZ);
+    if (rain > 0) this.tableWater = Math.min(1, this.tableWater + (dt * rain) / SOAK_TIME);
+    else this.tableWater = Math.max(0, this.tableWater - (dt * (1 + wind / 3)) / DRY_TIME);
+    const ease = (v: number, to: number, tau: number) => v + (to - v) * (1 - Math.exp(-dt / tau));
+    const ballTo = 0.8 * rain;
+    this.ballWet = ease(this.ballWet, ballTo, this.ballWet > ballTo ? 25 : 5);
+    this.batWet = ease(this.batWet, Math.max(0.9 * rain, 0.6 * this.ballWet), 6);
+  }
+
+  /** The ball bounced on the table: it picks up water, and a puddle soaks it. */
+  onBounce(splash: boolean) {
+    this.ballWet = splash ? 1 : Math.max(this.ballWet, 0.6 * this.tableWater);
+  }
+
+  /** Between points the players wipe the bat on their shirt and the ball on the towel. */
+  newPoint() {
+    this.batWet *= 0.4;
+    this.ballWet = Math.min(this.ballWet, 0.3 * this.preset.rain);
   }
 
   /** Advance the wind to clock time t (seconds). Smooth, with a gust every 5–15 s. */
@@ -210,26 +277,26 @@ export class WeatherState {
    */
   apply(params: PhysicsParams, active: boolean, swapped = false) {
     if (!active) {
-      params.windX = params.windZ = params.wetness = 0;
+      params.windX = params.windZ = params.wetness = params.batWet = params.ballWet = 0;
       if (params.puddles.length) params.puddles = [];
       return;
     }
     const k = swapped ? -1 : 1;
     params.windX = this.windX * k;
     params.windZ = this.windZ * k;
-    params.wetness = this.preset.wetness;
+    params.wetness = this.tableWater;
+    params.batWet = this.batWet;
+    params.ballWet = this.ballWet;
     const want = swapped ? this.mirrored() : this.puddles;
     if (params.puddles !== want) params.puddles = want;
   }
 
-  private mirrorCache: Puddle[] | null = null;
-  private mirrorOf: Puddle[] | null = null;
+  private mirrors = new WeakMap<Puddle[], Puddle[]>();
   private mirrored() {
-    if (this.mirrorOf !== this.puddles) {
-      this.mirrorOf = this.puddles;
-      this.mirrorCache = this.puddles.map((p) => ({ x: -p.x, z: -p.z, r: p.r }));
-    }
-    return this.mirrorCache!;
+    const here = this.puddles;
+    let m = this.mirrors.get(here);
+    if (!m) this.mirrors.set(here, (m = here.map((p) => ({ x: -p.x, z: -p.z, r: p.r }))));
+    return m;
   }
 
   readout(swapped = false): WeatherReadout {
@@ -242,6 +309,7 @@ export class WeatherState {
       towardsDeg: (Math.atan2(x, -z) * 180) / Math.PI,
       gusting: this.gustLevel > 0.45,
       rain: this.preset.rain,
+      water: this.tableWater,
     };
   }
 }

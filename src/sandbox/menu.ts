@@ -509,7 +509,7 @@ export class Menu {
     const note = (id: WeatherId) => (id === 'random' ? 'A different sky each match' : id === 'custom' ? 'Set the rain, wind and water yourself' : WEATHER[id].note);
     const choices = WEATHER_IDS.map((id) => this.choice('weather', id, weatherName(id), h.look.weather === id, note(id))).join('');
     const info = isOutdoor(h.look.venue)
-      ? 'Wind bends and holds up the ball; rain makes the table skid and takes spin off your rubber; a ball in a puddle splashes through low. Matches and practice only (drills, the tutorial, doubles and online stay dry).'
+      ? 'Wind bends and holds up the ball. Rain soaks the table as you play (it skids and the bounce dies) and wets your bat and the ball (less spin). A ball in a puddle splashes through low and comes out soaked. Matches and practice only (drills, the tutorial, doubles and online stay dry).'
       : `${esc(VENUES[h.look.venue].name)} is indoors: pick Rooftop, City Park, Offsite beach or Wonford House to play in the weather.`;
     const c = h.look.customWeather;
     const slider = (k: keyof CustomWeather, label: string, min: number, max: number, step: number, value: number, out: string) =>
@@ -521,7 +521,7 @@ export class Menu {
             ${slider('windKmh', 'Wind', 0, MAX_WIND_KMH, 1, c.windKmh, customOut('windKmh', c.windKmh))}
             ${slider('windDir', 'Wind blows', 0, 345, 15, c.windDir, customOut('windDir', c.windDir))}
             ${slider('water', 'Water on table', 0, 1, 0.05, c.water, customOut('water', c.water))}
-            <p class="menu-note">The direction is from the end you start at: it turns round with you when you change ends. Puddles appear from about a third water.</p>
+            <p class="menu-note">The direction is from the end you start at: it turns round with you when you change ends. Water is what the table starts with: rain soaks it further as you play (heavy rain: dry to soaked in about 4 minutes), and it dries when the rain stops. Puddles appear from about a third water. Rain wets the bats and the ball too.</p>
           </div>`
         : '';
     return this.group('Weather (outdoor tables)', `<div class="menu-choices wrap">${choices}</div>${sliders}<p class="menu-note">${info}</p>`);

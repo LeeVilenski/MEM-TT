@@ -158,6 +158,8 @@ export class WeatherView {
 
   private buildPuddles(puddles: readonly Puddle[]) {
     this.puddleKey = puddles;
+    // Puddles already standing stay as they are; new ones (the water building up) spread out.
+    const had = new Set((this.puddleGroup.children as THREE.Mesh[]).filter((m) => m.userData.grow >= 1).map((m) => m.userData.key as string));
     for (const m of this.puddleGroup.children as THREE.Mesh[]) m.geometry.dispose();
     this.puddleGroup.clear();
     for (const p of puddles) {
@@ -177,6 +179,10 @@ export class WeatherView {
       const m = new THREE.Mesh(geo, this.puddleMat);
       m.position.set(p.x, TABLE.height + 0.0015, p.z);
       m.renderOrder = 1;
+      m.userData.key = `${p.x.toFixed(4)},${p.z.toFixed(4)}`;
+      // On the first build (a new match, a slider) they're simply there.
+      m.userData.grow = had.has(m.userData.key) || !this.puddlesShown ? 1 : 0;
+      m.scale.setScalar(Math.max(0.05, m.userData.grow));
       this.puddleGroup.add(m);
     }
   }
@@ -213,7 +219,8 @@ export class WeatherView {
   update(dt: number, params: PhysicsParams, rain: number, active: boolean) {
     this.time += dt;
     const r = active ? rain : 0;
-    const wet = active ? params.wetness : 0;
+    // Quantised: the table look only needs redoing as the water visibly builds.
+    const wet = active ? Math.round(params.wetness * 50) / 50 : 0;
     if (Math.abs(r - this.rainLevel) > 1e-3 || this.lastWet !== wet) {
       this.rainLevel = r;
       this.lastWet = wet;
@@ -221,8 +228,17 @@ export class WeatherView {
     }
     const windy = active && (params.windX !== 0 || params.windZ !== 0);
     this.group.visible = active && (r > 0 || windy || params.puddles.length > 0);
-    if (!this.group.visible) return;
+    if (!this.group.visible) {
+      this.puddlesShown = false;
+      return;
+    }
     if (this.puddleKey !== params.puddles) this.buildPuddles(params.puddles);
+    this.puddlesShown = true;
+    for (const m of this.puddleGroup.children) {
+      if (m.userData.grow >= 1) continue;
+      m.userData.grow = Math.min(1, m.userData.grow + dt / 4);
+      m.scale.setScalar(Math.max(0.05, m.userData.grow));
+    }
 
     // Rain: drops fall and drift with the wind; respawn at the top when they reach the ground.
     const count = Math.round(this.dropCount * r);
@@ -306,6 +322,8 @@ export class WeatherView {
   }
 
   private lastWet = -1;
+  /** Puddles have been drawn since the weather was last hidden (so new ones grow in). */
+  private puddlesShown = false;
 
   dispose() {
     this.scene.remove(this.group);
