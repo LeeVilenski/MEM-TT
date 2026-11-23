@@ -1,4 +1,4 @@
-import { WEATHER, WEATHER_IDS, isOutdoor, weatherName, type WeatherId } from '../game/weather';
+import { MAX_WIND_KMH, WEATHER, WEATHER_IDS, isOutdoor, weatherName, windDirLabel, type CustomWeather, type WeatherId } from '../game/weather';
 import { STYLES, PLAYABLE_STYLE_IDS, FREE_PLAY_OPPONENT_IDS, type StyleId } from '../game/styles';
 import { AI_LEVELS, type AiLevel } from '../game/ai';
 import { REALISM_PRESETS } from '../game/realism';
@@ -28,7 +28,7 @@ export interface MenuHost {
   saveDoublesPicks(): void;
   onlineSettings: { name: string; code: string; mode: 'singles' | 'doubles'; bestOf: number };
   realism: { percent: number; style: StyleId };
-  look: { venue: VenueId; weather: WeatherId; volume: number; muted: boolean; ambience: boolean; music: boolean; autoReplay: boolean; arcadeFx: boolean; bloom: boolean; fullSpeedOut: boolean; callouts: boolean; mjMode: boolean; spinPalette: 'standard' | 'colourblind'; spinLabel: boolean; reduceMotion: boolean; swipeMode: 'curve' | 'real' | 'aim' | 'spin' };
+  look: { venue: VenueId; weather: WeatherId; customWeather: CustomWeather; volume: number; muted: boolean; ambience: boolean; music: boolean; autoReplay: boolean; arcadeFx: boolean; bloom: boolean; fullSpeedOut: boolean; callouts: boolean; mjMode: boolean; spinPalette: 'standard' | 'colourblind'; spinLabel: boolean; reduceMotion: boolean; swipeMode: 'curve' | 'real' | 'aim' | 'spin' };
   quality: { setting: QualitySetting };
   devTools: boolean;
   /** null if unlocked, otherwise how to unlock it. */
@@ -70,6 +70,7 @@ export interface MenuHost {
   setStyle(id: StyleId): void;
   setVenue(id: VenueId): void;
   setWeather(id: WeatherId): void;
+  setCustomWeather(c: Partial<CustomWeather>): void;
   setVolume(v: number): void;
   setMuted(m: boolean): void;
   setAmbience(a: boolean): void;
@@ -93,6 +94,14 @@ export interface MenuHost {
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
 const BEST_OF = [1, 3, 5, 7];
+
+/** What a Custom weather slider reads, e.g. "12 km/h", "↗ away and to your right". */
+function customOut(k: keyof CustomWeather, v: number): string {
+  if (k === 'windKmh') return v < 1 ? 'Still' : `${Math.round(v)} km/h`;
+  if (k === 'windDir') return `${'↑↗→↘↓↙←↖'[Math.round((((v % 360) + 360) % 360) / 45) % 8]} ${windDirLabel(v)}`;
+  if (k === 'rain') return v === 0 ? 'Dry' : v < 0.35 ? `Light · ${Math.round(v * 100)}%` : v < 0.75 ? `Steady · ${Math.round(v * 100)}%` : `Heavy · ${Math.round(v * 100)}%`;
+  return v === 0 ? 'Dry' : v < 0.25 ? `Damp · ${Math.round(v * 100)}%` : v < 0.7 ? `Wet · ${Math.round(v * 100)}%` : `Soaked · ${Math.round(v * 100)}%`;
+}
 
 /** "Helpdesk Hero · All-rounder" (the role only when it isn't the name). */
 const styleNote = (id: StyleId) => {
@@ -377,7 +386,6 @@ export class Menu {
       .map(([name, v]) => this.choice('realism', String(Math.round(v * 100)), name, h.realism.percent === Math.round(v * 100), ['Real physics, no help', 'Some help', 'Forgiving (default)', 'Slow and very forgiving'][Object.keys(REALISM_PRESETS).indexOf(name)]))
       .join('');
     const venues = (Object.keys(VENUES) as VenueId[]).map((id) => this.choice('venue', id, VENUES[id].name, h.look.venue === id, undefined, h.lockReason('venue', id))).join('');
-    const weather = WEATHER_IDS.map((id) => this.choice('weather', id, weatherName(id), h.look.weather === id, id === 'random' ? 'A different sky each match' : WEATHER[id].note)).join('');
     const quality = QUALITY.map(([name, q]) => this.choice('quality', String(q), name, h.quality.setting === q)).join('');
     const toggle = (k: string, label: string, on: boolean, note?: string) =>
       `<label class="menu-toggle"><input type="checkbox" data-k="${k}" ${on ? 'checked' : ''}><span>${label}${note ? `<small>${note}</small>` : ''}</span></label>`;
@@ -389,14 +397,6 @@ export class Menu {
         ${this.group('Your character', `<button data-a="go-characters" class="menu-player compact"><span class="mp-avatar" aria-hidden="true">${esc(STYLES[h.realism.style].character[0])}</span><span class="mp-text"><b>${esc(STYLES[h.realism.style].character)}</b><small>${esc(styleNote(h.realism.style))}</small></span><span class="mp-change">Change ›</span></button>`)}
         ${this.group('Venue', `<div class="menu-choices wrap">${venues}</div>`)}
         ${this.weatherGroup()}
-        ${this.group(
-          'Weather (outdoor tables)',
-          `<div class="menu-choices wrap">${weather}</div><p class="menu-note">${
-            isOutdoor(h.look.venue)
-              ? 'Wind bends and holds up the ball; rain makes the table skid and takes spin off your rubber; a ball in a puddle splashes through low. Matches and practice only (drills, the tutorial and online stay dry).'
-              : `${esc(VENUES[h.look.venue].name)} is indoors: pick Rooftop, City Park, Offsite beach or Wonford House to play in the weather.`
-          }</p>`,
-        )}
         ${this.group(
           'Sound',
           `<label class="menu-slider"><span>Volume</span><input type="range" data-k="volume" min="0" max="1" step="0.05" value="${h.look.volume}" aria-label="Volume"><output>${Math.round(h.look.volume * 100)}%</output></label>
@@ -506,12 +506,27 @@ export class Menu {
   /** Weather for the outdoor tables (in Settings and on the match screen, next to the venue). */
   private weatherGroup() {
     const h = this.host;
-    const choices = WEATHER_IDS.map((id) => this.choice('weather', id, weatherName(id), h.look.weather === id, id === 'random' ? 'A different sky each match' : WEATHER[id].note)).join('');
-    const note = isOutdoor(h.look.venue)
-      ? 'Wind bends and holds up the ball; rain makes the table skid and takes spin off your rubber; a ball in a puddle splashes through low. Matches and practice only (drills, the tutorial, doubles and online stay dry).'
+    const note = (id: WeatherId) => (id === 'random' ? 'A different sky each match' : id === 'custom' ? 'Set the rain, wind and water yourself' : WEATHER[id].note);
+    const choices = WEATHER_IDS.map((id) => this.choice('weather', id, weatherName(id), h.look.weather === id, note(id))).join('');
+    const info = isOutdoor(h.look.venue)
+      ? 'Wind bends and holds up the ball. Rain soaks the table as you play (it skids and the bounce dies) and wets your bat and the ball (less spin). A ball in a puddle splashes through low and comes out soaked. Matches and practice only (drills, the tutorial, doubles and online stay dry).'
       : `${esc(VENUES[h.look.venue].name)} is indoors: pick Rooftop, City Park, Offsite beach or Wonford House to play in the weather.`;
-    return this.group('Weather (outdoor tables)', `<div class="menu-choices wrap">${choices}</div><p class="menu-note">${note}</p>`);
+    const c = h.look.customWeather;
+    const slider = (k: keyof CustomWeather, label: string, min: number, max: number, step: number, value: number, out: string) =>
+      `<label class="menu-slider wide"><span>${label}</span><input type="range" data-k="cw-${k}" min="${min}" max="${max}" step="${step}" value="${value}" aria-label="${label}" aria-valuetext="${esc(out)}"><output>${esc(out)}</output></label>`;
+    const sliders =
+      h.look.weather === 'custom'
+        ? `<div class="weather-custom">
+            ${slider('rain', 'Rain', 0, 1, 0.05, c.rain, customOut('rain', c.rain))}
+            ${slider('windKmh', 'Wind', 0, MAX_WIND_KMH, 1, c.windKmh, customOut('windKmh', c.windKmh))}
+            ${slider('windDir', 'Wind blows', 0, 345, 15, c.windDir, customOut('windDir', c.windDir))}
+            ${slider('water', 'Water on table', 0, 1, 0.05, c.water, customOut('water', c.water))}
+            <p class="menu-note">The direction is from the end you start at: it turns round with you when you change ends. Water is what the table starts with: rain soaks it further as you play (heavy rain: dry to soaked in about 4 minutes), and it dries when the rain stops. Puddles appear from about a third water. Rain wets the bats and the ball too.</p>
+          </div>`
+        : '';
+    return this.group('Weather (outdoor tables)', `<div class="menu-choices wrap">${choices}</div>${sliders}<p class="menu-note">${info}</p>`);
   }
+
 
   private header(title: string) {
     return `<div class="menu-head"><button data-a="back" class="menu-back" aria-label="Back">←</button><h2 class="menu-title small">${title}</h2></div>`;
@@ -669,6 +684,14 @@ export class Menu {
       const up = t.value.toUpperCase().replace(/[^A-Z]/g, '');
       if (up !== t.value) t.value = up;
       h.onlineSettings.code = up;
+    } else if (k.startsWith('cw-')) {
+      const key = k.slice(3) as keyof CustomWeather;
+      const v = Number(t.value);
+      h.setCustomWeather({ [key]: v });
+      const text = customOut(key, v);
+      const out = t.parentElement?.querySelector('output');
+      if (out) out.textContent = text;
+      t.setAttribute('aria-valuetext', text);
     } else if (k === 'volume') {
       h.setVolume(Number(t.value));
       const out = t.parentElement?.querySelector('output');

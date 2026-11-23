@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BallSim, DEFAULT_PARAMS, RUBBERS, TABLE, paddleImpulse, predict, v3, wetRubber, type BallEvent, type BallState, type PhysicsParams } from '../src/physics';
-import { WEATHER, WeatherState, makePuddles } from '../src/game/weather';
+import { DRY_TIME, SOAK_TIME, WEATHER, WeatherState, makePuddles, puddleCount, sanitizeCustom, windDirLabel } from '../src/game/weather';
 import { mapParams } from '../src/game/frame';
 import { AI_LEVELS, AiPlayer } from '../src/game/ai';
 import { Match } from '../src/game/match';
@@ -74,14 +74,32 @@ describe('rain', () => {
     expect(inPuddle.velOut.y).toBeLessThan(beside.velOut.y * 0.8);
   });
 
-  it('a wet rubber puts less spin on', () => {
+  it('a wet bat or a wet ball puts less spin on (both, less still)', () => {
     const hit = (params: PhysicsParams) => {
       const s: BallState = { pos: v3(0, 1, 1.5), vel: v3(0, -1, 4), spin: v3() };
       paddleImpulse(s, { pos: v3(0, 1, 1.52), normal: v3(0, 0.5, -0.866), vel: v3(0, 6, -3) }, wetRubber(RUBBERS.inverted, params));
       return Math.abs(s.spin.x);
     };
-    expect(hit({ ...P, wetness: 1 })).toBeLessThan(hit(P) * 0.95);
-    expect(wetRubber(RUBBERS.inverted, P)).toBe(RUBBERS.inverted);
+    const dry = hit(P);
+    const bat = hit({ ...P, batWet: 1 });
+    const ball = hit({ ...P, ballWet: 1 });
+    expect(bat).toBeLessThan(dry * 0.95);
+    expect(ball).toBeLessThan(dry * 0.95);
+    expect(hit({ ...P, batWet: 1, ballWet: 1 })).toBeLessThan(Math.min(bat, ball));
+    // A wet table alone doesn't touch the bat.
+    expect(wetRubber(RUBBERS.inverted, { ...P, wetness: 1 })).toBe(RUBBERS.inverted);
+  });
+
+  it('a soaked ball is heavier: drag and spin move it less in the air', () => {
+    const topspin: BallState = { pos: v3(0, TABLE.height + 0.25, -TABLE.halfLength - 0.2), vel: v3(0, 1.2, 8), spin: v3(400, 0, 0) };
+    const dry = firstTable(topspin, P).pos.z;
+    const wet = firstTable(topspin, { ...P, ballWet: 1 }).pos.z;
+    // Less drag and less dip from topspin: it carries further.
+    expect(wet).toBeGreaterThan(dry + 0.01);
+    // ...and a crosswind pushes it less.
+    const cross = (ballWet: number) => firstTable(drive(), { ...P, windX: 3, ballWet }).pos.x;
+    expect(cross(1)).toBeLessThan(cross(0));
+    expect(cross(1)).toBeGreaterThan(0);
   });
 });
 
@@ -176,17 +194,135 @@ describe('playing in the weather', () => {
     const m = new Match(params, { near: { kind: 'ai', ai: near }, far: { kind: 'ai', ai: far } }, { bestOf: 1, pointsToWin: 11, firstServer: 'near' });
     let hits = 0;
     let points = 0;
+    let splashes = 0;
     m.on((e) => {
       if (e.type === 'hit') hits++;
-      if (e.type === 'point') points++;
+      if (e.type === 'point') {
+        points++;
+        w.newPoint();
+      }
+      if (e.type === 'ball' && e.event.type === 'table') {
+        w.onBounce(!!e.event.splash);
+        if (e.event.splash) splashes++;
+      }
     });
     for (let i = 0, t = 0; i < 60 * 60 * 10 && m.phase !== 'match-over'; i++) {
       w.update((t += 1 / 60));
+      w.advance(1 / 60);
       w.apply(params, true);
       m.frame(1 / 60, 1 / 60);
     }
     expect(m.phase).toBe('match-over');
+    // It played in the wet: the table soaked up and balls found the puddles.
+    expect(w.tableWater).toBeGreaterThan(WEATHER.storm.wetness);
+    expect(splashes).toBeGreaterThan(0);
     // Still air gives ~4.5 shots a point; with the wind read in the wrong frame it was under 1.
     expect(hits / points).toBeGreaterThan(3);
   }, 60000);
+});
+
+describe('custom weather', () => {
+  it('blows the way you set it, at the speed you set', () => {
+    const w = new WeatherState();
+    for (const [dir, label] of [[0, 'towards your opponent'], [90, 'to your right'], [180, 'back at you'], [270, 'to your left']] as const) {
+      w.setCustom({ rain: 0, windKmh: 18, windDir: dir, water: 0 });
+      w.update(0);
+      const r = w.readout();
+      expect(Math.abs(((r.towardsDeg - dir + 540) % 360) - 180)).toBeLessThan(25);
+      expect(windDirLabel(dir)).toBe(label);
+      // Gusts only add: never below ~85% of the steady wind.
+      expect(Math.hypot(w.windX, w.windZ) * 3.6).toBeGreaterThan(18 * 0.84);
+    }
+  });
+
+  it('water on the table sets the wetness, and puddles grow in number without moving', () => {
+    expect(puddleCount(0.2)).toBe(0);
+    expect(puddleCount(1)).toBe(6);
+    const w = new WeatherState();
+    w.setCustom({ rain: 1, windKmh: 0, windDir: 0, water: 0.5 }, 9);
+    const some = w.puddles;
+    w.setCustom({ rain: 1, windKmh: 0, windDir: 0, water: 1 }, 9, false);
+    expect(w.puddles.length).toBeGreaterThan(some.length);
+    expect(w.puddles.slice(0, some.length)).toEqual(some);
+    const params = { ...P };
+    w.apply(params, true);
+    expect(params.wetness).toBe(1);
+    expect([params.windX, params.windZ]).toEqual([0, 0]);
+  });
+
+  it('cleans up saved settings', () => {
+    expect(sanitizeCustom({ rain: 3, windKmh: -5, windDir: 450, water: Number.NaN })).toEqual({ rain: 1, windKmh: 0, windDir: 90, water: 0.5 });
+    expect(sanitizeCustom(null).windDir).toBe(90);
+  });
+});
+
+describe('getting wet as you play', () => {
+  const play = (w: WeatherState, seconds: number) => {
+    for (let t = 0; t < seconds; t += 0.5) w.advance(0.5);
+  };
+
+  it('rain soaks the table, and puddles appear as the water builds', () => {
+    const w = new WeatherState();
+    w.setPreset('downpour', 4);
+    const start = w.tableWater;
+    expect(start).toBe(WEATHER.downpour.wetness);
+    const first = w.puddles;
+    const before = first.length;
+    play(w, 60);
+    expect(w.tableWater).toBeCloseTo(start + 60 / SOAK_TIME, 5);
+    play(w, SOAK_TIME);
+    expect(w.tableWater).toBe(1);
+    expect(w.puddles.length).toBeGreaterThan(before);
+    // The first puddles stay where they were.
+    expect(w.puddles.slice(0, before)).toEqual(first);
+    // Lighter rain soaks it more slowly.
+    const d = new WeatherState();
+    d.setPreset('drizzle', 4);
+    play(d, 60);
+    expect(d.tableWater - WEATHER.drizzle.wetness).toBeLessThan(60 / SOAK_TIME / 2);
+  });
+
+  it('with no rain the table dries, faster in a wind', () => {
+    const still = new WeatherState();
+    still.setCustom({ rain: 0, windKmh: 0, windDir: 0, water: 1 });
+    const windy = new WeatherState();
+    windy.setCustom({ rain: 0, windKmh: 25, windDir: 0, water: 1 });
+    play(still, 60);
+    play(windy, 60);
+    expect(still.tableWater).toBeCloseTo(1 - 60 / DRY_TIME, 5);
+    expect(windy.tableWater).toBeLessThan(still.tableWater);
+  });
+
+  it('rain wets the bat and the ball; a puddle soaks the ball; a wipe between points dries them', () => {
+    const w = new WeatherState();
+    w.setPreset('downpour', 4);
+    play(w, 30);
+    expect(w.batWet).toBeGreaterThan(0.85);
+    expect(w.ballWet).toBeGreaterThan(0.75);
+    w.newPoint();
+    expect(w.batWet).toBeLessThan(0.4);
+    expect(w.ballWet).toBeLessThanOrEqual(0.3);
+    w.onBounce(true);
+    expect(w.ballWet).toBe(1);
+    // A soaked ball dries off slowly, and wets the bat that hits it.
+    play(w, 5);
+    expect(w.ballWet).toBeGreaterThan(0.85);
+    const params = { ...P };
+    w.apply(params, true);
+    expect([params.batWet, params.ballWet]).toEqual([w.batWet, w.ballWet]);
+    w.apply(params, false);
+    expect([params.batWet, params.ballWet]).toEqual([0, 0]);
+  });
+
+  it('a puddle soaks the ball even when it is not raining, and a wet table dampens it', () => {
+    const w = new WeatherState();
+    w.setCustom({ rain: 0, windKmh: 0, windDir: 0, water: 0.8 });
+    expect(w.ballWet).toBe(0);
+    w.onBounce(false);
+    expect(w.ballWet).toBeCloseTo(0.48, 5);
+    w.onBounce(true);
+    expect(w.ballWet).toBe(1);
+    play(w, 10);
+    expect(w.batWet).toBeGreaterThan(0.3); // from handling the wet ball
+  });
 });

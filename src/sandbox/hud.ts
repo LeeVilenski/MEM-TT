@@ -695,7 +695,7 @@ export class WeatherHud {
     container.append(this.root);
   }
 
-  update(r: { name: string; kmh: number; towardsDeg: number; gusting: boolean; rain: number } | null) {
+  update(r: { name: string; kmh: number; towardsDeg: number; gusting: boolean; rain: number; water: number } | null) {
     if (!r) {
       this.root.style.display = 'none';
       return;
@@ -705,11 +705,15 @@ export class WeatherHud {
     this.arrow.style.visibility = calm ? 'hidden' : 'visible';
     this.arrow.style.transform = `rotate(${r.towardsDeg.toFixed(0)}deg)`;
     const where = calm ? 'still' : Math.abs(r.towardsDeg) < 35 ? 'at your back' : Math.abs(r.towardsDeg) > 145 ? 'in your face' : r.towardsDeg > 0 ? 'blowing right' : 'blowing left';
-    const key = `${r.name}|${r.kmh}|${where}|${r.rain > 0}`;
+    // Water on the table, in steps of 5%.
+    const water = Math.round(r.water * 20) * 5;
+    const table = water === 0 ? '' : water < 25 ? `damp table ${water}%` : water < 70 ? `wet table ${water}%` : `soaked table ${water}%`;
+    const key = `${r.name}|${r.kmh}|${where}|${r.rain > 0}|${table}`;
     if (key === this.key) return;
     this.key = key;
-    this.text.innerHTML = `<b>${r.rain > 0 ? '🌧 ' : ''}${r.name}</b><small>${calm ? 'No wind' : `${r.kmh} km/h · ${where}`}</small>`;
-    this.root.setAttribute('aria-label', `Weather: ${r.name}, wind ${calm ? 'still' : `${r.kmh} km/h, ${where}`}`);
+    const wind = calm ? 'No wind' : `${r.kmh} km/h · ${where}`;
+    this.text.innerHTML = `<b>${r.rain > 0 ? '🌧 ' : ''}${r.name}</b><small>${wind}</small>${table ? `<small>💧 ${table}</small>` : ''}`;
+    this.root.setAttribute('aria-label', `Weather: ${r.name}, wind ${calm ? 'still' : `${r.kmh} km/h, ${where}`}${table ? `, ${table}` : ''}`);
   }
 
   /** A gust has got up. */
