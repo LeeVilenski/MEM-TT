@@ -46,6 +46,39 @@ export function bladeQuaternion(normal: Vec3, towardBody: number, out = new THRE
   return out.setFromRotationMatrix(m);
 }
 
+/** Blade length is drawn 6% longer than its width (the blade group's y scale). */
+const BLADE_OVAL = 1.06;
+/** The drawn bat's outline in its own frame: round the rim, and the end of the handle. */
+const BAT_OUTLINE: THREE.Vector3[] = (() => {
+  const pts: THREE.Vector3[] = [];
+  const r = PADDLE.radius + 0.004; // with the edge tape
+  for (let i = 0; i < 24; i++) {
+    const a = (i / 24) * Math.PI * 2;
+    for (const z of [-0.006, 0.006]) pts.push(new THREE.Vector3(r * Math.cos(a), r * Math.sin(a) * BLADE_OVAL, z));
+  }
+  const end = (-PADDLE.radius - 0.095) * BLADE_OVAL;
+  for (const x of [-0.013, 0.013]) for (const z of [-0.012, 0.012]) pts.push(new THREE.Vector3(x, end, z));
+  return pts;
+})();
+/** How far above the playing surface the drawn bat keeps (m). */
+const TABLE_GAP = 0.003;
+const scratch = new THREE.Vector3();
+
+/**
+ * How far (m) to lift a bat drawn at pos with orientation q so that no part of it over the
+ * table sinks into the top. Contact happens at the physics pose, so this only moves the
+ * picture, and only on low balls over the table, by a few centimetres at most.
+ */
+export function tableClearance(pos: THREE.Vector3, q: THREE.Quaternion): number {
+  let lift = 0;
+  for (const p of BAT_OUTLINE) {
+    scratch.copy(p).applyQuaternion(q).add(pos);
+    if (Math.abs(scratch.x) > TABLE.halfWidth || Math.abs(scratch.z) > TABLE.halfLength) continue;
+    lift = Math.max(lift, TABLE.height + TABLE_GAP - scratch.y);
+  }
+  return lift;
+}
+
 const HALF_TURN = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
 
 /**
@@ -109,7 +142,7 @@ export class PlayerView {
     this.handle = handle;
     const blade = new THREE.Group();
     blade.add(this.faceFront, this.faceBack, core, handle, tape);
-    blade.scale.set(1, 1.06, 1);
+    blade.scale.set(1, BLADE_OVAL, 1);
     blade.traverse((o) => (o.castShadow = true));
     this.paddle.add(blade);
     scene.add(this.paddle);
@@ -368,6 +401,7 @@ export class PlayerView {
     bladeQuaternion(n, bodyPos.x - pose.pos.x, this.paddle.quaternion);
     // Draw the stroke's forward lunge along the face normal (contact itself happens at the rest plane).
     this.paddle.position.set(pose.pos.x + n.x * forward, pose.pos.y, pose.pos.z + n.z * forward);
+    this.paddle.position.y += tableClearance(this.paddle.position, this.paddle.quaternion);
 
     // The hitting face shows the rubber colour for the current wing (red forehand, black backhand).
     const fh = wing === 'forehand';
