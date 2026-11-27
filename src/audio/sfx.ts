@@ -488,6 +488,107 @@ export class Sfx {
     });
   }
 
+  /**
+   * A broadcast-style sting for the stakes going up: brass stabs over a low drum hit.
+   * 'game' is two rising stabs; 'match' three, lower and heavier. `soft` for a repeat
+   * (game point again after it was saved): just the drum and one quiet stab.
+   */
+  sting(kind: 'game' | 'match', soft = false) {
+    const ctx = this.ready();
+    if (!ctx) return;
+    const t0 = ctx.currentTime + 0.02;
+    const out = ctx.createGain();
+    out.gain.value = soft ? 0.45 : 1;
+    out.connect(this.master!);
+    // Drum: a pitched-down sine thump plus a filtered noise hit.
+    const drum = (t: number, gain: number) => {
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(120, t);
+      o.frequency.exponentialRampToValueAtTime(48, t + 0.25);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.5 * gain, t + 0.005);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.45);
+      o.connect(g).connect(out);
+      o.start(t);
+      o.stop(t + 0.5);
+      const n = ctx.createBufferSource();
+      n.buffer = this.noise;
+      const f = ctx.createBiquadFilter();
+      f.type = 'lowpass';
+      f.frequency.value = 900;
+      const ng = ctx.createGain();
+      ng.gain.setValueAtTime(0.25 * gain, t);
+      ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+      n.connect(f).connect(ng).connect(out);
+      n.start(t);
+      n.stop(t + 0.2);
+    };
+    // Brass: detuned saws through a lowpass that opens and closes with each stab.
+    const stab = (t: number, notes: number[], dur: number, gain: number) => {
+      const f = ctx.createBiquadFilter();
+      f.type = 'lowpass';
+      f.Q.value = 2;
+      f.frequency.setValueAtTime(400, t);
+      f.frequency.exponentialRampToValueAtTime(2600, t + 0.04);
+      f.frequency.exponentialRampToValueAtTime(700, t + dur);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.09 * gain, t + 0.02);
+      g.gain.setValueAtTime(0.09 * gain, t + dur * 0.6);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      f.connect(g).connect(out);
+      for (const hz of notes)
+        for (const det of [-7, 7]) {
+          const o = ctx.createOscillator();
+          o.type = 'sawtooth';
+          o.frequency.value = hz;
+          o.detune.value = det;
+          o.connect(f);
+          o.start(t);
+          o.stop(t + dur + 0.02);
+        }
+    };
+    if (soft) {
+      drum(t0, 0.7);
+      stab(t0, kind === 'match' ? [196, 233, 294] : [262, 330, 392], 0.3, 0.6);
+      return;
+    }
+    if (kind === 'game') {
+      drum(t0, 0.8);
+      stab(t0, [262, 330, 392], 0.16, 1);
+      drum(t0 + 0.2, 1);
+      stab(t0 + 0.2, [294, 370, 440], 0.5, 1);
+    } else {
+      drum(t0, 1);
+      stab(t0, [196, 233, 294], 0.14, 1);
+      drum(t0 + 0.17, 0.8);
+      stab(t0 + 0.17, [196, 233, 294], 0.14, 1);
+      drum(t0 + 0.34, 1.2);
+      stab(t0 + 0.34, [220, 277, 330, 440], 0.7, 1.1);
+    }
+  }
+
+  /** A banner landing (WINNER, BAGEL): a short low thump with a bright tick. */
+  stamp(big = false) {
+    const ctx = this.ready();
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    const o = ctx.createOscillator();
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(big ? 160 : 190, t);
+    o.frequency.exponentialRampToValueAtTime(60, t + 0.18);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(big ? 0.45 : 0.3, t + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+    o.connect(g).connect(this.master!);
+    o.start(t);
+    o.stop(t + 0.32);
+    this.burst({ gain: big ? 0.3 : 0.2, pan: 0, freq: 3200, q: 1.5, decay: 0.05, type: 'highpass' });
+  }
+
   /** Background music for a venue (procedural songs; see music.ts). */
   setMusic(kind: SongId) {
     this.musicKind = kind;

@@ -9,7 +9,13 @@ import { Avatar, type Detail, type Reaction } from './avatar';
 const RED = 0xc8202a;
 /** The ring turns gold this long (s) before contact: flick now for a perfect stroke. */
 const PERFECT_RING = 0.06;
-const BLACK = 0x15161a;
+const BLACK = 0x1b1c21;
+/** How see-through the bat is: just enough that it never completely hides the ball at contact. */
+const PADDLE_OPACITY = 0.9;
+/** Swing streak: faint copies of the blade along its recent path, on fast swings. */
+const GHOSTS = 6;
+/** Seconds of path the streak covers. */
+const GHOST_SPAN = 0.07;
 /** Hit-zone colours: yours, and your doubles partner's turn. */
 const MINE = 0x5eead4;
 const PARTNER = 0x60a5fa;
@@ -77,9 +83,10 @@ export class PlayerView {
     // Blade: two thin discs (one per rubber) around a wooden core, slightly oval.
     const disc = new THREE.CylinderGeometry(PADDLE.radius, PADDLE.radius, 0.002, 40);
     disc.rotateX(Math.PI / 2); // face along ±z
-    // Slightly see-through so the blade never completely hides the ball at contact.
-    const mk = (color: number) => {
-      const m = new THREE.MeshStandardMaterial({ color, roughness: 0.6, transparent: true, opacity: 0.78 });
+    // Slightly see-through so the blade never completely hides the ball at contact (but not
+    // so much that the wooden core shows through the black rubber as brown).
+    const mk = (color: number, extra: THREE.MeshStandardMaterialParameters = {}) => {
+      const m = new THREE.MeshStandardMaterial({ color, roughness: 0.6, transparent: true, opacity: PADDLE_OPACITY, ...extra });
       this.paddleMaterials.push(m);
       return m;
     };
@@ -87,17 +94,37 @@ export class PlayerView {
     this.faceFront.position.z = 0.0045;
     this.faceBack = new THREE.Mesh(disc, mk(BLACK));
     this.faceBack.position.z = -0.0045;
-    const core = new THREE.Mesh(new THREE.CylinderGeometry(PADDLE.radius - 0.002, PADDLE.radius - 0.002, 0.007, 40).rotateX(Math.PI / 2), mk(0xd8b07a));
+    // Rubber has a soft sheen, so the black face still shows its shape in shadow.
+    for (const f of [this.faceFront, this.faceBack]) (f.material as THREE.MeshStandardMaterial).roughness = 0.42;
+    // Edge tape: a bright band round the rim, so the blade's outline reads against the
+    // table and floor from behind, whichever rubber faces you.
+    const tape = new THREE.Mesh(new THREE.TorusGeometry(PADDLE.radius + 0.0004, 0.0032, 6, 56), mk(0xd9dde3, { roughness: 0.35, metalness: 0.3, emissive: 0x2a2d33 }));
+    // The wooden core is dark: the rubbers are slightly see-through, and with effects on
+    // (blending in linear light) a pale core showed through the black rubber as brown.
+    // Its edge is under the edge tape anyway.
+    const core = new THREE.Mesh(new THREE.CylinderGeometry(PADDLE.radius - 0.002, PADDLE.radius - 0.002, 0.007, 40).rotateX(Math.PI / 2), mk(0x2a2420));
     const handle = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.1, 0.024), mk(0x8a5a2b));
     handle.position.y = -PADDLE.radius - 0.045;
     handle.name = 'handle';
     this.handle = handle;
     const blade = new THREE.Group();
-    blade.add(this.faceFront, this.faceBack, core, handle);
+    blade.add(this.faceFront, this.faceBack, core, handle, tape);
     blade.scale.set(1, 1.06, 1);
     blade.traverse((o) => (o.castShadow = true));
     this.paddle.add(blade);
     scene.add(this.paddle);
+
+    // Swing streak: additive copies of the blade's outline along its recent path.
+    const ghostGeo = new THREE.CircleGeometry(PADDLE.radius, 32);
+    ghostGeo.scale(1, 1.06, 1);
+    for (let i = 0; i < GHOSTS; i++) {
+      const m = new THREE.Mesh(ghostGeo, new THREE.MeshBasicMaterial({ color: 0xdfe8ff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false }));
+      m.visible = false;
+      m.frustumCulled = false;
+      m.renderOrder = 4;
+      this.ghosts.push(m);
+      scene.add(m);
+    }
 
     // Body: a faint torso only (the camera sits just above and behind the head), so it
     // gives a sense of position without ever hiding the ball.
@@ -151,6 +178,11 @@ export class PlayerView {
   private variant = 0;
   private detail: Detail = 2;
 
+  /** The character shown, if any. */
+  get styleId(): StyleId | null {
+    return this.style;
+  }
+
   /** Show this player as a style's character (replacing the plain torso). */
   setStyle(style: StyleId, avatarOpacity = this.avatarOpacity) {
     this.avatarOpacity = avatarOpacity;
@@ -188,7 +220,7 @@ export class PlayerView {
     const d = Math.hypot(b.x - camera.x, b.z - camera.z);
     const k = Math.max(0, Math.min(1, (d - 0.9) / 1.2));
     this.avatar.setOpacity(this.avatarOpacity * k);
-    for (const m of this.paddleMaterials) m.opacity = 0.78 * Math.max(0.15, k);
+    for (const m of this.paddleMaterials) m.opacity = PADDLE_OPACITY * Math.max(0.15, k);
   }
 
   /** A short body-language reaction to a point (no-op for the plain torso). */
@@ -196,8 +228,44 @@ export class PlayerView {
     this.avatar?.react(kind);
   }
 
+  /** Swing streak on (arcade effects). */
+  streakEnabled = true;
+  private ghosts: THREE.Mesh[] = [];
+  private path: { t: number; pos: THREE.Vector3; q: THREE.Quaternion }[] = [];
+
+  /** Keep the blade's recent path and draw the streak along it when the swing is fast. */
+  private updateGhosts() {
+    const now = performance.now() / 1000;
+    const pos = this.paddle.position.clone();
+    const last = this.path[this.path.length - 1];
+    // A jump (a new point, a replay cut) restarts the path.
+    if (last && last.pos.distanceTo(pos) > 0.6) this.path = [];
+    this.path.push({ t: now, pos, q: this.paddle.quaternion.clone() });
+    while (this.path.length > 2 && now - this.path[1].t > GHOST_SPAN) this.path.shift();
+    const first = this.path[0];
+    const span = now - first.t;
+    const speed = span > 1e-3 ? first.pos.distanceTo(pos) / span : 0;
+    // From a brisk 2.5 m/s swing, full by 7 m/s.
+    const k = this.streakEnabled && this.paddle.visible ? Math.max(0, Math.min(1, (speed - 2.5) / 4.5)) : 0;
+    this.ghosts.forEach((g, i) => {
+      g.visible = k > 0 && this.path.length > 1;
+      if (!g.visible) return;
+      // Spread back along the path: i = 0 is next to the blade, the last the oldest.
+      const tt = now - ((i + 1) / GHOSTS) * span;
+      let j = this.path.length - 1;
+      while (j > 0 && this.path[j - 1].t > tt) j--;
+      const a = this.path[Math.max(0, j - 1)];
+      const b = this.path[j];
+      const u = b.t > a.t ? Math.max(0, Math.min(1, (tt - a.t) / (b.t - a.t))) : 1;
+      g.position.lerpVectors(a.pos, b.pos, u);
+      g.quaternion.slerpQuaternions(a.q, b.q, u);
+      (g.material as THREE.MeshBasicMaterial).opacity = 0.16 * k * (1 - i / GHOSTS);
+    });
+  }
+
   set visible(v: boolean) {
     this.paddle.visible = v;
+    if (!v) for (const g of this.ghosts) g.visible = false;
     this.body.visible = v;
     this.shadow.visible = v;
     if (!v) this.setMarker(null);
@@ -316,6 +384,7 @@ export class PlayerView {
       this.avatar.update(bodyPos, hand, bodyPos.z >= 0, { gaze: g && this.gaze.set(g.x, g.y, g.z), grip: gripQuaternion(this.paddle.quaternion, wing, this.grip) });
     } else this.body.position.set(bodyPos.x, 0, bodyPos.z);
     this.shadow.position.set(bodyPos.x, 0.002, bodyPos.z);
+    this.updateGhosts();
   }
 }
 

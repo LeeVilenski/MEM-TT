@@ -444,6 +444,36 @@ export interface OverGrade {
   best: boolean;
 }
 
+/** A sesame bagel, for an 11–0 game. */
+const BAGEL_SVG = `<svg class="stamp-bagel" viewBox="0 0 120 100" aria-hidden="true">
+  <defs>
+    <radialGradient id="bagel-crust" cx="50%" cy="38%" r="62%">
+      <stop offset="0" stop-color="#f6cf7f"/>
+      <stop offset="0.55" stop-color="#d9913f"/>
+      <stop offset="1" stop-color="#8a4a17"/>
+    </radialGradient>
+  </defs>
+  <ellipse cx="60" cy="58" rx="52" ry="36" fill="#000" opacity="0.28"/>
+  <path fill="url(#bagel-crust)" fill-rule="evenodd" stroke="#6b3510" stroke-width="2"
+    d="M10 50a50 38 0 1 0 100 0a50 38 0 1 0 -100 0Z M45 49a15 9 0 1 0 30 0a15 9 0 1 0 -30 0Z"/>
+  <path d="M22 38q38 -26 76 0" fill="none" stroke="#fff3d6" stroke-width="3" stroke-linecap="round" opacity="0.45"/>
+  <g fill="#fff8e8" stroke="#c9a46a" stroke-width="0.6">
+    <ellipse cx="28" cy="40" rx="3" ry="1.6" transform="rotate(-25 28 40)"/>
+    <ellipse cx="40" cy="30" rx="3" ry="1.6" transform="rotate(15 40 30)"/>
+    <ellipse cx="55" cy="25" rx="3" ry="1.6" transform="rotate(-10 55 25)"/>
+    <ellipse cx="70" cy="27" rx="3" ry="1.6" transform="rotate(30 70 27)"/>
+    <ellipse cx="85" cy="33" rx="3" ry="1.6" transform="rotate(-35 85 33)"/>
+    <ellipse cx="95" cy="45" rx="3" ry="1.6" transform="rotate(20 95 45)"/>
+    <ellipse cx="24" cy="57" rx="3" ry="1.6" transform="rotate(40 24 57)"/>
+    <ellipse cx="36" cy="68" rx="3" ry="1.6" transform="rotate(-20 36 68)"/>
+    <ellipse cx="62" cy="72" rx="3" ry="1.6" transform="rotate(10 62 72)"/>
+    <ellipse cx="84" cy="66" rx="3" ry="1.6" transform="rotate(-30 84 66)"/>
+    <ellipse cx="97" cy="58" rx="3" ry="1.6" transform="rotate(25 97 58)"/>
+    <ellipse cx="47" cy="36" rx="2.6" ry="1.4" transform="rotate(-40 47 36)"/>
+    <ellipse cx="78" cy="40" rx="2.6" ry="1.4" transform="rotate(50 78 40)"/>
+  </g>
+</svg>`;
+
 export class MatchHud {
   private board: HTMLDivElement;
   private prompt: HTMLDivElement;
@@ -585,6 +615,41 @@ export class MatchHud {
     this.cueEl.className = `mhud-cue${mine ? ' mine' : ''}`;
     void this.cueEl.offsetWidth;
     this.cueEl.classList.add('show');
+  }
+
+  /**
+   * The start-of-point cue when the stakes are up: a big GAME POINT / MATCH POINT card
+   * with whose serve it is underneath. `mine`: the point is yours to win.
+   */
+  stakes(kind: 'game' | 'match', mine: boolean, serve: string) {
+    if (!this.cueEl) {
+      this.cueEl = el('div', 'mhud-cue');
+      this.board.parentElement!.append(this.cueEl);
+    }
+    this.cueEl.innerHTML = `<div class="stakes-title">${kind === 'match' ? 'MATCH POINT' : 'GAME POINT'}</div><div class="stakes-sub">${serve}</div>`;
+    this.cueEl.className = `mhud-cue stakes ${kind} ${mine ? 'mine' : 'theirs'}`;
+    void this.cueEl.offsetWidth;
+    this.cueEl.classList.add('show');
+  }
+
+  private stampEl: HTMLDivElement | null = null;
+
+  /**
+   * A banner stamped onto the screen for a big moment: a clean WINNER, or a BAGEL
+   * (a game won 11–0, with a bagel). `mine`: it's yours (gold), else theirs (muted).
+   */
+  stamp(kind: 'winner' | 'bagel', mine: boolean, sub = '') {
+    if (!this.stampEl) {
+      this.stampEl = el('div', 'mhud-stamp');
+      this.stampEl.setAttribute('role', 'status');
+      this.board.parentElement!.append(this.stampEl);
+    }
+    const title = kind === 'winner' ? 'WINNER' : mine ? 'BAGEL!' : 'BAGELED';
+    const art = kind === 'bagel' ? BAGEL_SVG : '';
+    this.stampEl.innerHTML = `${art}<div class="stamp-title">${title}</div>${sub ? `<div class="stamp-sub">${sub}</div>` : ''}`;
+    this.stampEl.className = `mhud-stamp ${kind} ${mine ? 'mine' : 'theirs'}`;
+    void this.stampEl.offsetWidth;
+    this.stampEl.classList.add('show');
   }
 
   /** A quick white pulse at the screen edges on a hard hit of yours (power 0–1). */
