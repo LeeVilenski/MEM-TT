@@ -28,7 +28,7 @@ export interface MenuHost {
   saveDoublesPicks(): void;
   onlineSettings: { name: string; code: string; mode: 'singles' | 'doubles'; bestOf: number };
   realism: { percent: number; style: StyleId };
-  look: { venue: VenueId; weather: WeatherId; customWeather: CustomWeather; volume: number; muted: boolean; ambience: boolean; music: boolean; autoReplay: boolean; arcadeFx: boolean; bloom: boolean; fullSpeedOut: boolean; callouts: boolean; mjMode: boolean; spinPalette: 'standard' | 'colourblind'; spinLabel: boolean; reduceMotion: boolean; swipeMode: 'curve' | 'real' | 'aim' | 'spin' };
+  look: { venue: VenueId; weather: WeatherId; customWeather: CustomWeather; volume: number; muted: boolean; ambience: boolean; music: boolean; autoReplay: boolean; arcadeFx: boolean; bloom: boolean; ao: boolean; fullSpeedOut: boolean; callouts: boolean; mjMode: boolean; spinPalette: 'standard' | 'colourblind'; spinLabel: boolean; reduceMotion: boolean; swipeMode: 'curve' | 'real' | 'aim' | 'spin' };
   quality: { setting: QualitySetting };
   devTools: boolean;
   /** null if unlocked, otherwise how to unlock it. */
@@ -79,6 +79,7 @@ export interface MenuHost {
   setArcadeFx(a: boolean): void;
   setQuality(q: QualitySetting): void;
   setBloom(on: boolean): void;
+  setAO(on: boolean): void;
   setFullSpeedOut(on: boolean): void;
   setCallouts(on: boolean): void;
   setMjMode(on: boolean): void;
@@ -422,7 +423,7 @@ export class Menu {
            ${toggle('reduceMotion', 'Reduce motion', h.look.reduceMotion, 'No camera shake, zoom kick, hit-stop or screen flash')}`,
         )}
         ${this.group('Camera', `<div class="menu-choices">${this.choice('cam', 'dynamic', 'Dynamic', h.camMode === 'dynamic', 'Follows the play (recommended)')}${this.choice('cam', 'close', 'Close', h.camMode === 'close', 'Behind you, more depth')}${this.choice('cam', 'classic', 'Classic', h.camMode === 'classic', 'High and steady, like TV')}</div>`)}
-        ${this.group('Graphics quality', `<div class="menu-choices">${quality}</div>${toggle('bloom', 'Glow effects', h.look.bloom, 'Bloom on the ball trail, sparks and lights (High quality only)')}`)}
+        ${this.group('Graphics quality', `<div class="menu-choices">${quality}</div>${toggle('bloom', 'Glow effects', h.look.bloom, 'Bloom on the ball trail, sparks and lights (High quality only)')}${toggle('ao', 'Contact shadows', h.look.ao, 'Soft shading where things meet: under the table, round feet and in corners (High quality only)')}`)}
         ${canInstall() ? this.group('App', '<div class="menu-choices"><button data-a="install" class="menu-choice">Install app</button></div>') : ''}
         ${this.group('Advanced', toggle('devTools', 'Developer tools', h.devTools, 'Physics tuning, ball machine and every assist. <kbd>`</kbd> toggles it too.'))}
       </div>`;
@@ -710,6 +711,7 @@ export class Menu {
       else if (k === 'arcadeFx') h.setArcadeFx(t.checked);
       else if (k === 'autoReplay') h.setAutoReplay(t.checked);
       else if (k === 'bloom') h.setBloom(t.checked);
+      else if (k === 'ao') h.setAO(t.checked);
       else if (k === 'fullSpeedOut') h.setFullSpeedOut(t.checked);
       else if (k === 'callouts') h.setCallouts(t.checked);
       else if (k === 'mjMode') h.setMjMode(t.checked);

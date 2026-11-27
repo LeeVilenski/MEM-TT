@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { SpectatorSpot } from './spectators';
 import { buildWonford } from './wonford';
 
 /**
@@ -41,6 +42,8 @@ export interface Venue {
   setScore?(lines: string[]): void;
   /** Where a free camera may go: a box centred on the table (floor at y = 0). */
   bounds: CameraBounds;
+  /** Where colleagues stand and watch (see spectators.ts), if anywhere. */
+  spectators?: SpectatorSpot[];
   dispose(): void;
 }
 
@@ -204,12 +207,91 @@ function onNearWall(o: THREE.Object3D, x: number, y: number, zWall: number) {
 
 // ---------------------------------------------------------------- venues
 
+/**
+ * A competition court round the table: a dark red sports floor, and (optionally) a ring
+ * of low navy barriers with the MEM logo, like the surrounds at a real tournament. It
+ * frames the table, so the eye goes to the play rather than the room. Symmetric, so it
+ * looks the same after a change of ends.
+ */
+function court(w: number, d: number, opts: { barriers?: boolean; color?: number } = {}) {
+  const g = new THREE.Group();
+  const floorTex = canvasTexture(
+    256,
+    256,
+    (ctx) => {
+      ctx.fillStyle = '#7d2a26';
+      ctx.fillRect(0, 0, 256, 256);
+      // A faint grain, so the floor isn't a flat colour up close.
+      for (let i = 0; i < 1400; i++) {
+        ctx.fillStyle = `rgba(${Math.random() < 0.5 ? '0,0,0' : '255,220,200'},${Math.random() * 0.04})`;
+        ctx.fillRect(Math.random() * 256, Math.random() * 256, 2, 2);
+      }
+    },
+    [w / 2, d / 2],
+  );
+  const mat = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshStandardMaterial({ map: floorTex, color: opts.color ?? 0x9c8a86, roughness: 0.62, metalness: 0 }));
+  mat.rotation.x = -Math.PI / 2;
+  mat.position.y = 0.0015;
+  mat.userData.receiveShadow = true;
+  mat.name = 'courtFloor';
+  g.add(mat);
+  if (!opts.barriers) return g;
+
+  // Barriers: 2 m panels, 0.75 m high, on small feet. Logo on the court side.
+  const logo = canvasTexture(512, 192, (ctx) => {
+    ctx.fillStyle = '#18233f';
+    ctx.fillRect(0, 0, 512, 192);
+    ctx.fillStyle = '#2f7cf6';
+    ctx.fillRect(0, 168, 512, 10);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '900 92px system-ui, sans-serif';
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'right';
+    ctx.fillText('MEM', 236, 92);
+    ctx.fillStyle = '#facc15';
+    ctx.font = '800 30px system-ui, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('TABLE TENNIS', 256, 96);
+  });
+  const face = new THREE.MeshStandardMaterial({ map: logo, roughness: 0.7 });
+  const plain = std(0x18233f, { roughness: 0.7 });
+  const foot = std(0x9aa3b2, { roughness: 0.5, metalness: 0.4 });
+  const PW = 2;
+  const PH = 0.75;
+  const panel = (x: number, z: number, ry: number) => {
+    const p = new THREE.Group();
+    // Box faces: +x, −x, +y, −y, +z (the court side), −z.
+    const body = new THREE.Mesh(new THREE.BoxGeometry(PW - 0.02, PH, 0.03), [plain, plain, plain, plain, face, plain]);
+    body.position.y = PH / 2 + 0.02;
+    body.castShadow = true;
+    p.add(body);
+    for (const fx of [-0.7, 0.7]) p.add(box(0.06, 0.03, 0.34, foot, fx, 0.015, -0.12));
+    p.position.set(x, 0, z);
+    p.rotation.y = ry;
+    g.add(p);
+  };
+  const nx = Math.round(w / PW);
+  const nz = Math.round(d / PW);
+  for (let i = 0; i < nx; i++) {
+    const x = -w / 2 + PW / 2 + i * (w / nx);
+    panel(x, -d / 2, 0); // far end, logo facing +z
+    panel(x, d / 2, Math.PI); // near end (behind the play camera)
+  }
+  for (let i = 0; i < nz; i++) {
+    const z = -d / 2 + PW / 2 + i * (d / nz);
+    panel(-w / 2, z, Math.PI / 2);
+    panel(w / 2, z, -Math.PI / 2);
+  }
+  return g;
+}
+
 function office(): Venue {
   const g = new THREE.Group();
   const W = 16;
   const D = 20;
   const H = 3.4;
   room(g, W, D, H, std(0xe9e6df), { ceiling: std(0xf2f1ee), skipWalls: ['back'] });
+  g.add(court(8, 14, { barriers: true }));
 
   // Window wall behind the far end: bright sky panels and mullions.
   const sky = canvasTexture(256, 256, (ctx) => {
@@ -322,7 +404,7 @@ function office(): Venue {
     },
     [24, 24],
   );
-  return makeVenue('office', g, { background: 0xe8eef5, fog: [0xe8eef5, 14, 34], hemi: [0xffffff, 0x8a8f99, 1.1], key: [0xffffff, 2.0], env: 0.4, floor: carpet });
+  return makeVenue('office', g, { background: 0xe8eef5, fog: [0xe8eef5, 14, 34], hemi: [0xffffff, 0x8a8f99, 1.1], key: [0xffffff, 2.0], env: 0.4, spot: 5, floor: carpet });
 }
 
 type FlagDraw = (ctx: CanvasRenderingContext2D) => void;
@@ -1079,6 +1161,7 @@ function mem(): Venue {
     hemi: [0xfff4dc, 0x5a5040, 1.0],
     key: [0xfffaf0, 2.0],
     env: 0.3,
+    spot: 5,
     floor: carpet,
     update: (dt) => {
       spin += dt * 9;
@@ -1466,6 +1549,7 @@ function testBay(): Venue {
     hemi: [0xf4f8ff, 0x7d8fa3, 1.0],
     key: [0xffffff, 2.2],
     env: 0.4,
+    spot: 5,
     floor: vinyl,
   });
 }
@@ -1577,6 +1661,7 @@ function conference(): Venue {
     hemi: [0xfff6e8, 0x6b5a48, 0.95],
     key: [0xfff3df, 2.0],
     env: 0.3,
+    spot: 5,
     floor: wood,
     setScore: (lines) => {
       screenLines = lines;
@@ -1987,6 +2072,15 @@ function wonford(): Venue {
     floor: b.floor,
     table: { color: 0xffffff, map: b.tableTop, roughness: 0.92, clearcoat: 0, legs: false, net: false },
     update: (dt) => b.update(dt),
+    // A lunchtime crowd: two at each end, off the corners of the table, a couple of them
+    // with bats waiting for winner-stays-on. (The venue turns at a change of ends, so the
+    // pair beyond the far end is always the one in view.)
+    spectators: [
+      { x: 2.6, z: -3.1, bat: true },
+      { x: -2.8, z: -3.5 },
+      { x: -2.6, z: 3.2, bat: true },
+      { x: 2.9, z: 3.6 },
+    ],
   });
 }
 
@@ -2001,7 +2095,7 @@ interface TableLook {
   legs: boolean;
   net: boolean;
 }
-const INDOOR_TABLE: TableLook = { color: 0x173a75, roughness: 0.5, clearcoat: 0.12, legs: true, net: true };
+const INDOOR_TABLE: TableLook = { color: 0x173a75, roughness: 0.42, clearcoat: 0.3, legs: true, net: true };
 
 function applyTable(scene: THREE.Scene, t: TableLook) {
   const top = scene.getObjectByName('tableTop') as THREE.Mesh<THREE.BufferGeometry, THREE.MeshPhysicalMaterial> | undefined;
@@ -2027,11 +2121,17 @@ interface Look {
   key: [number, number];
   /** Strength of the image-based (environment) light. */
   env?: number;
+  /**
+   * Indoors: the pool of light over the table (candela at the lamp; 0 or unset = none).
+   * The room's fill light is dimmed a little to match, so the table stands out.
+   */
+  spot?: number;
   floor?: THREE.Texture;
   /** Restyle the core table (default: the indoor blue table). */
   table?: TableLook;
   update?: (dt: number, time: number) => void;
   setScore?: (lines: string[]) => void;
+  spectators?: SpectatorSpot[];
 }
 
 function makeVenue(id: VenueId, group: THREE.Group, look: Look): Venue {
@@ -2045,6 +2145,7 @@ function makeVenue(id: VenueId, group: THREE.Group, look: Look): Venue {
     group,
     update: look.update ?? (() => {}),
     setScore: look.setScore,
+    spectators: look.spectators,
     bounds: (group.userData.bounds as CameraBounds | undefined) ?? OPEN_BOUNDS,
     dispose: () => {
       look.table?.map?.dispose();
@@ -2079,11 +2180,15 @@ export function setVenue(scene: THREE.Scene, id: VenueId, previous: Venue | null
   const hemi = scene.getObjectByName('hemi') as THREE.HemisphereLight;
   hemi.color.set(look.hemi[0]);
   hemi.groundColor.set(look.hemi[1]);
-  hemi.intensity = look.hemi[2];
+  const spot = scene.getObjectByName('tableSpot') as THREE.SpotLight | undefined;
+  const pool = look.spot ?? 0;
+  if (spot) spot.intensity = pool;
+  // With the table lit from above, the rest of the room can sit a little darker.
+  hemi.intensity = look.hemi[2] * (pool > 0 ? 0.7 : 1);
   const key = scene.getObjectByName('key') as THREE.DirectionalLight;
   key.color.set(look.key[0]);
   key.intensity = look.key[1];
-  scene.environmentIntensity = look.env ?? 0.35;
+  scene.environmentIntensity = (look.env ?? 0.35) * (pool > 0 ? 0.85 : 1);
   const floor = scene.getObjectByName('floor') as THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>;
   floor.material.map = look.floor ?? null;
   floor.material.color.set(look.floor ? 0xffffff : 0x23262e);

@@ -42,6 +42,7 @@ import type { Detail } from '../render/avatar';
 import { ServeAimView } from '../render/serveAim';
 import { createScene } from '../render/scene';
 import { PostFx } from '../render/post';
+import { Spectators } from '../render/spectators';
 import { Hud, MatchHud, type ShotReport, type ReturnReport, type PracticeStats } from './hud';
 import { Lobby } from './lobby';
 import { RallyRecorder, ReplayPlayer, type ViewFrame } from './replay';
@@ -69,7 +70,7 @@ import { OnlineClient } from '../net/client';
 import { LocalServer, WebSocketTransport, roomUrl, type Transport } from '../net/transport';
 import { fromV, isRoomCode, randomRoomCode, seatSide, type GameMode, type Seat } from '../net/protocol';
 import { mapVec, mapState, type SideId } from '../game/frame';
-import { endsSwapped } from '../game/rules';
+import { endsSwapped, type PointResult } from '../game/rules';
 import { WEATHER_IDS, WeatherState, isOutdoor, sanitizeCustom, type CustomWeather, type WeatherId } from '../game/weather';
 import { WeatherView } from '../render/weatherView';
 import { WeatherHud } from './hud';
@@ -340,6 +341,8 @@ export class Sandbox implements MenuHost {
     arcadeFx: loadPref('mem.arcadeFx', '1') === '1',
     shotDetails: loadPref('mem.shotDetails', '0') === '1',
     bloom: loadPref('mem.bloom', '1') === '1',
+    /** Ambient occlusion (soft contact shadows), High quality only. */
+    ao: loadPref('mem.ao', '1') === '1',
     fullSpeedOut: loadPref('mem.fullSpeedOut', '1') === '1',
     /** The call-out after each point / practice return (NET, OUT…). Off by default. */
     callouts: loadPref('mem.callouts', '0') === '1',
@@ -446,6 +449,10 @@ export class Sandbox implements MenuHost {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     container.appendChild(this.renderer.domElement);
+    // A soft vignette over the 3D view: draws the eye to the table in the middle.
+    const vignette = document.createElement('div');
+    vignette.className = 'view-vignette';
+    container.appendChild(vignette);
 
     this.scene = createScene(this.renderer);
     // Near plane 5 cm (nothing gets closer to the camera): 5× the depth precision of 1 cm,
@@ -1024,8 +1031,14 @@ export class Sandbox implements MenuHost {
     }
     this.syncMenu();
     this.ball.streakEnabled = this.look.arcadeFx;
+    for (const v of [this.playerView, this.aiView, ...this.remoteViews.values()]) v.streakEnabled = this.look.arcadeFx;
     this.ball.playRate = this.replay ? this.replay.speed : this.online ? this.gameSpeed : this.playRate;
     this.venue?.update(realDt, now / 1000);
+    if (this.spectators) {
+      this.spectators.avoid(this.playingStyles());
+      const b = this.ball.last;
+      this.spectators.update(realDt, b && this.ball.isVisible ? b.pos : null);
+    }
     // Your own character: just the racket arm in first person, the full character otherwise.
     this.playerView.setFirstPerson(this.playing && !this.replay);
     // Touch: show Serve only when it's your serve. Tilt: phone tilt sets the face angle.
@@ -1169,9 +1182,11 @@ export class Sandbox implements MenuHost {
           if (e.result.winner === 'near' && match.referee?.server === 'near' && (match.referee?.hits ?? 9) <= 3 && read && Math.abs(read.seenTop - read.top) > Math.max(15, 0.35 * Math.abs(read.top))) this.career.award('social-engineering');
           this.fxPoint(e.result.reason, match.referee?.hits ?? 0, e.result.winner === 'near', e.match);
           const m = pointMessage(e.result, names);
+          const big = this.bigMoment(e.result, match.referee?.hits ?? 0, e.result.winner === 'near', e.game, match.score.history[match.score.history.length - 1], names);
           if (e.match) this.hud.flash(e.result.winner === 'near' ? 'YOU WIN!' : 'MATCH LOST', e.result.winner === 'near' ? 'You won the match!' : `${ai.displayName} won the match`);
-          else if (e.game) this.hud.flash(e.result.winner === 'near' ? 'GAME WON' : 'GAME LOST', `Game to ${names[e.result.winner]}${this.look.callouts ? ` — ${m.title}: ${m.sub}` : ''}`);
-          else this.callout(m.title, m.sub);
+          else if (e.game) {
+            if (big !== 'bagel') this.hud.flash(e.result.winner === 'near' ? 'GAME WON' : 'GAME LOST', `Game to ${names[e.result.winner]}${this.look.callouts ? ` — ${m.title}: ${m.sub}` : ''}`);
+          } else if (!big) this.callout(m.title, m.sub);
           break;
         }
       }
@@ -1232,7 +1247,10 @@ export class Sandbox implements MenuHost {
     this.matchHud.setRally(match.phase === 'rally' ? (match.referee?.hits ?? 0) : 0);
     if (this.playing && match.phase !== this.lastPhase) {
       this.lastPhase = match.phase;
-      if (match.phase === 'serve-wait' && this.playing) this.matchHud.cue(match.humanToServe ? 'YOUR SERVE' : 'RECEIVE', match.humanToServe);
+      if (match.phase === 'serve-wait' && this.playing) {
+        const sc = match.score;
+        this.serveCue(match.humanToServe ? 'YOUR SERVE' : 'RECEIVE', match.humanToServe, sc.matchPoint(), sc.gamePoint(), 'near', sc.gameNumber, match.humanToServe ? 'YOUR SERVE' : `${ai.displayName.toUpperCase()} TO SERVE`);
+      }
     }
     // Scoreboard.
     const sc = match.score;
@@ -1841,8 +1859,10 @@ export class Sandbox implements MenuHost {
 
   /** Bloom only at High quality (and only if the player wants it). */
   private applyBloom() {
-    this.post.enabled = this.look.bloom && this.qualityLevel === QUALITY_LEVELS.length - 1;
-    this.juice?.setGlow(this.post.enabled);
+    const high = this.qualityLevel === QUALITY_LEVELS.length - 1;
+    this.post.bloom = this.look.bloom && high;
+    this.post.ao = this.look.ao && high;
+    this.juice?.setGlow(this.post.bloom);
   }
 
   /** A per-point / per-return call-out: only if the player wants them. */
@@ -1902,6 +1922,13 @@ export class Sandbox implements MenuHost {
   setFullSpeedOut(on: boolean) {
     this.look.fullSpeedOut = on;
     savePref('mem.fullSpeedOut', on ? '1' : '0');
+  }
+
+  setAO(on: boolean) {
+    this.look.ao = on;
+    savePref('mem.ao', on ? '1' : '0');
+    this.applyBloom();
+    this.gui?.controllersRecursive().forEach((c) => c.updateDisplay());
   }
 
   setBloom(on: boolean) {
@@ -1970,9 +1997,23 @@ export class Sandbox implements MenuHost {
     this.wasGusting = r.gusting;
   }
 
+  /** Colleagues watching at venues that have them. */
+  private spectators: Spectators | null = null;
+
+  /** The characters on court right now (spectators are chosen from everyone else). */
+  private playingStyles(): string[] {
+    return [this.playerView, this.aiView, ...this.remoteViews.values()].map((v) => v.styleId).filter((s): s is StyleId => !!s);
+  }
+
   setVenue(id: VenueId) {
     this.look.venue = id;
+    this.spectators?.dispose();
+    this.spectators = null;
     this.venue = setVenue(this.scene, id, this.venue);
+    if (this.venue?.spectators) {
+      this.spectators = new Spectators(this.venue.spectators, this.playingStyles(), this.qualityLevel as Detail);
+      this.venue.group.add(this.spectators.group);
+    }
     this.weatherView.captureVenue();
     this.applyEnds();
     this.sfx.setAmbience(this.look.ambience ? VENUES[id].ambience : 'none');
@@ -2112,15 +2153,61 @@ export class Sandbox implements MenuHost {
     }
   }
 
+  /** Which game the game/match point sting last played for (it plays in full once per game and side). */
+  private stakesKey = '';
+
+  /**
+   * The start-of-point cue. At game or match point it's a big GAME POINT / MATCH POINT
+   * card (whose serve underneath) with a sting: in full the first time in a game, softer
+   * when the point comes round again (saved, or deuce). `side`: the local player's side.
+   */
+  private serveCue(text: string, mine: boolean, matchPoint: SideId | null, gamePoint: SideId | null, side: SideId, gameNo: number, serveLine: string) {
+    const stake = matchPoint ? 'match' : gamePoint ? 'game' : null;
+    const who = matchPoint ?? gamePoint;
+    if (!stake || !who) return this.matchHud.cue(text, mine);
+    this.matchHud.stakes(stake, who === side, serveLine);
+    const key = `${stake}:${who}:${gameNo}`;
+    this.sfx.sting(stake, key === this.stakesKey);
+    this.stakesKey = key;
+  }
+
+  /**
+   * A banner for a big moment, if this point was one: 'bagel' (a game won 11–0) or
+   * 'winner' (a clean winner: a rally shot the other side never got back). Returns which
+   * it showed, so the usual call-out can stand aside.
+   */
+  private bigMoment(result: PointResult, rallyHits: number, mine: boolean, game: boolean, lastGame: Record<SideId, number> | undefined, names: Record<SideId, string>): 'bagel' | 'winner' | null {
+    if (game && lastGame && Math.min(lastGame.near, lastGame.far) === 0) {
+      const w = result.winner;
+      const l = w === 'near' ? 'far' : 'near';
+      this.matchHud.stamp('bagel', mine, mine ? `You won the game ${lastGame[w]}–${lastGame[l]}` : `${names[w]} won the game ${lastGame[w]}–${lastGame[l]}`);
+      this.sfx.stamp(true);
+      if (mine) this.sfx.crowd('cheer', 0.8);
+      return 'bagel';
+    }
+    if (game) return null;
+    const clean = !result.ace && (result.reason === 'double-bounce' || result.reason === 'missed') && rallyHits >= 2;
+    if (!clean) return null;
+    this.matchHud.stamp('winner', mine, mine ? '' : names[result.winner]);
+    this.sfx.stamp(false);
+    return 'winner';
+  }
+
   /** Colleagues react to how a point ended. */
   private fxPoint(reason: string, rallyHits: number, mine: boolean, matchOver: boolean) {
     if (!this.look.arcadeFx) return;
     const error = reason === 'net' || reason === 'out' || reason === 'own-side' || reason === 'volley-out';
     if (matchOver) {
       this.sfx.crowd(mine ? 'cheer' : 'applause', 1);
+      this.spectators?.cheer(1);
       this.finale = true;
-    } else if (rallyHits >= 8) this.sfx.crowd('cheer', Math.min(1, rallyHits / 14));
-    else if (rallyHits >= 5) this.sfx.crowd('applause', 0.5);
+    } else if (rallyHits >= 8) {
+      this.sfx.crowd('cheer', Math.min(1, rallyHits / 14));
+      this.spectators?.cheer(Math.min(1, rallyHits / 14));
+    } else if (rallyHits >= 5) {
+      this.sfx.crowd('applause', 0.5);
+      this.spectators?.cheer(0.2);
+    }
     else if (!error && this.lastHitPower > 0.75) this.sfx.crowd('applause', 0.4); // a smash winner
     else if (error && rallyHits >= 3) this.sfx.crowd('groan', 0.5);
   }
@@ -2520,9 +2607,12 @@ export class Sandbox implements MenuHost {
         const names = { near: this.teamName('near'), far: this.teamName('far') };
         const m = pointMessage(e.result, names);
         const mine = e.result.winner === c.side;
+        const hist = c.score?.history ?? [];
+        const big = this.bigMoment(e.result, this.rallyHits, mine, e.game, hist[hist.length - 1], names);
         if (e.match) this.hud.flash(mine ? 'YOU WIN!' : 'MATCH LOST', `${names[e.result.winner]} won the match`);
-        else if (e.game) this.hud.flash(mine ? 'GAME WON' : 'GAME LOST', `Game to ${names[e.result.winner]}${this.look.callouts ? ` — ${m.title}: ${m.sub}` : ''}`);
-        else this.callout(m.title, m.sub);
+        else if (e.game) {
+          if (big !== 'bagel') this.hud.flash(mine ? 'GAME WON' : 'GAME LOST', `Game to ${names[e.result.winner]}${this.look.callouts ? ` — ${m.title}: ${m.sub}` : ''}`);
+        } else if (!big) this.callout(m.title, m.sub);
         break;
       }
       case 'over':
@@ -2599,7 +2689,10 @@ export class Sandbox implements MenuHost {
       this.lastPhase = c.phase;
       if (c.phase === 'serve-wait' && this.playing && c.seat && c.serverSeat) {
         const ours = seatSide(c.serverSeat) === c.side;
-        this.matchHud.cue(c.myServe ? 'YOUR SERVE' : ours ? 'PARTNER SERVES' : 'RECEIVE', c.myServe);
+        const text = c.myServe ? 'YOUR SERVE' : ours ? 'PARTNER SERVES' : 'RECEIVE';
+        const sc = c.score;
+        const gameNo = sc ? sc.games.near + sc.games.far + 1 : 0;
+        this.serveCue(text, c.myServe, sc?.matchPoint ?? null, sc?.gamePoint ?? null, c.side, gameNo, c.myServe ? 'YOUR SERVE' : `${(c.names[c.serverSeat] ?? 'Opponent').toUpperCase()} TO SERVE`);
       }
     }
     // Scoreboard (my team first).
@@ -2979,6 +3072,7 @@ export class Sandbox implements MenuHost {
       .name('Graphics quality')
       .onChange((v: QualitySetting) => this.setQuality(v));
     lf.add(this.look, 'bloom').name('Glow (bloom, High quality)').onChange((b: boolean) => this.setBloom(b));
+    lf.add(this.look, 'ao').name('Contact shadows (AO, High quality)').onChange((b: boolean) => this.setAO(b));
     lf.add(this.quality, 'showFps').name('Show FPS');
 
     const on = gui.addFolder('Online multiplayer');

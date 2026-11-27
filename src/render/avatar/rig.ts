@@ -178,6 +178,11 @@ export class AvatarRig {
   private hipX: number;
   /** Seated in a wheelchair (lower body, legs on the footplate, wheels that roll). */
   readonly seated: boolean;
+  /**
+   * Standing about rather than playing (a spectator): upright, knees nearly straight, no
+   * ready bounce, and no turning into a stroke.
+   */
+  relaxed = false;
   /** Bat hand: +1 right (local +x), −1 left. */
   readonly batHand: 1 | -1;
   private wheelRoll = [0, 0];
@@ -629,11 +634,11 @@ export class AvatarRig {
 
     // Turn toward the paddle side and into the swing; lean over low or far-forward balls.
     // Backhands (bat across the body) turn the bat shoulder further round.
-    const twistTarget = clamp(-hand.x * (hand.x * side < 0 ? 0.85 : 0.55) - this.swingVel * 0.05, -0.75, 0.75);
+    const twistTarget = this.relaxed ? 0 : clamp(-hand.x * (hand.x * side < 0 ? 0.85 : 0.55) - this.swingVel * 0.05, -0.75, 0.75);
     this.twist = this.spring('twist', twistTarget, 11, dt);
     const reachDown = clamp((1.15 - drop0 - hand.y) * 0.5, 0, 0.3);
     const reachForward = clamp((-hand.z - 0.3) * 0.25, 0, 0.15);
-    this.lean = this.spring('lean', 0.1 + reachDown + reachForward, 9, dt);
+    this.lean = this.spring('lean', this.relaxed ? 0.02 : 0.1 + reachDown + reachForward, 9, dt);
 
     // Reaching for a ball beyond the arm: bend sideways toward it and lean in.
     const sx = side * this.shoulderX;
@@ -643,15 +648,15 @@ export class AvatarRig {
     this.reachLean = this.spring('reachLean', clamp(far * 1.1 * (1 - sideways * 0.6), 0, 0.35), 12, dt);
 
     // Ready stance: knees bent, a light bounce on the toes.
-    const bounce = Math.sin(time * Math.PI * 2 * 1.4) * (1 - this.stride * 2);
-    let bend = 0.4 + this.lean * 0.3 + bounce * 0.03;
+    const bounce = this.relaxed ? 0 : Math.sin(time * Math.PI * 2 * 1.4) * (1 - this.stride * 2);
+    let bend = this.relaxed ? 0.06 : 0.4 + this.lean * 0.3 + bounce * 0.03;
     // Breathing: a slow rise and fall of the chest.
     let lean = this.lean + 0.012 * Math.sin(time * Math.PI * 2 * 0.27);
     // Seated, the shoulders turn part of the way with the chair under them.
     let twist = this.twist + this.chairYaw * 0.5;
-    let freeZ = 0.2 + this.stride * 0.6;
-    let freeX = 0.35 + this.lean * 0.6; // free arm a little forward, for balance
-    let elbow = 1.25;
+    let freeZ = this.relaxed ? 0.1 : 0.2 + this.stride * 0.6;
+    let freeX = this.relaxed ? 0.08 : 0.35 + this.lean * 0.6; // free arm a little forward, for balance (hanging when relaxed)
+    let elbow = this.relaxed ? 0.3 : 1.25;
     let jump = 0;
 
     const r = this.reaction;

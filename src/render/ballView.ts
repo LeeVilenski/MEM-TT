@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
-import { BALL, length, spinComponents, type BallState, type Vec3 } from '../physics';
+import { BALL, TABLE, length, spinComponents, type BallState, type Vec3 } from '../physics';
 
 /** The kind of spin a ball predominantly carries. */
 export type SpinKind = 'top' | 'back' | 'side' | 'none';
@@ -88,6 +88,46 @@ const TRAIL_POINTS = 900;
 /** Trail width on screen, pixels. */
 const TRAIL_WIDTH = 3.5;
 
+/** A soft round blob: white in the middle fading to nothing (tinted by the material). */
+function softDisc(): THREE.Texture {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const ctx = c.getContext('2d')!;
+  const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.45, 'rgba(255,255,255,0.7)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(c);
+}
+
+/**
+ * The ball's halo: a white disc ringed in dark, drawn at a fixed size on screen. Far away
+ * (the far end of the table, against bright windows or sky) it gives the ball a minimum
+ * size and an outline, so it never disappears. Up close the ball itself is bigger and
+ * hides it (the halo sits at the ball's centre, behind its front surface).
+ */
+function haloTexture(): THREE.Texture {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const ctx = c.getContext('2d')!;
+  const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.34, 'rgba(250,250,246,1)');
+  g.addColorStop(0.42, 'rgba(12,18,32,0.85)');
+  g.addColorStop(0.56, 'rgba(12,18,32,0.5)');
+  g.addColorStop(1, 'rgba(12,18,32,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 64, 64);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+/** The halo's size on screen (CSS px). */
+const HALO_PX = 18;
+
 /**
  * The ball mesh, its spin-axis indicator and a colour-coded trail.
  * Orientation is integrated from the simulated angular velocity, so in slow
@@ -111,10 +151,37 @@ export class BallView {
   /** Playback rate (slow motion), so the streak follows how fast the ball looks. */
   playRate = 1;
 
+  /** Fixed-size halo (see haloTexture). */
+  private halo: THREE.Sprite;
+  /** A soft dark spot on the table (or floor) under the ball: sharper and darker as it comes down. */
+  private blob: THREE.Mesh;
+
   constructor(scene: THREE.Scene) {
-    this.mesh = new THREE.Mesh(new THREE.SphereGeometry(BALL.radius, 32, 16), new THREE.MeshStandardMaterial({ map: ballTexture(), roughness: 0.35 }));
+    // A touch of its own light, so the ball stays bright white on the shaded side too.
+    this.mesh = new THREE.Mesh(new THREE.SphereGeometry(BALL.radius, 32, 16), new THREE.MeshStandardMaterial({ map: ballTexture(), roughness: 0.35, emissive: 0xffffff, emissiveIntensity: 0.12 }));
     this.mesh.castShadow = true;
     scene.add(this.mesh);
+
+    this.halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTexture(), sizeAttenuation: false, transparent: true, depthWrite: false, toneMapped: false }));
+    this.halo.renderOrder = 3;
+    this.halo.frustumCulled = false;
+    // Sized each frame for the camera's field of view and the canvas height.
+    const size = new THREE.Vector2();
+    this.halo.onBeforeRender = (renderer, _scene, camera) => {
+      const fov = (camera as THREE.PerspectiveCamera).fov ?? 50;
+      renderer.getSize(size);
+      const s = (2 * HALO_PX * Math.tan(THREE.MathUtils.degToRad(fov) / 2)) / Math.max(1, size.y);
+      this.halo.scale.set(s, s, 1);
+    };
+    scene.add(this.halo);
+
+    this.blob = new THREE.Mesh(
+      new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ map: softDisc(), color: 0x000000, transparent: true, opacity: 0, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 }),
+    );
+    this.blob.renderOrder = 1;
+    this.blob.userData.noAO = true;
+    scene.add(this.blob);
 
     const axisGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, -1, 0), new THREE.Vector3(0, 1, 0)]);
     this.axis = new THREE.Line(axisGeo, new THREE.LineBasicMaterial({ color: 0xffffff }));
@@ -145,6 +212,8 @@ export class BallView {
 
   set visible(v: boolean) {
     this.mesh.visible = v;
+    this.halo.visible = v;
+    this.blob.visible = v;
     if (!v) this.streak.visible = false;
     this.axis.visible = v && this.showAxis;
   }
@@ -176,6 +245,20 @@ export class BallView {
   update(pos: Vec3, state: BallState) {
     this.last = { pos, state };
     this.mesh.position.set(pos.x, pos.y, pos.z);
+    this.halo.position.copy(this.mesh.position);
+    this.halo.visible = this.mesh.visible;
+
+    // Contact shadow: on the table when the ball is over it, else on the floor.
+    const overTable = Math.abs(pos.x) <= TABLE.halfWidth && Math.abs(pos.z) <= TABLE.halfLength && pos.y > TABLE.height;
+    const surface = overTable ? TABLE.height + 0.0012 : 0.004;
+    const h = Math.max(0, pos.y - surface - BALL.radius);
+    const near = Math.max(0, 1 - h / 1.2);
+    this.blob.visible = this.mesh.visible && near > 0;
+    if (this.blob.visible) {
+      this.blob.position.set(pos.x, surface, pos.z);
+      this.blob.scale.setScalar(BALL.radius * 2.6 + h * 0.09);
+      (this.blob.material as THREE.MeshBasicMaterial).opacity = 0.55 * near * near;
+    }
 
     // Speed streak: from ~10 m/s as seen, longer and brighter with speed.
     const v = length(state.vel);
