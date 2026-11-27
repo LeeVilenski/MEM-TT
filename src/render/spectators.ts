@@ -130,7 +130,8 @@ export class Spectators {
         const m = o as THREE.Mesh;
         if (m.isMesh) {
           m.geometry.dispose();
-          (m.material as THREE.Material).dispose();
+          // The blade has one material per face group, so this can be an array.
+          for (const mat of ([] as THREE.Material[]).concat(m.material)) mat.dispose();
         }
       });
     }
